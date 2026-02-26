@@ -76,7 +76,8 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const isResponsible = doc.conselheiro_providencia_id === currentUser.id || 
     doc.conselheiro_referencia_id === currentUser.id;
   const isImediata = doc.conselheiro_providencia_id === currentUser.id;
-  const canEditTechnicalFields = isResponsible;
+  const isADM = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
+  const canEditTechnicalFields = isResponsible && !isADM;
 
   // INTELIGÊNCIA SIMCT: Dossiê Familiar Cruzado
   const familyDossier = useMemo(() => {
@@ -168,13 +169,14 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       'TIPIFICACAO_INCOMPLETA',
       'NOTIFICACAO_LEANDRO', 'NOTIFICACAO_LUIZA', 'NOTIFICACAO_MILENA', 
       'NOTIFICACAO_MIRIAN', 'NOTIFICACAO_SANDRA', 'NOTIFICACAO_ROSILDA',
-      'DIREITO_NAO_VIOLADO'
+      'DIREITO_NAO_VIOLADO', 'NENHUMA', 'AGUARDANDO_AVALIACAO'
     ];
     return informativeKeys.sort((a, b) => STATUS_LABELS[a].localeCompare(STATUS_LABELS[b]));
   }, []);
 
   const handleQuickStatusChange = (newStatus: DocumentStatus) => {
-    if (!isResponsible) return;
+    // DIRETRIZ: Apenas o Conselheiro de Providência Imediata (ou ADM) possui autonomia para despacho sem validação
+    if (!isImediata && !isADM) return;
     
     // DIRETRIZ: Alteração de status por autonomia dispensa validação do trio
     // Removemos a pendência de validação ao realizar um despacho administrativo
@@ -283,19 +285,32 @@ const DocumentView: React.FC<DocumentViewProps> = ({
 
     const currentStatus = doc.status[doc.status.length - 1];
     const isInformative = informativeStatusOptions.includes(currentStatus);
-    const isTechnicalEdit = combinedMedidas.length > 0 || selectedAtribuicoes.length > 0;
+    
+    // Verificação de alteração técnica para revalidação (Diretriz: Apenas se houver edição ou nova aplicação)
+    const currentMedidasInciso = (doc.medidas_detalhadas || []).map(m => m.artigo_inciso).sort();
+    const newMedidasInciso = [...selectedMedidas101.map(id => `Art. 101, ${id}`), ...selectedMedidas129.map(id => `Art. 129, ${id}`)].sort();
+    const hasMedidasChanged = JSON.stringify(currentMedidasInciso) !== JSON.stringify(newMedidasInciso);
+    
+    const hasAtribuicoesChanged = JSON.stringify(selectedAtribuicoes.sort()) !== JSON.stringify((doc.atribuicoes_136 || []).sort()) ||
+                                  JSON.stringify(atribuicoesDetalhadas) !== JSON.stringify(doc.atribuicoes_136_detalhadas || []);
+
+    const isTechnicalChange = hasMedidasChanged || hasAtribuicoesChanged;
+    const hasTechnicalContent = combinedMedidas.length > 0 || selectedAtribuicoes.length > 0;
 
     let statusFinal: DocumentStatus[] = [...doc.status];
     
     if (finalize) {
       if (isImprocedente) {
         statusFinal = [...doc.status.filter(s => s !== 'AGUARDANDO_VALIDACAO'), 'DIREITO_NAO_VIOLADO'];
-      } else if (isTechnicalEdit) {
-        // Se editou técnica, remove medida aplicada e força aguardando validação
+      } else if (isTechnicalChange) {
+        // Se houve edição ou nova aplicação, força aguardando validação
         statusFinal = statusFinal.filter(s => s !== 'MEDIDA_APLICADA');
         if (!statusFinal.includes('AGUARDANDO_VALIDACAO')) {
           statusFinal.push('AGUARDANDO_VALIDACAO');
         }
+      } else if (hasTechnicalContent && (doc.status.includes('MEDIDA_APLICADA') || doc.status.includes('AGUARDANDO_VALIDACAO'))) {
+        // Se já está em fluxo de validação ou aplicada, e não houve mudança técnica, mantém
+        statusFinal = doc.status;
       } else if (isInformative) {
         statusFinal = doc.status;
       } else {
@@ -360,11 +375,17 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                   className="w-full p-4 bg-white border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-indigo-500 shadow-sm cursor-pointer"
                   value={doc.status[doc.status.length - 1]}
                   onChange={(e) => handleQuickStatusChange(e.target.value as DocumentStatus)}
-                  disabled={!isResponsible}
+                  disabled={!isImediata && !isADM}
                >
                   <option value="">DEFINIR NOVA SITUAÇÃO...</option>
                   {informativeStatusOptions.map(status => (
-                    <option key={status} value={status}>{STATUS_LABELS[status]}</option>
+                    <option 
+                      key={status} 
+                      value={status}
+                      disabled={status === 'DIREITO_NAO_VIOLADO' && (tempViolacoes.length > 0 || tempAgentes.length > 0)}
+                    >
+                      {STATUS_LABELS[status]}
+                    </option>
                   ))}
                </select>
                {/* LEGENDA DE CORES PARA STATUS */}
@@ -383,29 +404,33 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                   </div>
                </div>
 
-               <div className="p-4 bg-white border border-slate-100 rounded-xl flex items-center gap-4">
-                  <Activity className="w-5 h-5 text-indigo-600" />
-                  <div>
-                     <span className="text-[9px] font-black text-slate-400 uppercase block">Situação Vigente</span>
-                     <span className={`text-[11px] font-black uppercase ${doc.status[doc.status.length - 1] === 'DIREITO_NAO_VIOLADO' ? 'text-emerald-600' : 'text-indigo-700'}`}>
-                        {STATUS_LABELS[doc.status[doc.status.length - 1]]}
-                     </span>
+                {doc.status[doc.status.length - 1] !== 'NENHUMA' && (
+                  <div className="p-4 bg-white border border-slate-100 rounded-xl flex items-center gap-4">
+                    <Activity className="w-5 h-5 text-indigo-600" />
+                    <div>
+                        <span className="text-[9px] font-black text-slate-400 uppercase block">Situação Vigente</span>
+                        <span className={`text-[11px] font-black uppercase ${doc.status[doc.status.length - 1] === 'DIREITO_NAO_VIOLADO' ? 'text-emerald-600' : 'text-indigo-700'}`}>
+                          {STATUS_LABELS[doc.status[doc.status.length - 1]]}
+                        </span>
+                    </div>
                   </div>
-               </div>
+                )}
             </div>
 
-            <div className="space-y-2">
-               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                 <FileText className="w-4 h-4 text-indigo-600" /> Código do Comunicado (Opcional)
-               </label>
-               <textarea 
-                  className="w-full p-4 bg-white border border-slate-200 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-indigo-500 shadow-sm min-h-[80px]"
-                  placeholder="INFORME O CÓDIGO DO COMUNICADO OU OBSERVAÇÃO ADMINISTRATIVA..."
-                  value={doc.despacho_situacao || ''}
-                  onChange={(e) => onUpdateDocument(doc.id, { despacho_situacao: e.target.value })}
-                  disabled={!isResponsible}
-               />
-            </div>
+            {!isADM && (
+              <div className="space-y-2">
+                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                   <FileText className="w-4 h-4 text-indigo-600" /> Código do Comunicado (Opcional)
+                 </label>
+                 <textarea 
+                    className="w-full p-4 bg-white border border-slate-200 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-indigo-500 shadow-sm min-h-[80px]"
+                    placeholder="INFORME O CÓDIGO DO COMUNICADO OU OBSERVAÇÃO ADMINISTRATIVA..."
+                    value={doc.despacho_situacao || ''}
+                    onChange={(e) => onUpdateDocument(doc.id, { despacho_situacao: e.target.value })}
+                    disabled={!isImediata && !isADM}
+                 />
+              </div>
+            )}
           </section>
 
           {/* ACORDEÕES TÉCNICOS */}
@@ -418,6 +443,9 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                 if (next) {
                   setTempViolacoes([]);
                   setTempAgentes([]);
+                  onUpdateDocument(doc.id, { is_improcedente: true, violacoesSipia: [], agentesVioladores: [] });
+                } else {
+                  onUpdateDocument(doc.id, { is_improcedente: false });
                 }
               }}
               className={`p-6 rounded-[2rem] border-2 cursor-pointer transition-all flex items-center justify-between ${isImprocedente ? 'bg-slate-900 border-slate-900 text-white shadow-lg' : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50'}`}
@@ -442,7 +470,14 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                              {items.map(item => (
                                <div 
                                  key={item} 
-                                 onClick={() => canEditTechnicalFields && setTempViolacoes(prev => prev.some(v => v.especifico === item) ? prev.filter(v => v.especifico !== item) : [...prev, { fundamental: fund, grupo: grp, especifico: item }])} 
+                                 onClick={() => {
+                                   if (!canEditTechnicalFields) return;
+                                   const nextViolacoes = tempViolacoes.some(v => v.especifico === item) 
+                                     ? tempViolacoes.filter(v => v.especifico !== item) 
+                                     : [...tempViolacoes, { fundamental: fund, grupo: grp, especifico: item }];
+                                   setTempViolacoes(nextViolacoes);
+                                   onUpdateDocument(doc.id, { violacoesSipia: nextViolacoes });
+                                 }} 
                                  className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer text-[10px] uppercase font-bold transition-all ${tempViolacoes.some(v => v.especifico === item) ? 'bg-blue-600 text-white shadow-sm' : 'hover:bg-slate-50 text-slate-600'}`}
                                >
                                  {tempViolacoes.some(v => v.especifico === item) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4 opacity-20" />} 
@@ -464,7 +499,14 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                         {info.options.map(opt => (
                           <div 
                             key={opt} 
-                            onClick={() => canEditTechnicalFields && setTempAgentes(prev => prev.some(a => a.principal === opt) ? prev.filter(a => a.principal !== opt) : [...prev, {categoria: cat, principal: opt, tipo: 'PRINCIPAL'}])} 
+                            onClick={() => {
+                              if (!canEditTechnicalFields) return;
+                              const nextAgentes: AgenteVioladorEntry[] = tempAgentes.some(a => a.principal === opt) 
+                                ? tempAgentes.filter(a => a.principal !== opt) 
+                                : [...tempAgentes, {categoria: cat, principal: opt, tipo: 'PRINCIPAL' as const}];
+                              setTempAgentes(nextAgentes);
+                              onUpdateDocument(doc.id, { agentesVioladores: nextAgentes });
+                            }} 
                             className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer text-[10px] uppercase font-bold transition-all ${tempAgentes.some(a => a.principal === opt) ? 'bg-orange-500 text-white shadow-sm' : 'hover:bg-slate-50 text-slate-600'}`}
                           >
                             {tempAgentes.some(a => a.principal === opt) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4 opacity-20" />} 
@@ -512,7 +554,17 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                         const is136IIIa = a.id === 'III-a';
                         return (
                           <div key={a.id} className="space-y-3">
-                            <div onClick={() => canEditTechnicalFields && setSelectedAtribuicoes(p => p.includes(a.id) ? p.filter(x => x !== a.id) : [...p, a.id])} className={`flex items-start gap-3 p-3 rounded-xl cursor-pointer text-[10px] font-bold uppercase transition-all ${isSelected ? 'bg-purple-600 text-white shadow-md' : 'bg-slate-50 hover:bg-purple-50 text-slate-600'}`}>
+                            <div 
+                              onClick={() => {
+                                if (!canEditTechnicalFields) return;
+                                const nextAtribuicoes = selectedAtribuicoes.includes(a.id) 
+                                  ? selectedAtribuicoes.filter(x => x !== a.id) 
+                                  : [...selectedAtribuicoes, a.id];
+                                setSelectedAtribuicoes(nextAtribuicoes);
+                                onUpdateDocument(doc.id, { atribuicoes_136: nextAtribuicoes });
+                              }} 
+                              className={`flex items-start gap-3 p-3 rounded-xl cursor-pointer text-[10px] font-bold uppercase transition-all ${isSelected ? 'bg-purple-600 text-white shadow-md' : 'bg-slate-50 hover:bg-purple-50 text-slate-600'}`}
+                            >
                               {isSelected ? <CheckSquare className="w-4 h-4 mt-0.5" /> : <Square className="w-4 h-4 mt-0.5 opacity-20" />}
                               <span>{a.label}</span>
                             </div>

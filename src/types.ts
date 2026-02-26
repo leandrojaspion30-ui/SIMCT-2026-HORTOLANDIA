@@ -41,7 +41,9 @@ export type DocumentStatus =
   | 'NOTIFICACAO_MIRIAN'
   | 'NOTIFICACAO_SANDRA'
   | 'NOTIFICACAO_ROSILDA'
-  | 'DIREITO_NAO_VIOLADO';
+  | 'DIREITO_NAO_VIOLADO'
+  | 'NENHUMA'
+  | 'AGUARDANDO_AVALIACAO';
 
 export interface MedidaConfirmacao {
   usuario_id: string;

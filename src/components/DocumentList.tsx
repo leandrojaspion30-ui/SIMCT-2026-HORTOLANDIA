@@ -41,7 +41,7 @@ interface DocumentListProps {
 }
 
 const DocumentList: React.FC<DocumentListProps> = ({ documents, currentUser, onSelectDoc, onEditDoc, isReadOnly, isMyReferenceView }) => {
-  const [myViewMode, setMyViewMode] = useState<'ALL' | 'REF' | 'IMED'>(isMyReferenceView ? 'REF' : 'ALL');
+  const [myViewMode, setMyViewMode] = useState<'ALL' | 'REF' | 'IMED' | 'VALID'>(isMyReferenceView ? 'REF' : 'ALL');
   const initialFilters = { term: '', bairro: '', status: '', conselheiro_ref_id: '' };
   const [filters, setFilters] = useState(initialFilters);
 
@@ -50,6 +50,12 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, currentUser, onS
       // Regra: Se for modo "Minha Referência", filtra. Se for "Painel Geral", vê tudo.
       if (myViewMode === 'REF' && doc.conselheiro_referencia_id !== currentUser.id) return false;
       if (myViewMode === 'IMED' && doc.conselheiro_providencia_id !== currentUser.id) return false;
+      if (myViewMode === 'VALID') {
+        const isRef = doc.conselheiro_referencia_id === currentUser.id;
+        const isInTrio = doc.conselheiros_providencia_nomes?.some(name => name.toUpperCase() === currentUser.nome.toUpperCase());
+        const isPending = doc.status.includes('AGUARDANDO_VALIDACAO');
+        if (!isPending || (!isRef && !isInTrio)) return false;
+      }
 
       const matchTerm = !filters.term || 
         doc.crianca_nome.toUpperCase().includes(filters.term.toUpperCase()) || 
@@ -73,7 +79,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, currentUser, onS
         <div className="flex items-center justify-between">
            <div className="flex items-center gap-3">
               <Database className="w-6 h-6 text-blue-600" />
-              <h3 className="text-[14px] font-black uppercase text-slate-800 tracking-widest">Painel de Busca SICT</h3>
+              <h3 className="text-[14px] font-black uppercase text-slate-800 tracking-widest">Painel de Busca SIMCT</h3>
            </div>
            <button onClick={clearFilters} className="text-[10px] font-black uppercase text-red-500 hover:text-red-700 flex items-center gap-2">
               <RefreshCw className="w-3 h-3" /> Resetar Busca
@@ -99,10 +105,11 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, currentUser, onS
           </select>
         </div>
 
-        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-2xl w-full max-w-lg mt-4 border border-slate-200">
+        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-2xl w-full max-w-2xl mt-4 border border-slate-200">
            <button onClick={() => setMyViewMode('ALL')} className={`flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'ALL' ? 'bg-[#111827] text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Visão Geral (Todos)</button>
            <button onClick={() => setMyViewMode('REF')} className={`flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'REF' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Minha Titularidade</button>
            <button onClick={() => setMyViewMode('IMED')} className={`flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'IMED' ? 'bg-amber-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Minha Imediata</button>
+           <button onClick={() => setMyViewMode('VALID')} className={`flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'VALID' ? 'bg-red-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Aguardando Validação</button>
         </div>
       </div>
 
@@ -149,7 +156,8 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, currentUser, onS
             'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
             'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
             'NOTIFICACAO_LEANDRO', 'NOTIFICACAO_LUIZA', 'NOTIFICACAO_MILENA', 
-            'NOTIFICACAO_MIRIAN', 'NOTIFICACAO_SANDRA', 'NOTIFICACAO_ROSILDA'
+            'NOTIFICACAO_MIRIAN', 'NOTIFICACAO_SANDRA', 'NOTIFICACAO_ROSILDA',
+            'NENHUMA', 'AGUARDANDO_AVALIACAO'
           ].includes(s));
 
           const style = getStatusStyle(mainStatus, doc.is_improcedente, validationState);
@@ -169,7 +177,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, currentUser, onS
                               <ShieldAlert className="w-3 h-3" /> Aguardando Validação do Colegiado
                            </span>
                         )}
-                        {lastDispatch && (
+                        {lastDispatch && lastDispatch !== 'NENHUMA' && (
                            <span className={`flex items-center gap-2 px-3 py-1 rounded-lg text-white text-[10px] font-black uppercase tracking-widest shadow-sm ${lastDispatch === 'DIREITO_NAO_VIOLADO' ? 'bg-emerald-600' : 'bg-blue-600'}`}>
                               <Tag className="w-3 h-3" /> DESPACHO: {STATUS_LABELS[lastDispatch]}
                            </span>

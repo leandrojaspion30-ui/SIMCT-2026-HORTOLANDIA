@@ -23,6 +23,8 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
       canaisComunicado: {} as Record<string, number>,
       atribuicoesECA: {} as Record<string, number>,
       violencias: {} as Record<string, number>,
+      medidas101: {} as Record<string, number>,
+      medidas129: {} as Record<string, number>,
       medidasAplicadas: {} as Record<string, number>,
       status: {} as Record<string, number>,
       faixasEtarias: {
@@ -58,6 +60,11 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
       });
 
       doc.medidas_detalhadas?.forEach(m => {
+        if (m.artigo_inciso?.includes('101')) {
+          stats.medidas101[m.texto] = (stats.medidas101[m.texto] || 0) + 1;
+        } else if (m.artigo_inciso?.includes('129')) {
+          stats.medidas129[m.texto] = (stats.medidas129[m.texto] || 0) + 1;
+        }
         stats.medidasAplicadas[m.texto] = (stats.medidasAplicadas[m.texto] || 0) + 1;
       });
 
@@ -97,6 +104,20 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
 
   const measuresData = useMemo(() => 
     Object.entries(aiStats.medidasAplicadas)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8)
+  , [aiStats]);
+
+  const measures101Data = useMemo(() => 
+    Object.entries(aiStats.medidas101)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8)
+  , [aiStats]);
+
+  const measures129Data = useMemo(() => 
+    Object.entries(aiStats.medidas129)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 8)
@@ -279,7 +300,64 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
         </div>
       </div>
       
-      {/* NOVA SEÇÃO: DETALHAMENTO DAS MEDIDAS APLICADAS */}
+      {/* NOVA SEÇÃO: DETALHAMENTO DAS MEDIDAS APLICADAS (SEPARADAS POR ARTIGO) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Medidas Art. 101 (Criança/Adolescente)</h3>
+            <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase">Proteção</span>
+          </div>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={measures101Data} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
+                <XAxis type="number" hide />
+                <YAxis 
+                  dataKey="name" 
+                  type="category" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  width={180}
+                  tick={{fontSize: 8, fontWeight: 800, fill: '#64748b'}} 
+                />
+                <Tooltip 
+                  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
+                />
+                <Bar dataKey="value" fill="#2563EB" radius={[0, 8, 8, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Medidas Art. 129 (Pais/Responsáveis)</h3>
+            <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-black uppercase">Orientação</span>
+          </div>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={measures129Data} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
+                <XAxis type="number" hide />
+                <YAxis 
+                  dataKey="name" 
+                  type="category" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  width={180}
+                  tick={{fontSize: 8, fontWeight: 800, fill: '#64748b'}} 
+                />
+                <Tooltip 
+                  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
+                />
+                <Bar dataKey="value" fill="#F59E0B" radius={[0, 8, 8, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+      
+      {/* SEÇÃO ORIGINAL: FREQUÊNCIA GERAL DE MEDIDAS */}
       <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
         <div className="flex items-center justify-between mb-8">
           <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Detalhamento das Medidas Aplicadas</h3>

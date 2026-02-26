@@ -279,7 +279,8 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   type="date" 
                   required 
                   max={todayDate}
-                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-blue-500"
+                  disabled={!!initialData && !isADM}
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-blue-500 disabled:opacity-50"
                   value={formData.data_aporte}
                   onChange={e => setFormData({...formData, data_aporte: e.target.value})}
                 />
@@ -289,7 +290,8 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 <input 
                   type="time" 
                   required 
-                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-blue-500"
+                  disabled={!!initialData && !isADM}
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-blue-500 disabled:opacity-50"
                   value={formData.hora_aporte}
                   onChange={e => setFormData({...formData, hora_aporte: e.target.value})}
                 />
@@ -352,7 +354,8 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
               <input 
                 type="text" 
-                className="w-full p-4 bg-white border border-slate-100 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm"
+                disabled={!!initialData && !isADM}
+                className="w-full p-4 bg-white border border-slate-100 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm disabled:opacity-50"
                 value={formData.tipo_documento}
                 onChange={e => setFormData({...formData, tipo_documento: e.target.value.toUpperCase()})}
                 placeholder="Nº OFÍCIO / DOCUMENTO (OPCIONAL)"
@@ -535,7 +538,8 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
             </div>
             <textarea 
               required
-              className={`w-full p-6 bg-slate-50 border-2 rounded-2xl font-medium outline-none transition-all min-h-[150px] ${showRelatoError && !formData.relato_inicial ? 'border-red-500 shadow-red-50' : 'border-slate-100 focus:border-blue-500'}`}
+              disabled={!!initialData && !isADM}
+              className={`w-full p-6 bg-slate-50 border-2 rounded-2xl font-medium outline-none transition-all min-h-[150px] disabled:opacity-50 ${showRelatoError && !formData.relato_inicial ? 'border-red-500 shadow-red-50' : 'border-slate-100 focus:border-blue-500'}`}
               value={formData.relato_inicial}
               onChange={e => {
                 setFormData({...formData, relato_inicial: e.target.value});
