@@ -334,13 +334,10 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     if (finalize) {
       if (isImprocedente) {
         statusFinal = [...doc.status.filter(s => s !== 'AGUARDANDO_VALIDACAO' && s !== 'MEDIDA_APLICADA'), 'DIREITO_NAO_VIOLADO'];
-      } else if (hasTechnicalContent) {
-        // REGRA 1º: Conteúdo técnico (Direito, Medida, Atribuição) OBRIGA a validação colegiada
-        // Isso gera o alerta para os outros conselheiros de providência imediata
-        if (isTechnicalChange || isImediata) {
-          statusFinal = statusFinal.filter(s => s !== 'MEDIDA_APLICADA');
-        }
-        if (!statusFinal.includes('AGUARDANDO_VALIDACAO') && !statusFinal.includes('MEDIDA_APLICADA')) {
+      } else if (isTechnicalChange) {
+        // REGRA: Apenas edições técnicas obrigam a validação colegiada
+        statusFinal = statusFinal.filter(s => s !== 'MEDIDA_APLICADA');
+        if (!statusFinal.includes('AGUARDANDO_VALIDACAO')) {
           statusFinal.push('AGUARDANDO_VALIDACAO');
         }
 
@@ -355,8 +352,13 @@ const DocumentView: React.FC<DocumentViewProps> = ({
         notificacoesTrio = novasNotificacoes;
 
       } else if (isInformative) {
-        // Se houver apenas despacho administrativo SEM conteúdo técnico, removemos a pendência de validação
+        // DIRETRIZ: Se houver despacho administrativo SEM mudança técnica, a validação colegiada é proibida
         statusFinal = statusFinal.filter(s => s !== 'AGUARDANDO_VALIDACAO');
+      } else if (hasTechnicalContent) {
+        // Se houver conteúdo técnico mas sem mudança agora, mantém o fluxo atual
+        if (!statusFinal.includes('AGUARDANDO_VALIDACAO') && !statusFinal.includes('MEDIDA_APLICADA')) {
+          statusFinal.push('AGUARDANDO_VALIDACAO');
+        }
       } else {
         // Se não houver conteúdo técnico nem despacho, conclui
         statusFinal = statusFinal.filter(s => s !== 'AGUARDANDO_VALIDACAO' && s !== 'MEDIDA_APLICADA');

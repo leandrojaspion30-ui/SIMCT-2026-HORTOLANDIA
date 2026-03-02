@@ -28,6 +28,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
       origens: {} as Record<string, number>,
       canaisComunicado: {} as Record<string, number>,
       atribuicoesECA: {} as Record<string, number>,
+      requisicoes136IIIa: 0,
       violencias: {} as Record<string, number>,
       medidas101: {} as Record<string, number>,
       medidas129: {} as Record<string, number>,
@@ -59,6 +60,12 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
 
       doc.atribuicoes_136?.forEach(a => {
         stats.atribuicoesECA[a] = (stats.atribuicoesECA[a] || 0) + 1;
+      });
+
+      doc.atribuicoes_136_detalhadas?.forEach(ad => {
+        if (ad.inciso === 'III-a') {
+          stats.requisicoes136IIIa += (ad.servicos?.length || 0);
+        }
       });
 
       doc.violencias?.forEach(v => {
@@ -184,7 +191,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
         </div>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
             <FileText className="w-5 h-5 text-blue-500" />
@@ -209,6 +216,13 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
           <p className="text-[42px] font-black text-slate-900 leading-none">
             {filteredDocuments.filter(d => d.status.includes('AGUARDANDO_VALIDACAO')).length}
           </p>
+        </div>
+        <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <Sparkles className="w-5 h-5 text-purple-500" />
+            <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Requisições Art. 136 III-a</span>
+          </div>
+          <p className="text-[42px] font-black text-slate-900 leading-none">{aiStats.requisicoes136IIIa}</p>
         </div>
       </div>
 
