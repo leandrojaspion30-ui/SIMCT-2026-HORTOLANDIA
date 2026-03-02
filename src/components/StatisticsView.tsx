@@ -28,7 +28,8 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
       origens: {} as Record<string, number>,
       canaisComunicado: {} as Record<string, number>,
       atribuicoesECA: {} as Record<string, number>,
-      requisicoes136IIIa: 0,
+      requisicoes136III: 0,
+      servicos136III: {} as Record<string, number>,
       violencias: {} as Record<string, number>,
       medidas101: {} as Record<string, number>,
       medidas129: {} as Record<string, number>,
@@ -63,8 +64,12 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
       });
 
       doc.atribuicoes_136_detalhadas?.forEach(ad => {
-        if (ad.inciso === 'III-a') {
-          stats.requisicoes136IIIa += (ad.servicos?.length || 0);
+        if (ad.inciso?.startsWith('III')) {
+          stats.requisicoes136III += (ad.servicos?.length || 0);
+          ad.servicos?.forEach(s => {
+            const servicoNome = s.servico === 'OUTROS SERVIÇOS / FORA DA REDE' ? (s.servico_custom || 'OUTRO SERVIÇO') : s.servico;
+            stats.servicos136III[servicoNome] = (stats.servicos136III[servicoNome] || 0) + 1;
+          });
         }
       });
 
@@ -155,6 +160,12 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
       .slice(0, 6)
   , [aiStats]);
 
+  const servicos136IIIData = useMemo(() => 
+    Object.entries(aiStats.servicos136III)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+  , [aiStats]);
+
   const totalAttributions = useMemo(() => 
     filteredDocuments.reduce((acc, doc) => acc + (doc.atribuicoes_136?.length || 0), 0)
   , [filteredDocuments]);
@@ -220,9 +231,9 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
         <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
             <Sparkles className="w-5 h-5 text-purple-500" />
-            <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Requisições Art. 136 III-a</span>
+            <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Requisições Art. 136 III</span>
           </div>
-          <p className="text-[42px] font-black text-slate-900 leading-none">{aiStats.requisicoes136IIIa}</p>
+          <p className="text-[42px] font-black text-slate-900 leading-none">{aiStats.requisicoes136III}</p>
         </div>
       </div>
 
@@ -418,6 +429,34 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
                 contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
               />
               <Bar dataKey="value" fill="#10B981" radius={[0, 8, 8, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* NOVA SEÇÃO: DETALHAMENTO DOS SERVIÇOS REQUISITADOS (ART. 136 III) */}
+      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+        <div className="flex items-center justify-between mb-8">
+          <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Serviços Requisitados (Art. 136 III)</h3>
+          <span className="px-3 py-1 bg-purple-50 text-purple-600 rounded-lg text-[10px] font-black uppercase">Detalhamento por Serviço</span>
+        </div>
+        <div className="h-96">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={servicos136IIIData} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
+              <XAxis type="number" hide />
+              <YAxis 
+                dataKey="name" 
+                type="category" 
+                axisLine={false} 
+                tickLine={false} 
+                width={250}
+                tick={{fontSize: 8, fontWeight: 800, fill: '#64748b'}} 
+              />
+              <Tooltip 
+                contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
+              />
+              <Bar dataKey="value" fill="#8B5CF6" radius={[0, 8, 8, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

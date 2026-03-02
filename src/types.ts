@@ -77,6 +77,7 @@ export interface RequisicaoServico {
   servico: string;
   prazo: string;
   prazo_custom?: string;
+  servico_custom?: string;
   dataFinal: string;
   observacao?: string;
   concluido?: boolean;
