@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History } from 'lucide-react';
 import { Documento, User, ChildData, DocumentStatus } from '../types';
-import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, CANAIS_COMUNICADO_LIST, getEffectiveEscala, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO } from '../constants';
+import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, CANAIS_COMUNICADO_LIST, getEffectiveEscala, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
 
 interface DocumentRegistrationProps {
@@ -11,9 +11,10 @@ interface DocumentRegistrationProps {
   onSubmit: (data: any, files: File[]) => void;
   onCancel: () => void;
   initialData?: Documento;
+  isReadOnly?: boolean;
 }
 
-const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, currentUser, onSubmit, onCancel, initialData }) => {
+const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, currentUser, onSubmit, onCancel, initialData, isReadOnly }) => {
   const systemNow = new Date();
   const todayDate = systemNow.toISOString().split('T')[0];
   const todayTime = systemNow.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -79,10 +80,12 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
   }, [formData.cpf_genitora, formData.criancas, documents]);
 
   // DIRETRIZ 48: Escala baseada na data de HOJE
-  const trioNames = useMemo(() => getEffectiveEscala(todayDate, todayTime), [todayDate, todayTime]);
+  const trioNames = useMemo(() => getEffectiveEscala(todayDate, todayTime, currentUser.unidade_id), [todayDate, todayTime, currentUser.unidade_id]);
 
   // DIRETRIZ 51/52: Rodízio Alfabético para Referência e Imediata
   const assignedReference = useMemo(() => {
+    const conselheirosUnidade = CONSELHEIROS_ALFABETICO_POR_UNIDADE[currentUser.unidade_id] || [];
+    
     if (initialData) return INITIAL_USERS.find(u => u.id === initialData.conselheiro_referencia_id);
     if (isReferenceLocked) return INITIAL_USERS.find(u => u.id === formData.conselheiro_referencia_id);
     if (isManualReference && formData.conselheiro_referencia_id) return INITIAL_USERS.find(u => u.id === formData.conselheiro_referencia_id);
@@ -92,17 +95,17 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     const lastAssignedRefId = newCases[0]?.conselheiro_referencia_id;
     const lastRefName = INITIAL_USERS.find(u => u.id === lastAssignedRefId)?.nome.toUpperCase();
     
-    const currentIndex = CONSELHEIROS_ALFABETICO.indexOf(lastRefName || '');
-    const nextIndex = (currentIndex + 1) % CONSELHEIROS_ALFABETICO.length;
-    const nextName = CONSELHEIROS_ALFABETICO[nextIndex];
+    const currentIndex = conselheirosUnidade.indexOf(lastRefName || '');
+    const nextIndex = (currentIndex + 1) % conselheirosUnidade.length;
+    const nextName = conselheirosUnidade[nextIndex];
     
-    return INITIAL_USERS.find(u => u.nome.toUpperCase() === nextName);
-  }, [isReferenceLocked, formData.conselheiro_referencia_id, documents]);
+    return INITIAL_USERS.find(u => u.nome.toUpperCase() === nextName && u.unidade_id === currentUser.unidade_id);
+  }, [isReferenceLocked, formData.conselheiro_referencia_id, documents, currentUser.unidade_id]);
 
   const assignedImediata = useMemo(() => {
     // 1. PRIORIDADE ABSOLUTA: Notificação desbloqueia e define a imediata
     if (formData.notificacao) {
-      return INITIAL_USERS.find(u => u.nome.toUpperCase() === formData.notificacao.toUpperCase());
+      return INITIAL_USERS.find(u => u.nome.toUpperCase() === formData.notificacao.toUpperCase() && u.unidade_id === currentUser.unidade_id);
     }
 
     if (initialData) return INITIAL_USERS.find(u => u.id === initialData.conselheiro_providencia_id);
@@ -119,8 +122,8 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     const nextIndex = (currentIndex + 1) % trioNames.length;
     const nextName = trioNames[nextIndex];
     
-    return INITIAL_USERS.find(u => u.nome.toUpperCase() === nextName);
-  }, [trioNames, documents, todayDate, formData.notificacao, initialData]);
+    return INITIAL_USERS.find(u => u.nome.toUpperCase() === nextName && u.unidade_id === currentUser.unidade_id);
+  }, [trioNames, documents, todayDate, formData.notificacao, initialData, currentUser.unidade_id]);
 
   const handleChildChange = (index: number, field: keyof ChildData, value: any) => {
     const newChildren = [...formData.criancas];
@@ -266,7 +269,8 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
         </header>
 
         <form onSubmit={handleSubmit} className="p-8 space-y-8">
-          {/* BLOCO 1: NOVO DOCUMENTO (DATA E HORA) */}
+          <fieldset disabled={isReadOnly} className="contents">
+            {/* BLOCO 1: NOVO DOCUMENTO (DATA E HORA) */}
           <section className="space-y-6">
             <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
               <Calendar className="w-5 h-5 text-blue-600" />
@@ -434,15 +438,17 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 <Baby className="w-5 h-5 text-blue-600" />
                 <h3 className="text-[12px] font-black uppercase text-slate-800 tracking-widest">4. Dados da Criança/Adolescente</h3>
               </div>
-              <button type="button" onClick={addChild} className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase hover:bg-blue-100 transition-all">
-                <PlusCircle className="w-4 h-4" /> Adicionar Irmão
-              </button>
+              {!isReadOnly && (
+                <button type="button" onClick={addChild} className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase hover:bg-blue-100 transition-all">
+                  <PlusCircle className="w-4 h-4" /> Adicionar Irmão
+                </button>
+              )}
             </div>
             {formData.criancas.map((crianca, idx) => {
               const ageInfo = getAgeInfo(crianca.data_nascimento);
               return (
                 <div key={idx} className="p-6 bg-slate-50 rounded-2xl border border-slate-100 space-y-4 relative group">
-                  {formData.criancas.length > 1 && (
+                  {formData.criancas.length > 1 && !isReadOnly && (
                     <button type="button" onClick={() => removeChild(idx)} className="absolute top-4 right-4 p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100">
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -471,10 +477,10 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Data Nascimento *</label>
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Data Nascimento {!crianca.nao_informado && '*'}</label>
                       <input 
                         type="date" 
-                        required 
+                        required={!crianca.nao_informado} 
                         className="w-full p-3 bg-white border border-slate-200 rounded-lg font-bold outline-none focus:border-blue-500" 
                         value={crianca.data_nascimento} 
                         onChange={e => handleChildChange(idx, 'data_nascimento', e.target.value)} 
@@ -491,9 +497,9 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Gênero *</label>
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Gênero {!crianca.nao_informado && '*'}</label>
                       <select 
-                        required 
+                        required={!crianca.nao_informado} 
                         className="w-full p-3 bg-white border border-slate-200 rounded-lg font-bold uppercase text-[10px] outline-none focus:border-blue-500"
                         value={crianca.genero_identidade}
                         onChange={e => handleChildChange(idx, 'genero_identidade', e.target.value)}
@@ -615,14 +621,17 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
               </div>
             </div>
           </div>
+        </fieldset>
 
+        {!isReadOnly && (
           <button 
             type="submit" 
             className="w-full py-6 bg-[#111827] text-white rounded-2xl font-black uppercase text-[14px] tracking-[0.2em] shadow-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
           >
             <Save className="w-5 h-5" /> [Salvar Prontuário e Monitoramento]
           </button>
-        </form>
+        )}
+      </form>
       </div>
 
       {showHistoryModal && (

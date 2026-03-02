@@ -278,12 +278,14 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
                     </td>
                     <td className="px-8 py-6 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button 
-                          onClick={() => setShowAddService(doc.id)}
-                          className="p-2.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all shadow-sm flex items-center gap-2 text-[10px] font-black uppercase"
-                        >
-                          <Plus className="w-4 h-4" /> Add Serviço
-                        </button>
+                        {!isReadOnly && (
+                          <button 
+                            onClick={() => setShowAddService(doc.id)}
+                            className="p-2.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all shadow-sm flex items-center gap-2 text-[10px] font-black uppercase"
+                          >
+                            <Plus className="w-4 h-4" /> Add Serviço
+                          </button>
+                        )}
                         <button onClick={() => onSelectDoc(doc.id)} className="p-2.5 bg-[#111827] text-white rounded-lg hover:bg-[#2563EB] transition-all shadow-sm"><FileText className="w-4 h-4" /></button>
                         {!isReadOnly && <button onClick={() => setDocToConfirmDelete(doc)} className="p-2.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all shadow-sm"><CheckCircle2 className="w-4 h-4" /></button>}
                       </div>

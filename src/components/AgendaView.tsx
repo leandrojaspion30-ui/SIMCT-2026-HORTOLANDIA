@@ -26,10 +26,10 @@ interface AgendaViewProps {
 const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, currentUser, effectiveUserId, isReadOnly, onAddLog }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const todayStr = new Date().toISOString().split('T')[0];
-  const isAdmin = currentUser.perfil === 'ADMIN';
-  const councilors = INITIAL_USERS.filter(u => u.perfil === 'CONSELHEIRO');
+  const isAdmin = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
+  const councilors = INITIAL_USERS.filter(u => u.perfil === 'CONSELHEIRO' && u.unidade_id === currentUser.unidade_id);
   
-  const [newEntry, setNewEntry] = useState<Omit<AgendaEntry, 'id'>>({
+  const [newEntry, setNewEntry] = useState<Omit<AgendaEntry, 'id' | 'unidade_id'>>({
     conselheiro_id: isAdmin ? '' : effectiveUserId,
     data: todayStr,
     hora: '09:00',
@@ -74,7 +74,7 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, currentUser,
       return;
     }
 
-    const entry: AgendaEntry = { ...newEntry, id: `agenda-${Date.now()}` };
+    const entry: AgendaEntry = { ...newEntry, id: `agenda-${Date.now()}`, unidade_id: currentUser.unidade_id };
     setAgenda(prev => [...prev, entry]);
     
     const assignedUser = INITIAL_USERS.find(u => u.id === entry.conselheiro_id);

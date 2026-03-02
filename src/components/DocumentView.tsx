@@ -2,8 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { 
   ArrowLeft, Scale, X, Check, Clock, AlertCircle, Info, 
   Save, ShieldAlert, History, ClipboardList, CheckSquare, Square, 
-  SendHorizonal, Activity, Ban, Calendar, UserRound, Plus,
-  CheckCircle, CheckCircle2, ChevronDown, Play, Users2, Tag, FileCheck2,
+  SendHorizontal, Activity, Ban, Calendar, UserRound, Plus,
+  CheckCircle, CheckCircle2, ChevronDown, Play, Users, Tag, FileCheck2,
   Database, Fingerprint, MapPin, Building2, UserCog, Search, LayoutList,
   ChevronRight, Timer, ArrowUpRight, ShieldCheck, Box, FileText, Baby,
   AlertTriangle, Trash2
@@ -16,7 +16,7 @@ import {
   STATUS_LABELS, INITIAL_USERS, 
   SIPIA_HIERARCHY, AGENTES_VIOLADORES_ESTRUTURA, 
   MEDIDAS_101_ECA, MEDIDAS_129_ECA,
-  ATRIBUICOES_136_ECA, REDE_HORTOLANDIA
+  ATRIBUICOES_136_ECA, REDE_HORTOLANDIA, getEffectiveEscala
 } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
 
@@ -77,7 +77,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     doc.conselheiro_referencia_id === currentUser.id;
   const isImediata = doc.conselheiro_providencia_id === currentUser.id;
   const isADM = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
-  const canEditTechnicalFields = isResponsible && !isADM;
+  const canEditTechnicalFields = isImediata && !isADM;
 
   // INTELIGÊNCIA SIMCT: Dossiê Familiar Cruzado
   const familyDossier = useMemo(() => {
@@ -175,15 +175,19 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   }, []);
 
   const handleQuickStatusChange = (newStatus: DocumentStatus) => {
-    // DIRETRIZ: Apenas o Conselheiro de Providência Imediata (ou ADM) possui autonomia para despacho sem validação
-    if (!isImediata && !isADM) return;
+    // DIRETRIZ: Apenas o Conselheiro de Providência Imediata possui autonomia para despacho sem validação
+    if (!isImediata) return;
     
-    // DIRETRIZ: Alteração de status por autonomia dispensa validação do trio
-    // Removemos a pendência de validação ao realizar um despacho administrativo
+    const hasTechnical = (doc.violacoesSipia?.length || 0) > 0 || 
+                         (doc.medidas_detalhadas?.length || 0) > 0 || 
+                         (doc.atribuicoes_136?.length || 0) > 0 ||
+                         ((doc.agentesVioladores?.length || 0) > 0 && doc.agentesVioladores?.[0]?.categoria !== 'INEXISTENTE');
+
+    // REGRA: Quando um despacho é selecionado, a validação colegiada não deve aparecer
     let nextStatus: DocumentStatus[] = doc.status.filter(s => s !== 'AGUARDANDO_VALIDACAO');
     
-    // IMPORTANTE: Não adicionamos MEDIDA_APLICADA automaticamente aqui. 
-    // Este status agora é exclusivo da validação pelo colegiado (trio).
+    // Se o novo status já estiver no array, removemos para reinserir no final (tornando-o o atual)
+    nextStatus = nextStatus.filter(s => s !== newStatus);
     nextStatus.push(newStatus);
 
     onUpdateDocument(doc.id, { 
@@ -212,18 +216,41 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     const now = new Date();
     const formattedDate = now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
     
-    // Se um responsável edita, resetamos as validações dos outros
+    // Verificação de alteração técnica para revalidação (Diretriz: Apenas se houver edição ou nova aplicação)
+    const currentMedidasInciso = (doc.medidas_detalhadas || []).map(m => m.artigo_inciso).sort();
+    const newMedidasInciso = [...selectedMedidas101.map(id => `Art. 101, ${id}`), ...selectedMedidas129.map(id => `Art. 129, ${id}`)].sort();
+    const hasMedidasChanged = JSON.stringify(currentMedidasInciso) !== JSON.stringify(newMedidasInciso);
+    
+    const hasAtribuicoesChanged = JSON.stringify(selectedAtribuicoes.sort()) !== JSON.stringify((doc.atribuicoes_136 || []).sort()) ||
+                                  JSON.stringify(atribuicoesDetalhadas) !== JSON.stringify(doc.atribuicoes_136_detalhadas || []);
+
+    const hasViolacoesChanged = JSON.stringify([...tempViolacoes].sort((a, b) => a.especifico.localeCompare(b.especifico))) !== 
+                                JSON.stringify([...(doc.violacoesSipia || [])].sort((a, b) => a.especifico.localeCompare(b.especifico)));
+
+    const hasAgentesChanged = JSON.stringify([...tempAgentes].sort((a, b) => a.principal.localeCompare(b.principal))) !== 
+                              JSON.stringify([...(doc.agentesVioladores || [])].sort((a, b) => a.principal.localeCompare(b.principal)));
+
+    const isTechnicalChange = hasMedidasChanged || hasAtribuicoesChanged || hasViolacoesChanged || hasAgentesChanged;
+
+    // Se houver mudança técnica, resetamos as validações dos outros para forçar revalidação colegiada
     let confirmacoes = doc.medidas_detalhadas?.[0]?.confirmacoes || [];
-    if (isResponsible && doc.medidas_detalhadas && doc.medidas_detalhadas.length > 0) {
+    let notificacoesTrio = doc.notificacoes_trio || [];
+
+    if (isTechnicalChange && isImediata) {
+      // REFORÇO: Se houver mudança técnica, invalidamos assinaturas anteriores e notificamos o trio
       confirmacoes = confirmacoes.filter(c => c.usuario_id === currentUser.id);
+      const escala = getEffectiveEscala(doc.data_aporte, doc.hora_aporte, currentUser.unidade_id);
+      notificacoesTrio = escala.filter(nome => nome !== currentUser.nome.toUpperCase());
     }
     
     const mySignature = { usuario_id: currentUser.id, usuario_nome: `${currentUser.nome} - ${formattedDate}`, data_hora: now.toISOString() };
     if (!confirmacoes.some(c => c.usuario_id === currentUser.id)) {
       confirmacoes.push(mySignature);
+      // Ao assinar, remove o próprio nome das notificações pendentes
+      notificacoesTrio = notificacoesTrio.filter(nome => nome.toUpperCase() !== currentUser.nome.toUpperCase());
     }
 
-    const combinedMedidas: MedidaAplicada[] = [
+    let combinedMedidas: MedidaAplicada[] = [
       ...selectedMedidas101.map(id => ({ 
         id: `med-101-${id}-${Date.now()}`, 
         artigo_inciso: `Art. 101, ${id}`, 
@@ -245,6 +272,20 @@ const DocumentView: React.FC<DocumentViewProps> = ({
         confirmacoes 
       }))
     ];
+
+    // Se houver violação ou atribuição mas nenhuma medida selecionada, criamos uma entrada de controle para as assinaturas
+    if (combinedMedidas.length === 0 && (tempViolacoes.length > 0 || selectedAtribuicoes.length > 0)) {
+      combinedMedidas = [{
+        id: `val-tech-${Date.now()}`,
+        artigo_inciso: 'CONTROLE_VALIDACAO',
+        texto: 'Validação Técnica de Direitos/Atribuições',
+        autor_id: currentUser.id,
+        autor_nome: currentUser.nome,
+        data_lancamento: now.toISOString(),
+        conselheiros_requeridos: doc.conselheiros_providencia_nomes,
+        confirmacoes
+      }];
+    }
 
     // DIRETRIZ 93: Sincronização automática com Monitoramento
     const novasRequisicoesMonitoramento = atribuicoesDetalhadas.flatMap(attr => 
@@ -286,35 +327,42 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     const currentStatus = doc.status[doc.status.length - 1];
     const isInformative = informativeStatusOptions.includes(currentStatus);
     
-    // Verificação de alteração técnica para revalidação (Diretriz: Apenas se houver edição ou nova aplicação)
-    const currentMedidasInciso = (doc.medidas_detalhadas || []).map(m => m.artigo_inciso).sort();
-    const newMedidasInciso = [...selectedMedidas101.map(id => `Art. 101, ${id}`), ...selectedMedidas129.map(id => `Art. 129, ${id}`)].sort();
-    const hasMedidasChanged = JSON.stringify(currentMedidasInciso) !== JSON.stringify(newMedidasInciso);
-    
-    const hasAtribuicoesChanged = JSON.stringify(selectedAtribuicoes.sort()) !== JSON.stringify((doc.atribuicoes_136 || []).sort()) ||
-                                  JSON.stringify(atribuicoesDetalhadas) !== JSON.stringify(doc.atribuicoes_136_detalhadas || []);
-
-    const isTechnicalChange = hasMedidasChanged || hasAtribuicoesChanged;
-    const hasTechnicalContent = combinedMedidas.length > 0 || selectedAtribuicoes.length > 0;
+    const hasTechnicalContent = tempViolacoes.length > 0 || combinedMedidas.length > 0 || selectedAtribuicoes.length > 0 || (tempAgentes.length > 0 && tempAgentes[0]?.categoria !== 'INEXISTENTE');
 
     let statusFinal: DocumentStatus[] = [...doc.status];
     
     if (finalize) {
       if (isImprocedente) {
-        statusFinal = [...doc.status.filter(s => s !== 'AGUARDANDO_VALIDACAO'), 'DIREITO_NAO_VIOLADO'];
-      } else if (isTechnicalChange) {
-        // Se houve edição ou nova aplicação, força aguardando validação
-        statusFinal = statusFinal.filter(s => s !== 'MEDIDA_APLICADA');
-        if (!statusFinal.includes('AGUARDANDO_VALIDACAO')) {
+        statusFinal = [...doc.status.filter(s => s !== 'AGUARDANDO_VALIDACAO' && s !== 'MEDIDA_APLICADA'), 'DIREITO_NAO_VIOLADO'];
+      } else if (hasTechnicalContent) {
+        // REGRA 1º: Conteúdo técnico (Direito, Medida, Atribuição) OBRIGA a validação colegiada
+        // Isso gera o alerta para os outros conselheiros de providência imediata
+        if (isTechnicalChange || isImediata) {
+          statusFinal = statusFinal.filter(s => s !== 'MEDIDA_APLICADA');
+        }
+        if (!statusFinal.includes('AGUARDANDO_VALIDACAO') && !statusFinal.includes('MEDIDA_APLICADA')) {
           statusFinal.push('AGUARDANDO_VALIDACAO');
         }
-      } else if (hasTechnicalContent && (doc.status.includes('MEDIDA_APLICADA') || doc.status.includes('AGUARDANDO_VALIDACAO'))) {
-        // Se já está em fluxo de validação ou aplicada, e não houve mudança técnica, mantém
-        statusFinal = doc.status;
+
+        // Notificar automaticamente os outros membros do trio de imediata
+        const escala = getEffectiveEscala(doc.data_aporte, doc.hora_aporte, currentUser.unidade_id);
+        const outrosDoTrio = escala.filter(nome => nome !== currentUser.nome.toUpperCase());
+        
+        const novasNotificacoes = [...notificacoesTrio];
+        outrosDoTrio.forEach(nome => {
+          if (!novasNotificacoes.includes(nome)) novasNotificacoes.push(nome);
+        });
+        notificacoesTrio = novasNotificacoes;
+
       } else if (isInformative) {
-        statusFinal = doc.status;
+        // Se houver apenas despacho administrativo SEM conteúdo técnico, removemos a pendência de validação
+        statusFinal = statusFinal.filter(s => s !== 'AGUARDANDO_VALIDACAO');
       } else {
-        statusFinal = [...doc.status, 'CONCLUIDO'];
+        // Se não houver conteúdo técnico nem despacho, conclui
+        statusFinal = statusFinal.filter(s => s !== 'AGUARDANDO_VALIDACAO' && s !== 'MEDIDA_APLICADA');
+        if (!isInformative && !statusFinal.includes('CONCLUIDO')) {
+          statusFinal.push('CONCLUIDO');
+        }
       }
     } else {
       if (!isInformative && currentStatus !== 'EM_PREENCHIMENTO') {
@@ -331,7 +379,8 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       status: statusFinal,
       relato_providencias: relatoProvidencias,
       is_improcedente: isImprocedente,
-      monitoramento: monitoramentoAtualizado
+      monitoramento: monitoramentoAtualizado,
+      notificacoes_trio: notificacoesTrio
     });
     
     onAddLog(doc.id, finalize ? `EDIÇÃO TÉCNICA: Medidas/Atribuições alteradas. REVALIDAÇÃO COLEGIADA OBRIGATÓRIA.` : `RASCUNHO TÉCNICO: Prontuário atualizado.`, 'DOCUMENTO');
@@ -349,7 +398,15 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       nextStatus = nextStatus.filter(s => s !== 'AGUARDANDO_VALIDACAO'); 
       nextStatus.push('MEDIDA_APLICADA'); 
     }
-    onUpdateDocument(doc.id, { medidas_detalhadas: updated, status: nextStatus });
+    
+    // Remove o próprio nome das notificações ao validar
+    const nextNotificacoes = (doc.notificacoes_trio || []).filter(nome => nome.toUpperCase() !== currentUser.nome.toUpperCase());
+
+    onUpdateDocument(doc.id, { 
+      medidas_detalhadas: updated, 
+      status: nextStatus,
+      notificacoes_trio: nextNotificacoes
+    });
     onAddLog(doc.id, `VALIDAÇÃO TÉCNICA: Assinatura confirmada pelo trio.`, 'VALIDAÇÃO');
   };
 
@@ -362,6 +419,28 @@ const DocumentView: React.FC<DocumentViewProps> = ({
           <div className="text-center"><h2 className="text-[20px] font-black uppercase">{doc.crianca_nome}</h2><p className="text-[10px] opacity-60 uppercase">SIMCT #{doc.id}</p></div>
           <div className="w-12 h-12"></div>
         </header>
+
+        {/* ALERTA DE REVALIDAÇÃO OBRIGATÓRIA */}
+        {(doc.notificacoes_trio || []).includes(currentUser.nome.toUpperCase()) && (
+          <div className="bg-red-600 p-6 flex items-center justify-between animate-pulse">
+            <div className="flex items-center gap-4 text-white">
+              <ShieldAlert className="w-8 h-8" />
+              <div>
+                <h4 className="text-[14px] font-black uppercase tracking-tighter">Atenção: Revalidação Obrigatória</h4>
+                <p className="text-[11px] font-bold uppercase opacity-90">Houve uma edição técnica neste prontuário. Você precisa validar as novas medidas/atribuições.</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => {
+                const section = document.getElementById('validacao-trio');
+                if (section) section.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="px-6 py-3 bg-white text-red-600 rounded-xl text-[10px] font-black uppercase hover:bg-slate-100 transition-all shadow-lg"
+            >
+              Ir para Validação
+            </button>
+          </div>
+        )}
 
         <div className="p-10 space-y-10">
           {/* DESPACHO RÁPIDO */}
@@ -409,9 +488,16 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                     <Activity className="w-5 h-5 text-indigo-600" />
                     <div>
                         <span className="text-[9px] font-black text-slate-400 uppercase block">Situação Vigente</span>
-                        <span className={`text-[11px] font-black uppercase ${doc.status[doc.status.length - 1] === 'DIREITO_NAO_VIOLADO' ? 'text-emerald-600' : 'text-indigo-700'}`}>
-                          {STATUS_LABELS[doc.status[doc.status.length - 1]]}
-                        </span>
+                        <div className="flex flex-wrap gap-2 items-center">
+                          {doc.status.includes('MEDIDA_APLICADA') && doc.status[doc.status.length - 1] !== 'MEDIDA_APLICADA' && (
+                            <span className="text-[11px] font-black uppercase text-emerald-600 flex items-center gap-1">
+                              {STATUS_LABELS['MEDIDA_APLICADA']} <span className="text-slate-300">+</span>
+                            </span>
+                          )}
+                          <span className={`text-[11px] font-black uppercase ${doc.status[doc.status.length - 1] === 'DIREITO_NAO_VIOLADO' ? 'text-emerald-600' : 'text-indigo-700'}`}>
+                            {STATUS_LABELS[doc.status[doc.status.length - 1]]}
+                          </span>
+                        </div>
                     </div>
                   </div>
                 )}
@@ -427,7 +513,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                     placeholder="INFORME O CÓDIGO DO COMUNICADO OU OBSERVAÇÃO ADMINISTRATIVA..."
                     value={doc.despacho_situacao || ''}
                     onChange={(e) => onUpdateDocument(doc.id, { despacho_situacao: e.target.value })}
-                    disabled={!isImediata && !isADM}
+                    disabled={!isImediata}
                  />
               </div>
             )}
@@ -575,7 +661,8 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                                   <h5 className="text-[11px] font-black text-purple-800 uppercase tracking-widest">Requisição de Serviços (Rede Hortolândia)</h5>
                                   <button 
                                     onClick={() => setAtribuicoesDetalhadas(prev => [...prev, { id: Date.now().toString(), inciso: 'III-a', texto: 'REQUISIÇÃO DE SERVIÇO', servicos: [] }])}
-                                    className="px-4 py-2 bg-purple-600 text-white rounded-xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-purple-700 transition-all shadow-md"
+                                    disabled={!canEditTechnicalFields}
+                                    className={`px-4 py-2 bg-purple-600 text-white rounded-xl text-[10px] font-black uppercase flex items-center gap-2 transition-all shadow-md ${!canEditTechnicalFields ? 'opacity-50 cursor-not-allowed' : 'hover:bg-purple-700'}`}
                                   >
                                     <Plus className="w-4 h-4" /> Adicionar Serviço
                                   </button>
@@ -584,13 +671,20 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                                 <div className="space-y-4">
                                   {atribuicoesDetalhadas.filter(ad => ad.inciso === 'III-a').map((ad, idx) => (
                                     <div key={ad.id} className="p-6 bg-white rounded-2xl border border-purple-100 space-y-4 shadow-sm relative group">
-                                      <button onClick={() => setAtribuicoesDetalhadas(prev => prev.filter(p => p.id !== ad.id))} className="absolute top-4 right-4 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><X className="w-4 h-4" /></button>
+                                      <button 
+                                        onClick={() => setAtribuicoesDetalhadas(prev => prev.filter(p => p.id !== ad.id))} 
+                                        disabled={!canEditTechnicalFields}
+                                        className={`absolute top-4 right-4 p-2 text-slate-300 transition-all ${!canEditTechnicalFields ? 'opacity-50 cursor-not-allowed' : 'hover:text-red-500 hover:bg-red-50 rounded-lg'}`}
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </button>
                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className="space-y-1">
                                           <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Área / Serviço</label>
                                           <select 
-                                            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-purple-500"
+                                            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-purple-500 disabled:opacity-50"
                                             value={`${ad.servicos?.[0]?.area}|${ad.servicos?.[0]?.servico}`}
+                                            disabled={!canEditTechnicalFields}
                                             onChange={(e) => {
                                               const [area, servico] = e.target.value.split('|');
                                               setAtribuicoesDetalhadas(prev => prev.map(p => p.id === ad.id ? { ...p, servicos: [{ area, servico, prazo: p.servicos?.[0]?.prazo || '48H', observacao: p.servicos?.[0]?.observacao || '', servico_custom: p.servicos?.[0]?.servico_custom || '' }] } : p));
@@ -613,8 +707,9 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                                             <input 
                                               type="text"
                                               placeholder="ESPECIFIQUE O SERVIÇO..."
-                                              className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-purple-500"
+                                              className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-purple-500 disabled:opacity-50"
                                               value={ad.servicos?.[0]?.servico_custom || ''}
+                                              disabled={!canEditTechnicalFields}
                                               onChange={(e) => setAtribuicoesDetalhadas(prev => prev.map(p => p.id === ad.id ? { ...p, servicos: [{ ...p.servicos?.[0], servico_custom: e.target.value }] } : p))}
                                             />
                                           </div>
@@ -623,8 +718,9 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                                           <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Prazo</label>
                                           <div className="flex gap-2">
                                             <select 
-                                              className="flex-1 p-3 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-purple-500"
+                                              className="flex-1 p-3 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-purple-500 disabled:opacity-50"
                                               value={ad.servicos?.[0]?.prazo || '48H'}
+                                              disabled={!canEditTechnicalFields}
                                               onChange={(e) => setAtribuicoesDetalhadas(prev => prev.map(p => p.id === ad.id ? { ...p, servicos: [{ ...p.servicos?.[0], prazo: e.target.value }] } : p))}
                                             >
                                               <option value="24H">24 HORAS (URGENTE)</option>
@@ -638,8 +734,9 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                                               <input 
                                                 type="number"
                                                 placeholder="DIAS"
-                                                className="w-20 p-3 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-purple-500"
+                                                className="w-20 p-3 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-purple-500 disabled:opacity-50"
                                                 value={ad.servicos?.[0]?.prazo_custom || ''}
+                                                disabled={!canEditTechnicalFields}
                                                 onChange={(e) => setAtribuicoesDetalhadas(prev => prev.map(p => p.id === ad.id ? { ...p, servicos: [{ ...p.servicos?.[0], prazo_custom: e.target.value }] } : p))}
                                               />
                                             )}
@@ -649,9 +746,10 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                                       <div className="space-y-1">
                                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Observações Técnicas</label>
                                         <textarea 
-                                          className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-purple-500 min-h-[80px]"
+                                          className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-purple-500 min-h-[80px] disabled:opacity-50"
                                           placeholder="DETALHAMENTO DA REQUISIÇÃO..."
                                           value={ad.servicos?.[0]?.observacao || ''}
+                                          disabled={!canEditTechnicalFields}
                                           onChange={(e) => setAtribuicoesDetalhadas(prev => prev.map(p => p.id === ad.id ? { ...p, servicos: [{ ...p.servicos?.[0], observacao: e.target.value }] } : p))}
                                         />
                                       </div>
@@ -670,9 +768,10 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                          <ClipboardList className="w-4 h-4" /> Relato de Providências (Opcional)
                        </label>
                        <textarea 
-                          className="w-full p-6 bg-slate-50 border border-slate-100 rounded-[2rem] text-[12px] font-bold uppercase outline-none focus:border-purple-500 min-h-[150px] shadow-inner"
+                          className="w-full p-6 bg-slate-50 border border-slate-100 rounded-[2rem] text-[12px] font-bold uppercase outline-none focus:border-purple-500 min-h-[150px] shadow-inner disabled:opacity-50"
                           placeholder="DESCREVA AS AÇÕES PRÁTICAS REALIZADAS (CONTATOS, VISITAS, ORIENTAÇÕES)..."
                           value={relatoProvidencias}
+                          disabled={!canEditTechnicalFields}
                           onChange={(e) => setRelatoProvidencias(e.target.value)}
                        />
                     </div>
@@ -682,17 +781,16 @@ const DocumentView: React.FC<DocumentViewProps> = ({
             )}
           </div>
 
-          {isResponsible && (
+          {(isImediata || isADM) && (
             <div className="grid grid-cols-2 gap-6 pt-6">
               <button onClick={() => handleSave(false)} className="py-6 bg-slate-600 text-white rounded-3xl font-black uppercase text-[12px] shadow-xl hover:bg-slate-700 transition-all flex items-center justify-center gap-3"><Save className="w-5 h-5" /> [Salvar Rascunho]</button>
               <button onClick={() => handleSave(true)} className="py-6 bg-emerald-600 text-white rounded-3xl font-black uppercase text-[12px] shadow-xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-3"><CheckCircle2 className="w-5 h-5" /> [Concluir Prontuário]</button>
             </div>
           )}
-
-          {/* VALIDAÇÃO DO TRIO */}
-          {(doc.status.includes('AGUARDANDO_VALIDACAO') || doc.status.includes('MEDIDA_APLICADA')) && (
-            <div className="mt-8 pt-8 border-t bg-slate-50/50 rounded-[2.5rem] p-8 space-y-6 border border-slate-100 shadow-inner">
-               <h4 className="text-[12px] font-black text-slate-800 uppercase flex items-center gap-2"><Users2 className="w-5 h-5 text-blue-600" /> Assinaturas Colegiadas (Trio de Imediata)</h4>
+          {(doc.status.includes('AGUARDANDO_VALIDACAO') || doc.status.includes('MEDIDA_APLICADA')) && 
+           (!informativeStatusOptions.includes(doc.status[doc.status.length - 1]) || (doc.notificacoes_trio || []).length > 0) && (
+            <div id="validacao-trio" className="mt-8 pt-8 border-t bg-slate-50/50 rounded-[2.5rem] p-8 space-y-6 border border-slate-100 shadow-inner">
+               <h4 className="text-[12px] font-black text-slate-800 uppercase flex items-center gap-2"><Users className="w-5 h-5 text-blue-600" /> Assinaturas Colegiadas (Trio de Imediata)</h4>
                
                {/* RESUMO TÉCNICO PARA VALIDAÇÃO */}
                <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-sm">

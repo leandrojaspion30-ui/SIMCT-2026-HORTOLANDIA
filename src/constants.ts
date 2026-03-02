@@ -5,17 +5,33 @@ export interface UserWithPassword extends User {
 }
 
 export const INITIAL_USERS: UserWithPassword[] = [
-  { id: 'admin_lud', nome: 'LUDIMILA', perfil: 'ADMIN', cargo: 'ADM GERAL', senha: '123456' },
-  { id: 'admin1', nome: 'EDSON', perfil: 'ADMIN', cargo: 'ADM', senha: '123456' },
-  { id: 'admin2', nome: 'LUIZ', perfil: 'ADMIN', cargo: 'ADM', senha: '123456' },
-  { id: 'admin3', nome: 'FATIMA', perfil: 'ADMIN', cargo: 'ADM', senha: '123456' },
-  { id: 'cons1', nome: 'LEANDRO', perfil: 'CONSELHEIRO', cargo: 'Conselheiro', senha: '123456' },
-  { id: 'cons2', nome: 'LUIZA', perfil: 'CONSELHEIRO', cargo: 'Conselheira', senha: '123456' },
-  { id: 'cons3', nome: 'MILENA', perfil: 'CONSELHEIRO', cargo: 'Conselheira', senha: '123456' },
-  { id: 'cons5', nome: 'MIRIAN', perfil: 'CONSELHEIRO', cargo: 'Conselheira', senha: '123456' },
-  { id: 'cons4', nome: 'SANDRA', perfil: 'CONSELHEIRO', cargo: 'Conselheira', senha: '123456' },
-  { id: 'suplente1', nome: 'ROSILDA', perfil: 'SUPLENTE', cargo: 'Conselheira Suplente', senha: '123456', status: 'INATIVO' },
+  // UNIDADE 1 - CT 1
+  { id: 'admin_lud', nome: 'LUDIMILA', perfil: 'ADMIN', cargo: 'ADM GERAL', senha: '123456', unidade_id: 1 },
+  { id: 'admin1', nome: 'EDSON', perfil: 'ADMIN', cargo: 'ADM', senha: '123456', unidade_id: 1 },
+  { id: 'admin2', nome: 'LUIZ', perfil: 'ADMIN', cargo: 'ADM', senha: '123456', unidade_id: 1 },
+  { id: 'admin3', nome: 'FATIMA', perfil: 'ADMIN', cargo: 'ADM', senha: '123456', unidade_id: 1 },
+  { id: 'cons1', nome: 'LEANDRO', perfil: 'CONSELHEIRO', cargo: 'Conselheiro', senha: '123456', unidade_id: 1 },
+  { id: 'cons2', nome: 'LUIZA', perfil: 'CONSELHEIRO', cargo: 'Conselheira', senha: '123456', unidade_id: 1 },
+  { id: 'cons3', nome: 'MILENA', perfil: 'CONSELHEIRO', cargo: 'Conselheira', senha: '123456', unidade_id: 1 },
+  { id: 'cons5', nome: 'MIRIAN', perfil: 'CONSELHEIRO', cargo: 'Conselheira', senha: '123456', unidade_id: 1 },
+  { id: 'cons4', nome: 'SANDRA', perfil: 'CONSELHEIRO', cargo: 'Conselheira', senha: '123456', unidade_id: 1 },
+  { id: 'suplente1', nome: 'ROSILDA', perfil: 'SUPLENTE', cargo: 'Conselheira Suplente', senha: '123456', status: 'INATIVO', unidade_id: 1 },
+
+  // UNIDADE 2 - CT 2
+  { id: 'ct2_admin1', nome: 'ISRAEL', perfil: 'ADMINISTRATIVO', cargo: 'ADM', senha: '123456', unidade_id: 2 },
+  { id: 'ct2_admin2', nome: 'RAISSA', perfil: 'ADMINISTRATIVO', cargo: 'ADM', senha: '123456', unidade_id: 2 },
+  { id: 'ct2_admin3', nome: 'THAINA', perfil: 'ADMINISTRATIVO', cargo: 'ADM', senha: '123456', unidade_id: 2 },
+  { id: 'ct2_cons1', nome: 'ALINE', perfil: 'CONSELHEIRO', cargo: 'Conselheira', senha: '123456', unidade_id: 2 },
+  { id: 'ct2_cons2', nome: 'EDSON LOPES', perfil: 'CONSELHEIRO', cargo: 'Conselheiro', senha: '123456', unidade_id: 2 },
+  { id: 'ct2_cons3', nome: 'FABIO', perfil: 'CONSELHEIRO', cargo: 'Conselheiro', senha: '123456', unidade_id: 2 },
+  { id: 'ct2_cons4', nome: 'MARCIA', perfil: 'CONSELHEIRO', cargo: 'Conselheira', senha: '123456', unidade_id: 2 },
+  { id: 'ct2_cons5', nome: 'MATHEUS', perfil: 'CONSELHEIRO', cargo: 'Conselheiro', senha: '123456', unidade_id: 2 },
 ];
+
+export const CONSELHEIROS_ALFABETICO_POR_UNIDADE: Record<number, string[]> = {
+  1: ['LEANDRO', 'LUIZA', 'MILENA', 'MIRIAN', 'SANDRA'],
+  2: ['ALINE', 'EDSON LOPES', 'FABIO', 'MARCIA', 'MATHEUS']
+};
 
 export const CONSELHEIROS_ALFABETICO = ['LEANDRO', 'LUIZA', 'MILENA', 'MIRIAN', 'SANDRA'];
 
@@ -91,38 +107,41 @@ export const classifyTurno = (dateStr: string, timeStr: string): 'COMERCIAL' | '
   return (isWeekend || !isBusinessHours) ? 'PLANTAO' : 'COMERCIAL';
 };
 
-export const getEffectiveEscala = (dateStr: string, timeStr: string = "08:00"): string[] => {
+export const getEffectiveEscala = (dateStr: string, timeStr: string = "08:00", unidade_id: number = 1): string[] => {
   const [hours] = timeStr.split(':').map(Number);
   let dt = new Date(`${dateStr}T12:00:00`);
   if (hours < 8) dt.setDate(dt.getDate() - 1);
   
-  const year = dt.getFullYear();
-  const month = dt.getMonth() + 1; // 1-indexed
   const day = dt.getDate();
+  const month = dt.getMonth() + 1;
+  const year = dt.getFullYear();
+
+  const sequence = CONSELHEIROS_ALFABETICO_POR_UNIDADE[unidade_id] || CONSELHEIROS_ALFABETICO_POR_UNIDADE[1];
 
   if (year === 2026) {
     if (month === 2) {
-      // Fevereiro 2026: Inicia com Milena (01/Dom)
-      const sequence = ['MILENA', 'SANDRA', 'LEANDRO', 'LUIZA', 'MIRIAN'];
+      // Fevereiro 2026: Inicia com Milena (01/Dom) no CT 1
+      // Vamos usar a mesma lógica de rodízio para o CT 2
       const index = (day - 1) % 5;
-      // Regra 47 diz que termina com Sandra no dia 28. 
-      // Vamos simplificar seguindo a lógica de rodízio de 5.
-      // Mas a regra 47 dá pontos fixos.
-      const febScale: Record<number, string[]> = {
-        17: ['MILENA', 'SANDRA', 'LEANDRO'],
-        18: ['LUIZA', 'SANDRA', 'MIRIAN']
+      const febScale: Record<number, Record<number, string[]>> = {
+        1: {
+          17: ['MILENA', 'SANDRA', 'LEANDRO'],
+          18: ['LUIZA', 'SANDRA', 'MIRIAN']
+        },
+        2: {
+          17: ['ALINE', 'EDSON LOPES', 'FABIO'],
+          18: ['MARCIA', 'EDSON LOPES', 'MATHEUS']
+        }
       };
-      return febScale[day] || [sequence[index], sequence[(index + 1) % 5], sequence[(index + 2) % 5]];
+      return febScale[unidade_id]?.[day] || [sequence[index], sequence[(index + 1) % 5], sequence[(index + 2) % 5]];
     }
     if (month === 3) {
-      // Março 2026: Inicia com Sandra (01/Dom)
-      const sequence = ['SANDRA', 'LEANDRO', 'LUIZA', 'MIRIAN', 'MILENA'];
       const index = (day - 1) % 5;
       return [sequence[index], sequence[(index + 1) % 5], sequence[(index + 2) % 5]];
     }
   }
 
-  return ['LEANDRO', 'MIRIAN', 'LUIZA'];
+  return [sequence[0], sequence[1], sequence[2]];
 };
 
 export const BAIRROS = [

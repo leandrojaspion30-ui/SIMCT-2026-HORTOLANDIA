@@ -177,6 +177,11 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, currentUser, onS
                               <ShieldAlert className="w-3 h-3" /> Aguardando Validação do Colegiado
                            </span>
                         )}
+                        {(doc.notificacoes_trio || []).includes(currentUser.nome.toUpperCase()) && (!lastDispatch || lastDispatch === 'NENHUMA') && (
+                           <span className="flex items-center gap-2 px-3 py-1 rounded-lg bg-red-100 text-red-600 text-[10px] font-black uppercase tracking-widest border border-red-200 animate-bounce">
+                              <Zap className="w-3 h-3" /> Revalidação Obrigatória
+                           </span>
+                        )}
                         {lastDispatch && lastDispatch !== 'NENHUMA' && (
                            <span className={`flex items-center gap-2 px-3 py-1 rounded-lg text-white text-[10px] font-black uppercase tracking-widest shadow-sm ${lastDispatch === 'DIREITO_NAO_VIOLADO' ? 'bg-emerald-600' : 'bg-blue-600'}`}>
                               <Tag className="w-3 h-3" /> DESPACHO: {STATUS_LABELS[lastDispatch]}

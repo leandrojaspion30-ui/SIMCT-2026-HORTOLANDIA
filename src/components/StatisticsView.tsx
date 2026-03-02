@@ -1,7 +1,7 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Documento } from '../types';
-import { INITIAL_USERS } from '../constants';
+import { INITIAL_USERS, STATUS_LABELS } from '../constants';
 import { BarChart3, PieChart, TrendingUp, Users, FileText, ShieldAlert, Sparkles } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell } from 'recharts';
 import AIStatisticsAnalyzer from './AIStatisticsAnalyzer';
@@ -11,11 +11,17 @@ interface StatisticsViewProps {
 }
 
 const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
+  const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const COLORS = ['#2563EB', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+
+  const filteredDocuments = useMemo(() => {
+    if (selectedStatus === 'ALL') return documents;
+    return documents.filter(doc => doc.status.includes(selectedStatus as any));
+  }, [documents, selectedStatus]);
 
   const aiStats = useMemo(() => {
     const stats = {
-      totalCriancas: documents.reduce((acc, d) => acc + (d.criancas?.length || 0), 0),
+      totalCriancas: filteredDocuments.reduce((acc, d) => acc + (d.criancas?.length || 0), 0),
       direitos: {} as Record<string, number>,
       bairros: {} as Record<string, number>,
       agentes: {} as Record<string, number>,
@@ -35,7 +41,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
       acoesPorConselheiro: {} as Record<string, number>
     };
 
-    documents.forEach(doc => {
+    filteredDocuments.forEach(doc => {
       stats.bairros[doc.bairro] = (stats.bairros[doc.bairro] || 0) + 1;
       stats.origens[doc.origem] = (stats.origens[doc.origem] || 0) + 1;
       stats.canaisComunicado[doc.canal_comunicado] = (stats.canaisComunicado[doc.canal_comunicado] || 0) + 1;
@@ -88,7 +94,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
     });
 
     return stats;
-  }, [documents]);
+  }, [filteredDocuments]);
 
   const bairroData = useMemo(() => 
     Object.entries(aiStats.bairros).map(([name, value]) => ({ name, value }))
@@ -143,12 +149,12 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
   , [aiStats]);
 
   const totalAttributions = useMemo(() => 
-    documents.reduce((acc, doc) => acc + (doc.atribuicoes_136?.length || 0), 0)
-  , [documents]);
+    filteredDocuments.reduce((acc, doc) => acc + (doc.atribuicoes_136?.length || 0), 0)
+  , [filteredDocuments]);
 
   return (
     <div className="space-y-8 pb-20">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
           <div className="p-4 bg-violet-50 rounded-3xl text-violet-600">
             <BarChart3 className="w-8 h-8" />
@@ -158,6 +164,24 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
             <p className="text-[12px] font-bold text-slate-400 uppercase tracking-widest">Análise quantitativa da rede de proteção</p>
           </div>
         </div>
+
+        <div className="flex items-center gap-3 bg-white p-2 pl-4 rounded-2xl border border-slate-100 shadow-sm">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Filtrar por Status:</span>
+          <select 
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
+            className="bg-slate-50 border-none rounded-xl px-4 py-2 text-[11px] font-bold uppercase outline-none focus:ring-2 focus:ring-violet-500/20 min-w-[200px]"
+          >
+            <option value="ALL">Todos os Procedimentos</option>
+            {Object.entries(STATUS_LABELS)
+              .filter(([key]) => key !== 'NENHUMA')
+              .sort((a, b) => a[1].localeCompare(b[1]))
+              .map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
+              ))
+            }
+          </select>
+        </div>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -166,7 +190,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
             <FileText className="w-5 h-5 text-blue-500" />
             <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Total de Casos</span>
           </div>
-          <p className="text-[42px] font-black text-slate-900 leading-none">{documents.length}</p>
+          <p className="text-[42px] font-black text-slate-900 leading-none">{filteredDocuments.length}</p>
         </div>
         <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
@@ -174,7 +198,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
             <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Em Monitoramento</span>
           </div>
           <p className="text-[42px] font-black text-slate-900 leading-none">
-            {documents.filter(d => d.status.includes('MONITORAMENTO')).length}
+            {filteredDocuments.filter(d => d.status.includes('MONITORAMENTO')).length}
           </p>
         </div>
         <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
@@ -183,7 +207,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
             <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Aguardando Validação</span>
           </div>
           <p className="text-[42px] font-black text-slate-900 leading-none">
-            {documents.filter(d => d.status.includes('AGUARDANDO_VALIDACAO')).length}
+            {filteredDocuments.filter(d => d.status.includes('AGUARDANDO_VALIDACAO')).length}
           </p>
         </div>
       </div>
@@ -410,16 +434,16 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
           <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-8">Canais de Comunicado</h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <RePieChart>
+              <RePieChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                 <Pie
                   data={channelsData}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
-                  outerRadius={100}
+                  outerRadius={80}
                   paddingAngle={5}
                   dataKey="value"
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }) => `${name.split(' ')[0]}: ${(percent * 100).toFixed(0)}%`}
                 >
                   {channelsData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -434,7 +458,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
         </div>
       </div>
 
-      <AIStatisticsAnalyzer stats={aiStats} totalDocs={documents.length} />
+      <AIStatisticsAnalyzer stats={aiStats} totalDocs={filteredDocuments.length} />
     </div>
   );
 };

@@ -8,6 +8,7 @@ export interface User {
   nome: string;
   perfil: UserRole;
   cargo: string;
+  unidade_id: number;
   status?: UserStatus;
   tentativas_login?: number;
   substituicao_ativa?: boolean;
@@ -107,6 +108,7 @@ export interface SnapshotComparativo {
 
 export interface Documento {
   id: string;
+  unidade_id: number;
   origem: string;
   canal_comunicado: string; 
   notificacao?: string;
@@ -154,6 +156,7 @@ export interface Documento {
   snapshot_validado?: SnapshotComparativo;
   justificativa_distribuicao?: string;
   historico_versoes?: any[];
+  notificacoes_trio?: string[];
 }
 
 export interface Atribuicao136Entry {
@@ -167,6 +170,7 @@ export type LogType = 'SEGURANÇA' | 'DOCUMENTO' | 'SISTEMA' | 'VALIDAÇÃO' | '
 
 export interface Log {
   id: string;
+  unidade_id: number;
   documento_id: string;
   usuario_id: string;
   usuario_nome: string;
@@ -199,6 +203,7 @@ export interface AgenteVioladorEntry {
 
 export interface DocumentFile {
   id: string;
+  unidade_id: number;
   nome: string;
   tamanho: number;
   tipo: string;
@@ -208,6 +213,7 @@ export interface DocumentFile {
 
 export interface AgendaEntry {
   id: string;
+  unidade_id: number;
   conselheiro_id: string;
   data: string;
   hora: string;

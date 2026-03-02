@@ -69,11 +69,7 @@ const App: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'register' | 'my-docs' | 'monitoring' | 'logs' | 'search' | 'settings' | 'agenda' | 'statistics' | 'edit' | 'user-management'>('dashboard');
-  const [documents, setDocuments] = useState<Documento[]>([]);
-  const [logs, setLogs] = useState<Log[]>([]);
-  const [files, setFiles] = useState<DocumentFile[]>([]);
   const [users, setUsers] = useState<UserWithPassword[]>([]);
-  const [agenda, setAgenda] = useState<AgendaEntry[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -84,6 +80,16 @@ const App: React.FC = () => {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [forceDirectEdit, setForceDirectEdit] = useState(false);
+  const [allDocuments, setAllDocuments] = useState<Documento[]>([]);
+  const [allLogs, setAllLogs] = useState<Log[]>([]);
+  const [allFiles, setAllFiles] = useState<DocumentFile[]>([]);
+  const [allAgenda, setAllAgenda] = useState<AgendaEntry[]>([]);
+
+  const documents = useMemo(() => allDocuments.filter(d => (d.unidade_id || 1) === currentUser?.unidade_id), [allDocuments, currentUser]);
+  const logs = useMemo(() => allLogs.filter(l => (l.unidade_id || 1) === currentUser?.unidade_id), [allLogs, currentUser]);
+  const files = useMemo(() => allFiles.filter(f => (f.unidade_id || 1) === currentUser?.unidade_id), [allFiles, currentUser]);
+  const agenda = useMemo(() => allAgenda.filter(a => (a.unidade_id || 1) === currentUser?.unidade_id), [allAgenda, currentUser]);
+  const filteredUsers = useMemo(() => users.filter(u => (u.unidade_id || 1) === currentUser?.unidade_id), [users, currentUser]);
 
   const isLud = useMemo(() => currentUser?.nome === 'LUDIMILA', [currentUser]);
 
@@ -97,13 +103,30 @@ const App: React.FC = () => {
         const eventDate = new Date(`${e.data}T${e.hora}:00`);
         const diffMs = eventDate.getTime() - now.getTime();
         const diffHours = diffMs / (1000 * 60 * 60);
-        // Mostrar se faltar menos de 24h e não foi descartado
-        return diffHours > -1 && diffHours <= 24;
+        // Mostrar se for hoje e não foi descartado
+        const isToday = e.data === now.toISOString().split('T')[0];
+        return isToday && !acknowledgedEventIds.includes(e.id);
       } catch {
         return false;
       }
     });
   }, [agenda, currentUser, acknowledgedEventIds]);
+
+  const twoHourReminder = useMemo(() => {
+    if (!currentUser || currentUser.perfil !== 'CONSELHEIRO') return null;
+    const now = new Date();
+    
+    return agenda.find(e => {
+      if (e.conselheiro_id !== currentUser.id || acknowledgedReminderIds.includes(`${e.id}-2h`)) return false;
+      try {
+        const eventDate = new Date(`${e.data}T${e.hora}:00`);
+        const diffMs = eventDate.getTime() - now.getTime();
+        const diffHours = diffMs / (1000 * 60 * 60);
+        // Alerta entre 2h e 1h antes do compromisso
+        return diffHours > 0 && diffHours <= 2.0;
+      } catch { return false; }
+    });
+  }, [agenda, currentUser, acknowledgedReminderIds]);
 
   useEffect(() => {
     const savedDocs = localStorage.getItem('pt_docs');
@@ -114,10 +137,10 @@ const App: React.FC = () => {
     const savedAck = localStorage.getItem('pt_ack_events');
     const savedAckRem = localStorage.getItem('pt_ack_reminders');
     
-    if (savedDocs) setDocuments(JSON.parse(savedDocs));
-    if (savedLogs) setLogs(JSON.parse(savedLogs));
-    if (savedFiles) setFiles(JSON.parse(savedFiles));
-    if (savedAgenda) setAgenda(JSON.parse(savedAgenda));
+    if (savedDocs) setAllDocuments(JSON.parse(savedDocs));
+    if (savedLogs) setAllLogs(JSON.parse(savedLogs));
+    if (savedFiles) setAllFiles(JSON.parse(savedFiles));
+    if (savedAgenda) setAllAgenda(JSON.parse(savedAgenda));
     if (savedAck) setAcknowledgedEventIds(JSON.parse(savedAck));
     if (savedAckRem) setAcknowledgedReminderIds(JSON.parse(savedAckRem));
 
@@ -136,20 +159,21 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('pt_docs', JSON.stringify(documents));
-    localStorage.setItem('pt_logs', JSON.stringify(logs));
-    localStorage.setItem('pt_files', JSON.stringify(files));
+    localStorage.setItem('pt_docs', JSON.stringify(allDocuments));
+    localStorage.setItem('pt_logs', JSON.stringify(allLogs));
+    localStorage.setItem('pt_files', JSON.stringify(allFiles));
     localStorage.setItem('pt_users', JSON.stringify(users));
-    localStorage.setItem('pt_agenda', JSON.stringify(agenda));
+    localStorage.setItem('pt_agenda', JSON.stringify(allAgenda));
     localStorage.setItem('pt_ack_events', JSON.stringify(acknowledgedEventIds));
     localStorage.setItem('pt_ack_reminders', JSON.stringify(acknowledgedReminderIds));
-  }, [documents, logs, files, users, agenda, acknowledgedEventIds, acknowledgedReminderIds]);
+  }, [allDocuments, allLogs, allFiles, users, allAgenda, acknowledgedEventIds, acknowledgedReminderIds]);
 
   const addLog = useCallback((docId: string, acao: string, tipo: LogType = 'SISTEMA', customUser?: User) => {
     const user = customUser || currentUser;
     if (!user) return;
     const newLog: Log = { 
       id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`, 
+      unidade_id: user.unidade_id,
       documento_id: docId, 
       usuario_id: user.id, 
       usuario_nome: user.nome, 
@@ -157,7 +181,7 @@ const App: React.FC = () => {
       tipo,
       data_hora: new Date().toISOString() 
     };
-    setLogs(prev => [newLog, ...prev]);
+    setAllLogs(prev => [newLog, ...prev]);
   }, [currentUser]);
 
   const pendingValidations = useMemo(() => {
@@ -188,7 +212,7 @@ const App: React.FC = () => {
 
   const handleDocumentSubmit = (data: any, files: File[]) => {
     if (editingDocId) {
-      setDocuments(prev => prev.map(d => d.id === editingDocId ? { ...d, ...data } : d));
+      setAllDocuments(prev => prev.map(d => d.id === editingDocId ? { ...d, ...data } : d));
       addLog(editingDocId, `EDIÇÃO: Registro de prontuário atualizado administrativamente.`, 'DOCUMENTO');
       setEditingDocId(null);
       handleNavigate('dashboard');
@@ -198,6 +222,7 @@ const App: React.FC = () => {
     const newDoc: Documento = { 
       ...data, 
       id, 
+      unidade_id: currentUser!.unidade_id,
       criado_em: new Date().toISOString(), 
       status: data.status || ['AGUARDANDO_ANALISE'], 
       criado_por_id: currentUser!.id, 
@@ -208,7 +233,7 @@ const App: React.FC = () => {
     const refName = INITIAL_USERS.find(u => u.id === newDoc.conselheiro_referencia_id)?.nome || 'N/A';
     const provName = INITIAL_USERS.find(u => u.id === newDoc.conselheiro_providencia_id)?.nome || 'N/A';
 
-    setDocuments(prev => [newDoc, ...prev]);
+    setAllDocuments(prev => [newDoc, ...prev]);
     addLog(id, `CRIAÇÃO: Novo procedimento registrado. REF: [${refName}] | IMEDIATA: [${provName}].`, 'DOCUMENTO');
     handleNavigate('dashboard');
   };
@@ -226,7 +251,7 @@ const App: React.FC = () => {
     
     if (activeTab === 'user-management' && isLud) return (
       <UserManagementPanel 
-        users={users} 
+        users={filteredUsers} 
         onUpdateUser={(id, upd) => {
           const target = users.find(u => u.id === id);
           if (upd.status) addLog('SISTEMA', `RH: Usuário ${target?.nome} teve status alterado para ${upd.status}.`, 'SEGURANÇA');
@@ -242,20 +267,20 @@ const App: React.FC = () => {
       return null;
     }
 
-    if (activeTab === 'register') return <DocumentRegistration documents={documents} currentUser={currentUser} onSubmit={handleDocumentSubmit} onCancel={() => handleNavigate('dashboard')} />;
-    if (activeTab === 'edit' && editingDocId) return <DocumentRegistration documents={documents} currentUser={currentUser} initialData={documents.find(d => d.id === editingDocId)} onSubmit={handleDocumentSubmit} onCancel={() => handleNavigate('dashboard')} />;
+    if (activeTab === 'register') return <DocumentRegistration documents={documents} currentUser={currentUser} onSubmit={handleDocumentSubmit} onCancel={() => handleNavigate('dashboard')} isReadOnly={!isAdministrative} />;
+    if (activeTab === 'edit' && editingDocId) return <DocumentRegistration documents={documents} currentUser={currentUser} initialData={documents.find(d => d.id === editingDocId)} onSubmit={handleDocumentSubmit} onCancel={() => handleNavigate('dashboard')} isReadOnly={!isAdministrative} />;
     
     if (selectedDocId) {
       const doc = documents.find(d => d.id === selectedDocId);
       if (!doc) return null;
       return <DocumentView document={doc} allDocuments={documents} files={[]} logs={logs.filter(l => l.documento_id === selectedDocId)} currentUser={currentUser} isReadOnly={isAdministrative} forceEdit={forceDirectEdit} onBack={() => setSelectedDocId(null)} onEdit={() => { setEditingDocId(doc.id); setActiveTab('edit'); }} onDelete={(id) => { 
           addLog(id, `EXCLUSÃO: Documento removido permanentemente do banco de dados SIMCT.`, 'DOCUMENTO');
-          setDocuments(prev => prev.filter(d => d.id !== id));
+          setAllDocuments(prev => prev.filter(d => d.id !== id));
           setSelectedDocId(null);
       }} onUpdateStatus={(id, s) => {
           addLog(id, `STATUS: Documento alterado para a situação [${s[s.length-1]}].`, 'SISTEMA');
-          setDocuments(prev => prev.map(d => d.id === id ? { ...d, status: s } : d));
-      }} onUpdateDocument={(id, fields) => setDocuments(prev => prev.map(d => d.id === id ? {...d, ...fields} : d))} onAddLog={addLog} onScience={() => {}} />;
+          setAllDocuments(prev => prev.map(d => d.id === id ? { ...d, status: s } : d));
+      }} onUpdateDocument={(id, fields) => setAllDocuments(prev => prev.map(d => d.id === id ? {...d, ...fields} : d))} onAddLog={addLog} onScience={() => {}} />;
     }
 
     switch (activeTab) {
@@ -283,7 +308,7 @@ const App: React.FC = () => {
             )}
             <DocumentList documents={documents} currentUser={currentUser} isReadOnly={false} onSelectDoc={handleOpenDocument} onEditDoc={(id) => { setEditingDocId(id); setActiveTab('edit'); }} onDeleteDoc={(id) => {
                 addLog(id, `EXCLUSÃO: Documento removido permanentemente via Painel Geral.`, 'DOCUMENTO');
-                setDocuments(prev => prev.filter(d => d.id !== id));
+                setAllDocuments(prev => prev.filter(d => d.id !== id));
             }} onScience={() => {}} onUpdateStatus={() => {}} />
           </div>
         );
@@ -296,16 +321,16 @@ const App: React.FC = () => {
         });
         return <DocumentList documents={myReferencedDocs} currentUser={currentUser} isReadOnly={false} onSelectDoc={(id) => handleOpenDocument(id, true)} onEditDoc={(id) => { setEditingDocId(id); setActiveTab('edit'); }} onDeleteDoc={(id) => {
             addLog(id, `EXCLUSÃO: Documento removido permanentemente via Minha Referência.`, 'DOCUMENTO');
-            setDocuments(prev => prev.filter(d => d.id !== id));
+            setAllDocuments(prev => prev.filter(d => d.id !== id));
         }} onScience={() => {}} onUpdateStatus={() => {}} isMyReferenceView={true} />;
       
       case 'monitoring': return <MonitoringDashboard documents={documents} currentUser={currentUser} effectiveUserId={currentUser.id} onSelectDoc={handleOpenDocument} onAddLog={addLog} onUpdateMonitoring={(id, m) => { 
-          setDocuments(prev => prev.map(d => d.id === id ? {...d, monitoramento: m} : d)); 
+          setAllDocuments(prev => prev.map(d => d.id === id ? {...d, monitoramento: m} : d)); 
       }} onRemoveMonitoring={(id) => {
           addLog(id, `MONITORAMENTO: Acompanhamento de caso encerrado com sucesso.`, 'MONITORAMENTO');
-          setDocuments(prev => prev.filter(d => d.id !== id));
+          setAllDocuments(prev => prev.filter(d => d.id !== id));
       }} isReadOnly={isAdministrative} />;
-      case 'agenda': return <AgendaView agenda={agenda} setAgenda={setAgenda} currentUser={currentUser} effectiveUserId={currentUser.id} isReadOnly={isLud || currentUser.perfil === 'ADMINISTRATIVO'} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} />;
+      case 'agenda': return <AgendaView agenda={agenda} setAgenda={setAllAgenda} currentUser={currentUser} effectiveUserId={currentUser.id} isReadOnly={isLud || currentUser.perfil === 'ADMINISTRATIVO'} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} />;
       case 'search': return <AdvancedSearch documents={documents} currentUser={currentUser} onSelectDoc={handleOpenDocument} />;
       case 'logs': return <AuditLogViewer logs={logs} />;
       case 'settings': return <SettingsView currentUser={currentUser} onUpdatePassword={(p) => { 
@@ -412,6 +437,16 @@ const App: React.FC = () => {
             setAcknowledgedEventIds(prev => [...prev, id]);
           }}
           onDismiss={(id) => setAcknowledgedEventIds(prev => [...prev, id])}
+        />
+      )}
+      {twoHourReminder && (
+        <AppointmentAlert 
+          event={{...twoHourReminder, descricao: `LEMBRETE (2H): ${twoHourReminder.descricao}`}} 
+          onView={(id) => {
+            setActiveTab('agenda');
+            setAcknowledgedReminderIds(prev => [...prev, `${id}-2h`]);
+          }}
+          onDismiss={(id) => setAcknowledgedReminderIds(prev => [...prev, `${id}-2h`])}
         />
       )}
     </div>
