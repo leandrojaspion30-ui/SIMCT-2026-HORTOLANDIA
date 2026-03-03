@@ -13,9 +13,10 @@ interface DocumentRegistrationProps {
   onCancel: () => void;
   initialData?: Documento;
   isReadOnly?: boolean;
+  title?: string;
 }
 
-const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, agenda, currentUser, onSubmit, onCancel, initialData, isReadOnly }) => {
+const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, agenda, currentUser, onSubmit, onCancel, initialData, isReadOnly, title }) => {
   const systemNow = new Date();
   const todayDate = systemNow.toISOString().split('T')[0];
   const todayTime = systemNow.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -260,7 +261,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
               <ShieldCheck className="w-7 h-7 text-white" />
             </div>
             <div>
-              <h2 className="text-[22px] font-black uppercase tracking-tight leading-none">SIMCT - Novo Procedimento</h2>
+              <h2 className="text-[22px] font-black uppercase tracking-tight leading-none">{title || 'SIMCT - Novo Procedimento'}</h2>
               <p className="text-[9px] font-bold text-blue-400 uppercase tracking-[0.2em] mt-1">Hortolândia - Gestão de Prontuários</p>
             </div>
           </div>
