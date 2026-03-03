@@ -1,12 +1,13 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History } from 'lucide-react';
-import { Documento, User, ChildData, DocumentStatus } from '../types';
+import { Documento, User, ChildData, DocumentStatus, AgendaEntry } from '../types';
 import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, CANAIS_COMUNICADO_LIST, getEffectiveEscala, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
 
 interface DocumentRegistrationProps {
   documents: Documento[];
+  agenda: AgendaEntry[];
   currentUser: User;
   onSubmit: (data: any, files: File[]) => void;
   onCancel: () => void;
@@ -14,7 +15,7 @@ interface DocumentRegistrationProps {
   isReadOnly?: boolean;
 }
 
-const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, currentUser, onSubmit, onCancel, initialData, isReadOnly }) => {
+const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, agenda, currentUser, onSubmit, onCancel, initialData, isReadOnly }) => {
   const systemNow = new Date();
   const todayDate = systemNow.toISOString().split('T')[0];
   const todayTime = systemNow.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -637,6 +638,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
       {showHistoryModal && (
         <FamilyHistoryModal 
           history={familyHistory} 
+          agenda={agenda}
           currentUser={currentUser} 
           onClose={() => setShowHistoryModal(false)} 
         />

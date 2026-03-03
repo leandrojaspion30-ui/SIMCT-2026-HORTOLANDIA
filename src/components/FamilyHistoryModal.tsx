@@ -1,20 +1,40 @@
 
 import React from 'react';
-import { X, History, Baby, Users, Calendar, FileText, Scale, ShieldCheck, Zap, Info, ShieldAlert } from 'lucide-react';
-import { Documento, User } from '../types';
+import { X, History, Baby, Users, Calendar, FileText, Scale, ShieldCheck, Zap, Info, ShieldAlert, Clock, MapPin } from 'lucide-react';
+import { Documento, User, AgendaEntry } from '../types';
 import { INITIAL_USERS } from '../constants';
 
 interface FamilyHistoryModalProps {
   history: Documento[];
+  agenda: AgendaEntry[];
   currentUser: User;
   onClose: () => void;
 }
 
-const FamilyHistoryModal: React.FC<FamilyHistoryModalProps> = ({ history, currentUser, onClose }) => {
+const FamilyHistoryModal: React.FC<FamilyHistoryModalProps> = ({ history, agenda, currentUser, onClose }) => {
   const isAdministrative = currentUser.perfil === 'ADMINISTRATIVO';
   
   // Ordenar histórico pelo mais recente
   const sortedHistory = [...history].sort((a, b) => new Date(b.data_recebimento).getTime() - new Date(a.data_recebimento).getTime());
+
+  // Filtrar agenda relacionada a esta família
+  const familyAgenda = agenda.filter(item => {
+    // Se tiver documento_id, verifica se está no histórico
+    if (item.documento_id) {
+      return history.some(d => d.id === item.documento_id);
+    }
+    // Caso contrário, tenta pelo nome da genitora (se houver)
+    if (item.genitores_responsavel) {
+      return history.some(d => d.genitora_nome.toUpperCase().includes(item.genitores_responsavel!.toUpperCase()));
+    }
+    return false;
+  });
+
+  // Combinar e ordenar cronologia
+  const chronology = [
+    ...sortedHistory.map(d => ({ type: 'DOC' as const, date: d.data_recebimento, data: d })),
+    ...familyAgenda.map(a => ({ type: 'AGENDA' as const, date: a.data, data: a }))
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   // Dados consolidados
   const totalAtendimentos = history.length;
@@ -73,59 +93,103 @@ const FamilyHistoryModal: React.FC<FamilyHistoryModalProps> = ({ history, curren
             </h4>
             
             <div className="space-y-4">
-              {sortedHistory.map((doc) => {
-                const ref = INITIAL_USERS.find(u => u.id === doc.conselheiro_referencia_id);
-                const prov = INITIAL_USERS.find(u => u.id === doc.conselheiro_providencia_id);
+              {chronology.map((item, idx) => {
+                if (item.type === 'DOC') {
+                  const doc = item.data as Documento;
+                  const ref = INITIAL_USERS.find(u => u.id === doc.conselheiro_referencia_id);
+                  const prov = INITIAL_USERS.find(u => u.id === doc.conselheiro_providencia_id);
 
-                return (
-                  <div key={doc.id} className="p-6 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm hover:shadow-md transition-all group">
-                    <div className="flex flex-col md:flex-row justify-between gap-4">
-                      <div className="space-y-2 flex-1">
-                        <div className="flex items-center gap-3">
-                          <span className="px-3 py-1 bg-slate-100 text-[#111827] text-[10px] font-black rounded-lg uppercase tracking-widest">
-                            {new Date(doc.data_recebimento).toLocaleDateString('pt-BR')}
-                          </span>
-                          <span className="text-[11px] font-mono font-bold text-slate-300">#{doc.id}</span>
-                        </div>
-                        <h5 className="text-[15px] font-bold text-[#111827] uppercase">{doc.crianca_nome}</h5>
-                        
-                        {!isAdministrative && (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                             <div className="space-y-1">
-                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Violações</span>
-                                <div className="flex flex-wrap gap-1">
-                                   {doc.violacoesSipia?.map((v, idx) => (
-                                     <span key={idx} className="px-2 py-0.5 bg-red-50 text-red-700 text-[9px] font-bold rounded uppercase border border-red-100">{v.especifico}</span>
-                                   ))}
-                                   {(!doc.violacoesSipia || doc.violacoesSipia.length === 0) && <span className="text-[9px] text-slate-300 italic">SEM DADO TÉCNICO</span>}
-                                </div>
-                             </div>
-                             <div className="space-y-1">
-                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Agentes</span>
-                                <div className="flex flex-wrap gap-1">
-                                   {doc.agentesVioladores?.map((a, idx) => (
-                                     <span key={idx} className="px-2 py-0.5 bg-amber-50 text-amber-700 text-[9px] font-bold rounded uppercase border border-amber-100">{a.principal}</span>
-                                   ))}
-                                   {(!doc.agentesVioladores || doc.agentesVioladores.length === 0) && <span className="text-[9px] text-slate-300 italic">NÃO DEFINIDO</span>}
-                                </div>
-                             </div>
+                  return (
+                    <div key={`doc-${doc.id}-${idx}`} className="p-6 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm hover:shadow-md transition-all group">
+                      <div className="flex flex-col md:flex-row justify-between gap-4">
+                        <div className="space-y-2 flex-1">
+                          <div className="flex items-center gap-3">
+                            <span className="px-3 py-1 bg-slate-100 text-[#111827] text-[10px] font-black rounded-lg uppercase tracking-widest">
+                              {new Date(doc.data_recebimento).toLocaleDateString('pt-BR')}
+                            </span>
+                            <span className="text-[11px] font-mono font-bold text-slate-300">#{doc.id}</span>
+                            <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[9px] font-black rounded uppercase border border-blue-100">PRONTUÁRIO</span>
                           </div>
-                        )}
-                      </div>
+                          <h5 className="text-[15px] font-bold text-[#111827] uppercase">{doc.crianca_nome}</h5>
+                          
+                          {!isAdministrative && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                               <div className="space-y-1">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Violações</span>
+                                  <div className="flex flex-wrap gap-1">
+                                     {doc.violacoesSipia?.map((v, idx) => (
+                                       <span key={idx} className="px-2 py-0.5 bg-red-50 text-red-700 text-[9px] font-bold rounded uppercase border border-red-100">{v.especifico}</span>
+                                     ))}
+                                     {(!doc.violacoesSipia || doc.violacoesSipia.length === 0) && <span className="text-[9px] text-slate-300 italic">SEM DADO TÉCNICO</span>}
+                                  </div>
+                               </div>
+                               <div className="space-y-1">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Agentes</span>
+                                  <div className="flex flex-wrap gap-1">
+                                     {doc.agentesVioladores?.map((a, idx) => (
+                                       <span key={idx} className="px-2 py-0.5 bg-amber-50 text-amber-700 text-[9px] font-bold rounded uppercase border border-amber-100">{a.principal}</span>
+                                     ))}
+                                     {(!doc.agentesVioladores || doc.agentesVioladores.length === 0) && <span className="text-[9px] text-slate-300 italic">NÃO DEFINIDO</span>}
+                                  </div>
+                               </div>
+                            </div>
+                          )}
+                        </div>
 
-                      <div className="md:w-64 space-y-3 md:text-right flex flex-col md:items-end justify-center border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-4">
-                         <div className="flex flex-col md:items-end">
-                            <span className="text-[9px] font-black text-[#2563EB] uppercase tracking-widest">Titular</span>
-                            <span className="text-[11px] font-bold text-[#111827] uppercase">{ref?.nome || 'N/A'}</span>
-                         </div>
-                         <div className="flex flex-col md:items-end">
-                            <span className="text-[9px] font-black text-amber-600 uppercase tracking-widest">Providência</span>
-                            <span className="text-[11px] font-bold text-[#111827] uppercase">{prov?.nome || 'N/A'}</span>
-                         </div>
+                        <div className="md:w-64 space-y-3 md:text-right flex flex-col md:items-end justify-center border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-4">
+                           <div className="flex flex-col md:items-end">
+                              <span className="text-[9px] font-black text-[#2563EB] uppercase tracking-widest">Titular</span>
+                              <span className="text-[11px] font-bold text-[#111827] uppercase">{ref?.nome || 'N/A'}</span>
+                           </div>
+                           <div className="flex flex-col md:items-end">
+                              <span className="text-[9px] font-black text-amber-600 uppercase tracking-widest">Providência</span>
+                              <span className="text-[11px] font-bold text-[#111827] uppercase">{prov?.nome || 'N/A'}</span>
+                           </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
+                  );
+                } else {
+                  const entry = item.data as AgendaEntry;
+                  const assignedUser = INITIAL_USERS.find(u => u.id === entry.conselheiro_id);
+                  
+                  return (
+                    <div key={`agenda-${entry.id}-${idx}`} className="p-6 bg-slate-50 border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-all group border-l-4 border-l-blue-500">
+                      <div className="flex flex-col md:flex-row justify-between gap-4">
+                        <div className="space-y-2 flex-1">
+                          <div className="flex items-center gap-3">
+                            <span className="px-3 py-1 bg-blue-600 text-white text-[10px] font-black rounded-lg uppercase tracking-widest">
+                              {new Date(entry.data + 'T12:00:00').toLocaleDateString('pt-BR')}
+                            </span>
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[9px] font-black rounded uppercase border border-blue-200">AGENDA / NOTIFICAÇÃO</span>
+                            {entry.status && (
+                              <span className={`px-2 py-0.5 text-[9px] font-black rounded uppercase border ${
+                                entry.status === 'COMPARECEU' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                entry.status === 'NAO_COMPARECEU' ? 'bg-red-50 text-red-700 border-red-200' :
+                                'bg-amber-50 text-amber-700 border-amber-200'
+                              }`}>
+                                {entry.status}
+                              </span>
+                            )}
+                          </div>
+                          <h5 className="text-[15px] font-bold text-[#111827] uppercase">{entry.tipo}: {entry.descricao}</h5>
+                          <div className="text-[11px] text-slate-500 font-bold uppercase flex flex-wrap gap-4 mt-2">
+                             <div className="flex items-center gap-1"><Clock className="w-3 h-3" /> {entry.hora}</div>
+                             <div className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {entry.local}</div>
+                             <div className="flex items-center gap-1"><Users className="w-3 h-3" /> {entry.participantes}</div>
+                          </div>
+                        </div>
+
+                        <div className="md:w-64 space-y-3 md:text-right flex flex-col md:items-end justify-center border-t md:border-t-0 md:border-l border-slate-200 pt-4 md:pt-0 md:pl-4">
+                           <div className="flex flex-col md:items-end">
+                              <span className="text-[9px] font-black text-[#2563EB] uppercase tracking-widest">Responsável</span>
+                              <span className="text-[11px] font-bold text-[#111827] uppercase">{assignedUser?.nome || 'N/A'}</span>
+                           </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
               })}
             </div>
           </div>

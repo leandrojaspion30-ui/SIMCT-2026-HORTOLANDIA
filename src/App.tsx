@@ -88,10 +88,13 @@ const App: React.FC = () => {
   const documents = useMemo(() => allDocuments.filter(d => (d.unidade_id || 1) === currentUser?.unidade_id), [allDocuments, currentUser]);
   const logs = useMemo(() => allLogs.filter(l => (l.unidade_id || 1) === currentUser?.unidade_id), [allLogs, currentUser]);
   const files = useMemo(() => allFiles.filter(f => (f.unidade_id || 1) === currentUser?.unidade_id), [allFiles, currentUser]);
-  const agenda = useMemo(() => allAgenda.filter(a => (a.unidade_id || 1) === currentUser?.unidade_id), [allAgenda, currentUser]);
-  const filteredUsers = useMemo(() => users.filter(u => (u.unidade_id || 1) === currentUser?.unidade_id), [users, currentUser]);
+  const agenda = useMemo(() => allAgenda, [allAgenda]);
+  const isLud = useMemo(() => currentUser?.nome === 'LUDIMILA' || currentUser?.nome === 'LEANDRO', [currentUser]);
 
-  const isLud = useMemo(() => currentUser?.nome === 'LUDIMILA', [currentUser]);
+  const filteredUsers = useMemo(() => {
+    if (isLud) return users;
+    return users.filter(u => (u.unidade_id || 1) === currentUser?.unidade_id);
+  }, [users, currentUser, isLud]);
 
   const imminentEvent = useMemo(() => {
     if (!currentUser) return null;
@@ -267,13 +270,13 @@ const App: React.FC = () => {
       return null;
     }
 
-    if (activeTab === 'register') return <DocumentRegistration documents={documents} currentUser={currentUser} onSubmit={handleDocumentSubmit} onCancel={() => handleNavigate('dashboard')} isReadOnly={!isAdministrative} />;
-    if (activeTab === 'edit' && editingDocId) return <DocumentRegistration documents={documents} currentUser={currentUser} initialData={documents.find(d => d.id === editingDocId)} onSubmit={handleDocumentSubmit} onCancel={() => handleNavigate('dashboard')} isReadOnly={!isAdministrative} />;
+    if (activeTab === 'register') return <DocumentRegistration documents={documents} agenda={agenda} currentUser={currentUser} onSubmit={handleDocumentSubmit} onCancel={() => handleNavigate('dashboard')} isReadOnly={!isAdministrative} />;
+    if (activeTab === 'edit' && editingDocId) return <DocumentRegistration documents={documents} agenda={agenda} currentUser={currentUser} initialData={documents.find(d => d.id === editingDocId)} onSubmit={handleDocumentSubmit} onCancel={() => handleNavigate('dashboard')} isReadOnly={!isAdministrative} />;
     
     if (selectedDocId) {
       const doc = documents.find(d => d.id === selectedDocId);
       if (!doc) return null;
-      return <DocumentView document={doc} allDocuments={documents} files={[]} logs={logs.filter(l => l.documento_id === selectedDocId)} currentUser={currentUser} isReadOnly={isAdministrative} forceEdit={forceDirectEdit} onBack={() => setSelectedDocId(null)} onEdit={() => { setEditingDocId(doc.id); setActiveTab('edit'); }} onDelete={(id) => { 
+      return <DocumentView document={doc} allDocuments={documents} agenda={agenda} files={[]} logs={logs.filter(l => l.documento_id === selectedDocId)} currentUser={currentUser} isReadOnly={isAdministrative} forceEdit={forceDirectEdit} onBack={() => setSelectedDocId(null)} onEdit={() => { setEditingDocId(doc.id); setActiveTab('edit'); }} onDelete={(id) => { 
           addLog(id, `EXCLUSÃO: Documento removido permanentemente do banco de dados SIMCT.`, 'DOCUMENTO');
           setAllDocuments(prev => prev.filter(d => d.id !== id));
           setSelectedDocId(null);
@@ -330,7 +333,7 @@ const App: React.FC = () => {
           addLog(id, `MONITORAMENTO: Acompanhamento de caso encerrado com sucesso.`, 'MONITORAMENTO');
           setAllDocuments(prev => prev.filter(d => d.id !== id));
       }} isReadOnly={isAdministrative} />;
-      case 'agenda': return <AgendaView agenda={agenda} setAgenda={setAllAgenda} currentUser={currentUser} effectiveUserId={currentUser.id} isReadOnly={isLud || currentUser.perfil === 'ADMINISTRATIVO'} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} />;
+      case 'agenda': return <AgendaView agenda={agenda} setAgenda={setAllAgenda} allDocuments={allDocuments} currentUser={currentUser} effectiveUserId={currentUser.id} isReadOnly={isLud} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} />;
       case 'search': return <AdvancedSearch documents={documents} currentUser={currentUser} onSelectDoc={handleOpenDocument} />;
       case 'logs': return <AuditLogViewer logs={logs} />;
       case 'settings': return <SettingsView currentUser={currentUser} onUpdatePassword={(p) => { 
@@ -338,7 +341,7 @@ const App: React.FC = () => {
           addLog('SISTEMA', `SEGURANÇA: Senha e assinatura digital alterada pelo próprio usuário.`, 'SEGURANÇA');
           return true; 
       }} />;
-      case 'statistics': return <StatisticsView documents={documents} />;
+      case 'statistics': return <StatisticsView documents={documents} agenda={agenda} currentUser={currentUser} />;
       default: return null;
     }
   };
@@ -371,6 +374,16 @@ const App: React.FC = () => {
               addLog('SISTEMA', `BLOQUEIO: Usuário bloqueado [${user.nome}] tentou acessar o sistema.`, 'SEGURANÇA', user);
               return; 
             } 
+
+            // Lógica de Substituição/Suplência
+            const now = new Date().toISOString().split('T')[0];
+            if (user.perfil === 'CONSELHEIRO' && user.substituicao_ativa) {
+              if (now >= (user.data_inicio_substituicao || '') && now <= (user.data_fim_prevista || '')) {
+                setLoginError("ACESSO NEGADO: VOCÊ ESTÁ SENDO SUBSTITUÍDO PELA SUPLENTE.");
+                addLog('SISTEMA', `ACESSO NEGADO: Conselheiro [${user.nome}] tentou acessar enquanto está em suplência ativa.`, 'SEGURANÇA', user);
+                return;
+              }
+            }
             
             if (!acceptedTerms) { 
               setLoginError("Obrigatório aceitar termos LGPD."); 
@@ -378,8 +391,26 @@ const App: React.FC = () => {
               return; 
             } 
             
-            setCurrentUser(user); 
-            addLog('SISTEMA', `LOGIN: Autenticação realizada com sucesso. Termos LGPD aceitos.`, 'SEGURANÇA', user);
+            // Se for a Rosilda em substituição ativa, ela "assume" a identidade mas mantém o nome
+            let sessionUser = { ...user };
+            if (user.nome === 'ROSILDA' && user.substituicao_ativa && user.substituindo_id) {
+              const substituted = users.find(u => u.id === user.substituindo_id);
+              if (substituted && now >= (user.data_inicio_substituicao || '') && now <= (user.data_fim_prevista || '')) {
+                sessionUser = {
+                  ...substituted,
+                  id: substituted.id, // Ela assume o ID para ver os documentos dele
+                  nome: `ROSILDA (Subst. ${substituted.nome})`,
+                  perfil: 'CONSELHEIRO',
+                  cargo: `Suplente de ${substituted.nome}`,
+                  unidade_id: substituted.unidade_id,
+                  is_suplente_active: true,
+                  real_user_id: user.id
+                };
+              }
+            }
+            
+            setCurrentUser(sessionUser); 
+            addLog('SISTEMA', `LOGIN: Autenticação realizada com sucesso. Termos LGPD aceitos.`, 'SEGURANÇA', sessionUser);
           }} className="space-y-6">
             <div className="relative">
               <input placeholder="USUÁRIO" className="w-full p-4 pl-12 bg-slate-50 border border-[#E5E7EB] rounded-xl outline-none font-bold uppercase focus:border-[#2563EB] transition-all" value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)} />
@@ -403,9 +434,9 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex bg-[#F9FAFB] font-['Inter']">
-      <aside className={`${isSidebarOpen ? 'w-80' : 'w-24'} bg-[#111827] transition-all flex flex-col fixed inset-y-0 z-50`}>
+      <aside className={`${isSidebarOpen ? 'w-80' : 'w-24'} bg-[#111827] transition-all flex flex-col fixed inset-y-0 z-50 overflow-hidden`}>
         <div className="p-6 flex items-center gap-4 border-b border-white/5"><img src={CT_LOGO_URL} alt="SIMCT" className="w-10 h-10" />{isSidebarOpen && <span className="text-white font-bold text-[18px] uppercase">SIM<span className="text-[#2563EB]">CT</span></span>}</div>
-        <nav className="flex-1 px-4 mt-8 space-y-2">
+        <nav className="flex-1 px-4 mt-8 space-y-2 overflow-y-auto min-h-0">
           <NavItem icon={<LayoutDashboard className="w-5 h-5" />} label="Painel Geral" active={activeTab === 'dashboard'} onClick={() => handleNavigate('dashboard')} collapsed={!isSidebarOpen} />
           {(currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO') && currentUser.nome !== 'LUDIMILA' && <NavItem icon={<FilePlus className="w-5 h-5" />} label="NOVO PROCEDIMENTO" active={activeTab === 'register'} onClick={() => handleNavigate('register')} collapsed={!isSidebarOpen} />}
           {currentUser.perfil === 'CONSELHEIRO' && (<><NavItem icon={<Briefcase className="w-5 h-5" />} label="Minha Referência" active={activeTab === 'my-docs'} onClick={() => handleNavigate('my-docs')} collapsed={!isSidebarOpen} /><NavItem icon={<Activity className="w-5 h-5" />} label="Monitoramento" active={activeTab === 'monitoring'} onClick={() => handleNavigate('monitoring')} collapsed={!isSidebarOpen} /></>)}
@@ -413,7 +444,7 @@ const App: React.FC = () => {
           <NavItem icon={<Database className="w-5 h-5" />} label="Busca Ativa" active={activeTab === 'search'} onClick={() => handleNavigate('search')} collapsed={!isSidebarOpen} />
           <NavItem icon={<BarChart3 className="w-5 h-5" />} label="Relatórios" active={activeTab === 'statistics'} onClick={() => handleNavigate('statistics')} collapsed={!isSidebarOpen} />
           <NavItem icon={<ShieldCheck className="w-5 h-5" />} label="Minha Senha" active={activeTab === 'settings'} onClick={() => handleNavigate('settings')} collapsed={!isSidebarOpen} />
-          {currentUser.nome === 'LUDIMILA' && <NavItem icon={<UserCog className="w-5 h-5" />} label="Gestão de RH" active={activeTab === 'user-management'} onClick={() => handleNavigate('user-management')} collapsed={!isSidebarOpen} />}
+          {(currentUser.nome === 'LUDIMILA' || currentUser.nome === 'LEANDRO') && <NavItem icon={<UserCog className="w-5 h-5" />} label="Gestão de RH" active={activeTab === 'user-management'} onClick={() => handleNavigate('user-management')} collapsed={!isSidebarOpen} />}
           {isLud && <NavItem icon={<History className="w-5 h-5" />} label="Audit Log" active={activeTab === 'logs'} onClick={() => handleNavigate('logs')} collapsed={!isSidebarOpen} />}
         </nav>
         <div className="p-4 border-t border-white/5">

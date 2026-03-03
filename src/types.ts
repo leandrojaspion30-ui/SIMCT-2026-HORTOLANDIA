@@ -15,6 +15,8 @@ export interface User {
   substituindo_id?: string;
   data_inicio_substituicao?: string;
   data_fim_prevista?: string;
+  is_suplente_active?: boolean;
+  real_user_id?: string;
 }
 
 export type DocumentStatus = 
@@ -220,6 +222,9 @@ export interface AgendaEntry {
   hora: string;
   local: string;
   participantes: string;
+  genitores_responsavel?: string;
+  documento_id?: string;
   descricao: string;
-  tipo: 'REUNIAO' | 'VISITA' | 'AUDIENCIA' | 'OUTROS';
+  tipo: 'REUNIAO' | 'VISITA' | 'AUDIENCIA' | 'NOTIFICACAO 1' | 'NOTIFICACAO 2' | 'NOTIFICACAO 3' | 'REUNIAO DE REDE' | 'OUTROS';
+  status?: 'PENDENTE' | 'COMPARECEU' | 'NAO_COMPARECEU' | 'REAGENDADO';
 }

@@ -1,16 +1,18 @@
 
 import React, { useMemo, useState } from 'react';
-import { Documento } from '../types';
+import { Documento, AgendaEntry, User } from '../types';
 import { INITIAL_USERS, STATUS_LABELS } from '../constants';
-import { BarChart3, PieChart, TrendingUp, Users, FileText, ShieldAlert, Sparkles } from 'lucide-react';
+import { BarChart3, PieChart, TrendingUp, Users, FileText, ShieldAlert, Sparkles, UserCheck, Bell, PhoneCall, Activity } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell } from 'recharts';
 import AIStatisticsAnalyzer from './AIStatisticsAnalyzer';
 
 interface StatisticsViewProps {
   documents: Documento[];
+  agenda: AgendaEntry[];
+  currentUser: User;
 }
 
-const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
+const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, currentUser }) => {
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const COLORS = ['#2563EB', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
@@ -169,6 +171,27 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
   const totalAttributions = useMemo(() => 
     filteredDocuments.reduce((acc, doc) => acc + (doc.atribuicoes_136?.length || 0), 0)
   , [filteredDocuments]);
+
+  const counselorPerformance = useMemo(() => {
+    return INITIAL_USERS
+      .filter(u => u.perfil === 'CONSELHEIRO' && (u.unidade_id || 1) === (currentUser.unidade_id || 1))
+      .map(u => {
+        const myDocs = documents.filter(d => d.conselheiro_referencia_id === u.id);
+        const myAgenda = agenda.filter(a => a.conselheiro_id === u.id);
+        
+        return {
+          id: u.id,
+          nome: u.nome,
+          unidade: u.unidade_id,
+          docs: myDocs.length,
+          disque100: myDocs.filter(d => d.origem.includes('DISQUE 100')).length,
+          monitoring: myDocs.filter(d => d.status.includes('MONITORAMENTO')).length,
+          notifications: myAgenda.filter(a => a.tipo.startsWith('NOTIFICACAO')).length,
+          attendances: myAgenda.filter(a => a.status === 'COMPARECEU').length
+        };
+      })
+      .sort((a, b) => b.docs - a.docs);
+  }, [documents, agenda]);
 
   return (
     <div className="space-y-8 pb-20">
@@ -512,6 +535,84 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents }) => {
       </div>
 
       <AIStatisticsAnalyzer stats={aiStats} totalDocs={filteredDocuments.length} />
+
+      {/* NOVA SEÇÃO: DESEMPENHO DOS CONSELHEIROS */}
+      <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-4 mb-10">
+          <div className="p-3 bg-blue-50 rounded-2xl text-blue-600">
+            <UserCheck className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-[18px] font-black text-slate-900 uppercase tracking-tight">Desempenho dos Conselheiros</h3>
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Produtividade Individual por Categoria de Ação</p>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-separate border-spacing-y-3">
+            <thead>
+              <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <th className="px-6 py-4">Conselheiro</th>
+                <th className="px-6 py-4 text-center">Unidade</th>
+                <th className="px-6 py-4 text-center">Documentos</th>
+                <th className="px-6 py-4 text-center">Disque 100</th>
+                <th className="px-6 py-4 text-center">Notificações</th>
+                <th className="px-6 py-4 text-center">Atendimentos</th>
+                <th className="px-6 py-4 text-center">Monitoramentos</th>
+              </tr>
+            </thead>
+            <tbody>
+              {counselorPerformance.map(perf => (
+                <tr key={perf.id} className="group hover:bg-slate-50 transition-all">
+                  <td className="px-6 py-5 bg-slate-50 group-hover:bg-white rounded-l-2xl border-y border-l border-transparent group-hover:border-slate-100 transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center font-black text-blue-600 text-xs border border-slate-100 shadow-sm">
+                        {perf.nome.substring(0, 2)}
+                      </div>
+                      <span className="text-[13px] font-black text-slate-700 uppercase">{perf.nome}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-5 bg-slate-50 group-hover:bg-white border-y border-transparent group-hover:border-slate-100 text-center">
+                    <span className="px-3 py-1 bg-slate-200 text-slate-600 rounded-lg text-[10px] font-black uppercase">CT {perf.unidade}</span>
+                  </td>
+                  <td className="px-6 py-5 bg-slate-50 group-hover:bg-white border-y border-transparent group-hover:border-slate-100 text-center">
+                    <div className="flex flex-col items-center">
+                      <span className="text-[16px] font-black text-slate-800">{perf.docs}</span>
+                      <div className="w-8 h-1 bg-blue-100 rounded-full mt-1 overflow-hidden">
+                        <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, (perf.docs / (documents.length || 1)) * 500)}%` }}></div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-5 bg-slate-50 group-hover:bg-white border-y border-transparent group-hover:border-slate-100 text-center">
+                    <div className="flex items-center justify-center gap-2">
+                      <PhoneCall className="w-3.5 h-3.5 text-red-400" />
+                      <span className="text-[14px] font-black text-slate-600">{perf.disque100}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-5 bg-slate-50 group-hover:bg-white border-y border-transparent group-hover:border-slate-100 text-center">
+                    <div className="flex items-center justify-center gap-2">
+                      <Bell className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="text-[14px] font-black text-slate-600">{perf.notifications}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-5 bg-slate-50 group-hover:bg-white border-y border-transparent group-hover:border-slate-100 text-center">
+                    <div className="flex items-center justify-center gap-2">
+                      <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-[14px] font-black text-slate-600">{perf.attendances}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-5 bg-slate-50 group-hover:bg-white rounded-r-2xl border-y border-r border-transparent group-hover:border-slate-100 text-center">
+                    <div className="flex items-center justify-center gap-2">
+                      <TrendingUp className="w-3.5 h-3.5 text-violet-400" />
+                      <span className="text-[14px] font-black text-slate-600">{perf.monitoring}</span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 };

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { 
   Documento, Log, User as UserType, DocumentStatus, 
-  MedidaAplicada, SipiaViolation, AgenteVioladorEntry, LogType
+  MedidaAplicada, SipiaViolation, AgenteVioladorEntry, LogType, AgendaEntry
 } from '../types';
 import { 
   STATUS_LABELS, INITIAL_USERS, 
@@ -23,6 +23,7 @@ import FamilyHistoryModal from './FamilyHistoryModal';
 interface DocumentViewProps {
   document: Documento;
   allDocuments: Documento[]; 
+  agenda: AgendaEntry[];
   currentUser: UserType;
   files: any[];
   logs: Log[];
@@ -40,6 +41,7 @@ interface DocumentViewProps {
 const DocumentView: React.FC<DocumentViewProps> = ({ 
   document: doc, 
   allDocuments,
+  agenda,
   currentUser, 
   logs,
   onBack, 
@@ -1066,6 +1068,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       {showHistoryModal && (
         <FamilyHistoryModal 
           history={[...familyDossier.history, doc]} 
+          agenda={agenda}
           currentUser={currentUser} 
           onClose={() => setShowHistoryModal(false)} 
         />
