@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert } from 'lucide-react';
+import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart } from 'lucide-react';
 import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada } from './types';
 import { INITIAL_USERS, UserWithPassword } from './constants';
 import DocumentList from './components/DocumentList';
@@ -68,7 +68,7 @@ const NavItem: React.FC<{ icon: React.ReactNode; label: string; active: boolean;
 const App: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'register' | 'my-docs' | 'monitoring' | 'logs' | 'search' | 'settings' | 'agenda' | 'statistics' | 'edit' | 'user-management' | 'plantao'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'register' | 'my-docs' | 'monitoring' | 'logs' | 'search' | 'settings' | 'agenda' | 'statistics' | 'edit' | 'user-management' | 'plantao' | 'global-statistics'>('dashboard');
   const [users, setUsers] = useState<UserWithPassword[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
@@ -342,6 +342,7 @@ const App: React.FC = () => {
           return true; 
       }} />;
       case 'statistics': return <StatisticsView documents={documents} agenda={agenda} currentUser={currentUser} />;
+      case 'global-statistics': return <StatisticsView documents={allDocuments} agenda={allAgenda} currentUser={currentUser} isGlobal />;
       default: return null;
     }
   };
@@ -446,6 +447,7 @@ const App: React.FC = () => {
           <NavItem icon={<ShieldCheck className="w-5 h-5" />} label="Minha Senha" active={activeTab === 'settings'} onClick={() => handleNavigate('settings')} collapsed={!isSidebarOpen} />
           {(currentUser.nome === 'LUDIMILA' || currentUser.nome === 'LEANDRO') && <NavItem icon={<UserCog className="w-5 h-5" />} label="Gestão de RH" active={activeTab === 'user-management'} onClick={() => handleNavigate('user-management')} collapsed={!isSidebarOpen} />}
           {isLud && <NavItem icon={<History className="w-5 h-5" />} label="Audit Log" active={activeTab === 'logs'} onClick={() => handleNavigate('logs')} collapsed={!isSidebarOpen} />}
+          {currentUser.nome === 'LEANDRO' && <NavItem icon={<PieChart className="w-5 h-5" />} label="Relatórios das Unidades" active={activeTab === 'global-statistics'} onClick={() => handleNavigate('global-statistics')} collapsed={!isSidebarOpen} />}
         </nav>
         <div className="p-4 border-t border-white/5">
           <NavItem icon={<LogOut className="w-5 h-5" />} label="Sair" active={false} onClick={handleLogout} collapsed={!isSidebarOpen} danger />
