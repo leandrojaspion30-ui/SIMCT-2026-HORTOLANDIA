@@ -30,8 +30,9 @@ interface AgendaViewProps {
 const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, allDocuments, currentUser, effectiveUserId, isReadOnly, onAddLog }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const todayStr = new Date().toISOString().split('T')[0];
   const isAdmin = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
+  const [filterType, setFilterType] = useState<'MY' | 'UNIT'>(isAdmin ? 'UNIT' : 'MY');
+  const todayStr = new Date().toISOString().split('T')[0];
   const councilors = INITIAL_USERS.filter(u => {
     if (u.perfil !== 'CONSELHEIRO') return false;
     // Se for ADM, vê apenas os da sua unidade
@@ -115,6 +116,13 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, allDocuments
   };
 
   const visibleEvents = agenda
+    .filter(item => {
+      if (filterType === 'MY') {
+        return item.conselheiro_id === effectiveUserId;
+      }
+      // Filtra pela unidade do usuário logado
+      return item.unidade_id === currentUser.unidade_id;
+    })
     .sort((a, b) => {
       const dateCompare = new Date(a.data).getTime() - new Date(b.data).getTime();
       if (dateCompare !== 0) return dateCompare;
@@ -190,7 +198,7 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, allDocuments
 
   return (
     <div className="space-y-8 pb-20 max-w-7xl mx-auto animate-in fade-in duration-700">
-      <div className="flex justify-between items-center bg-white p-10 rounded-[2.5rem] border shadow-sm">
+      <div className="flex flex-col md:flex-row justify-between items-center bg-white p-10 rounded-[2.5rem] border shadow-sm gap-6">
         <div className="flex items-center gap-4">
            <div className="p-3 bg-blue-600 rounded-2xl shadow-lg"><Calendar className="w-6 h-6 text-white" /></div>
            <div>
@@ -198,6 +206,24 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, allDocuments
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Gestão de Compromissos e Prazos Processuais</p>
            </div>
         </div>
+
+        {currentUser.perfil === 'CONSELHEIRO' && (
+          <div className="flex bg-slate-100 p-1.5 rounded-2xl">
+            <button 
+              onClick={() => setFilterType('MY')}
+              className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filterType === 'MY' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              Meus Compromissos
+            </button>
+            <button 
+              onClick={() => setFilterType('UNIT')}
+              className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filterType === 'UNIT' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              Agenda da Unidade
+            </button>
+          </div>
+        )}
+
         {!isReadOnly && (
           <button onClick={() => setShowAddModal(true)} className="px-8 py-4 bg-[#111827] text-white rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-2 hover:bg-blue-600 transition-all shadow-xl active:scale-95">
             <Plus className="w-5 h-5" /> Novo Compromisso

@@ -372,9 +372,10 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 onChange={e => setFormData({...formData, notificacao: e.target.value})}
               >
                 <option value="">NOTIFICAÇÃO (OPCIONAL)</option>
-                {['LEANDRO', 'LUIZA', 'MILENA', 'MIRIAN', 'SANDRA', 'ROSILDA'].map((opt, i) => (
+                {(CONSELHEIROS_ALFABETICO_POR_UNIDADE[currentUser.unidade_id] || []).map((opt, i) => (
                   <option key={`${opt}-${i}`} value={opt}>{opt}</option>
                 ))}
+                {currentUser.unidade_id === 1 && <option value="ROSILDA">ROSILDA</option>}
               </select>
             </div>
           </section>

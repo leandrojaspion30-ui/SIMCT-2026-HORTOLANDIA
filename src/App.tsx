@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart } from 'lucide-react';
 import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada } from './types';
-import { INITIAL_USERS, UserWithPassword } from './constants';
+import { INITIAL_USERS, UserWithPassword, INITIAL_AGENDA } from './constants';
 import DocumentList from './components/DocumentList';
 import DocumentRegistration from './components/DocumentRegistration';
 import DocumentView from './components/DocumentView';
@@ -144,6 +144,7 @@ const App: React.FC = () => {
     if (savedLogs) setAllLogs(JSON.parse(savedLogs));
     if (savedFiles) setAllFiles(JSON.parse(savedFiles));
     if (savedAgenda) setAllAgenda(JSON.parse(savedAgenda));
+    else setAllAgenda(INITIAL_AGENDA);
     if (savedAck) setAcknowledgedEventIds(JSON.parse(savedAck));
     if (savedAckRem) setAcknowledgedReminderIds(JSON.parse(savedAckRem));
 
@@ -333,7 +334,7 @@ const App: React.FC = () => {
           addLog(id, `MONITORAMENTO: Acompanhamento de caso encerrado com sucesso.`, 'MONITORAMENTO');
           setAllDocuments(prev => prev.filter(d => d.id !== id));
       }} isReadOnly={isAdministrative} />;
-      case 'agenda': return <AgendaView agenda={agenda} setAgenda={setAllAgenda} allDocuments={allDocuments} currentUser={currentUser} effectiveUserId={currentUser.id} isReadOnly={isLud} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} />;
+      case 'agenda': return <AgendaView agenda={agenda} setAgenda={setAllAgenda} allDocuments={allDocuments} currentUser={currentUser} effectiveUserId={currentUser.id} isReadOnly={currentUser.nome === 'LUDIMILA'} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} />;
       case 'search': return <AdvancedSearch documents={documents} currentUser={currentUser} onSelectDoc={handleOpenDocument} />;
       case 'logs': return <AuditLogViewer logs={logs} />;
       case 'settings': return <SettingsView currentUser={currentUser} onUpdatePassword={(p) => { 

@@ -73,7 +73,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     setAtribuicoesDetalhadas(doc.atribuicoes_136_detalhadas || []);
     setRelatoProvidencias(doc.relato_providencias || '');
     setIsImprocedente(doc.is_improcedente || false);
-  }, [doc.id, doc.violacoesSipia, doc.agentesVioladores, doc.medidas_detalhadas, doc.atribuicoes_136, doc.atribuicoes_136_detalhadas, doc.relato_providencias, doc.is_improcedente]);
+  }, [doc.id]);
 
   const isResponsible = doc.conselheiro_providencia_id === currentUser.id || 
     doc.conselheiro_referencia_id === currentUser.id;
