@@ -161,6 +161,22 @@ export const getEffectiveEscala = (dateStr: string, timeStr: string = "08:00", u
     ];
   }
 
+  // Lógica de Escala Contínua para Unidade 1 (Ano 2026)
+  if (unidade_id === 1 && dt.getFullYear() === 2026) {
+    const start2026 = new Date('2026-01-01T12:00:00');
+    const diffDays = Math.floor((dt.getTime() - start2026.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // Sequência calibrada para que em 07/03/2026 o trio seja: MILENA, LEANDRO, MIRIAN
+    const sequenceU1 = ['SANDRA', 'MILENA', 'LEANDRO', 'MIRIAN', 'LUIZA'];
+    const baseIdx = (diffDays + 1) % 5; 
+    
+    return [
+      sequenceU1[baseIdx],
+      sequenceU1[(baseIdx + 1) % 5],
+      sequenceU1[(baseIdx + 2) % 5]
+    ];
+  }
+
   const day = dt.getDate();
   const month = dt.getMonth() + 1;
   const year = dt.getFullYear();
