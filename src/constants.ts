@@ -144,6 +144,23 @@ export const getEffectiveEscala = (dateStr: string, timeStr: string = "08:00", u
   let dt = new Date(`${dateStr}T12:00:00`);
   if (hours < 8) dt.setDate(dt.getDate() - 1);
   
+  // Lógica de Escala Contínua para Unidade 2 (Ano 2026)
+  if (unidade_id === 2 && dt.getFullYear() === 2026) {
+    const start2026 = new Date('2026-01-01T12:00:00');
+    // Cálculo de dias corridos para rotação ininterrupta
+    const diffDays = Math.floor((dt.getTime() - start2026.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // Sequência calibrada para que em 07/03/2026 o trio seja: ALINE, MATHEUS, FABIO
+    const sequenceU2 = ['MARCIA', 'ALINE', 'MATHEUS', 'FABIO', 'EDSON LOPES'];
+    const baseIdx = (diffDays + 1) % 5; 
+    
+    return [
+      sequenceU2[baseIdx],
+      sequenceU2[(baseIdx + 1) % 5],
+      sequenceU2[(baseIdx + 2) % 5]
+    ];
+  }
+
   const day = dt.getDate();
   const month = dt.getMonth() + 1;
   const year = dt.getFullYear();
@@ -153,27 +170,19 @@ export const getEffectiveEscala = (dateStr: string, timeStr: string = "08:00", u
   if (year === 2026) {
     if (month === 2) {
       // Fevereiro 2026: Inicia com Milena (01/Dom) no CT 1
-      // Vamos usar a mesma lógica de rodízio para o CT 2
       const index = (day - 1) % 5;
       const febScale: Record<number, Record<number, string[]>> = {
         1: {
           17: ['MILENA', 'SANDRA', 'LEANDRO'],
           18: ['LUIZA', 'SANDRA', 'MIRIAN']
-        },
-        2: {
-          17: ['ALINE', 'EDSON LOPES', 'FABIO'],
-          18: ['MARCIA', 'EDSON LOPES', 'MATHEUS']
         }
       };
       return febScale[unidade_id]?.[day] || [sequence[index], sequence[(index + 1) % 5], sequence[(index + 2) % 5]];
     }
-    if (month === 3) {
-      const index = (day - 1) % 5;
-      return [sequence[index], sequence[(index + 1) % 5], sequence[(index + 2) % 5]];
-    }
   }
 
-  return [sequence[0], sequence[1], sequence[2]];
+  const index = (day - 1) % 5;
+  return [sequence[index], sequence[(index + 1) % 5], sequence[(index + 2) % 5]];
 };
 
 export const BAIRROS = [
