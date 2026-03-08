@@ -147,12 +147,12 @@ export const getEffectiveEscala = (dateStr: string, timeStr: string = "08:00", u
   // Lógica de Escala Contínua para Unidade 2 (Ano 2026)
   if (unidade_id === 2 && dt.getFullYear() === 2026) {
     const start2026 = new Date('2026-01-01T12:00:00');
-    // Cálculo de dias corridos para rotação ininterrupta
     const diffDays = Math.floor((dt.getTime() - start2026.getTime()) / (1000 * 60 * 60 * 24));
+    // Domingos não rotacionam a escala (mantêm o trio de sábado)
+    const effectiveDay = diffDays - Math.floor((diffDays + 4) / 7);
     
-    // Sequência calibrada para que em 07/03/2026 o trio seja: ALINE, MATHEUS, FABIO
     const sequenceU2 = ['MARCIA', 'ALINE', 'MATHEUS', 'FABIO', 'EDSON LOPES'];
-    const baseIdx = (diffDays + 1) % 5; 
+    const baseIdx = effectiveDay % 5; 
     
     return [
       sequenceU2[baseIdx],
@@ -165,10 +165,11 @@ export const getEffectiveEscala = (dateStr: string, timeStr: string = "08:00", u
   if (unidade_id === 1 && dt.getFullYear() === 2026) {
     const start2026 = new Date('2026-01-01T12:00:00');
     const diffDays = Math.floor((dt.getTime() - start2026.getTime()) / (1000 * 60 * 60 * 24));
+    // Domingos não rotacionam a escala (mantêm o trio de sábado)
+    const effectiveDay = diffDays - Math.floor((diffDays + 4) / 7);
     
-    // Sequência calibrada para que em 07/03/2026 o trio seja: MILENA, LEANDRO, MIRIAN
     const sequenceU1 = ['SANDRA', 'MILENA', 'LEANDRO', 'MIRIAN', 'LUIZA'];
-    const baseIdx = (diffDays + 1) % 5; 
+    const baseIdx = effectiveDay % 5; 
     
     return [
       sequenceU1[baseIdx],
