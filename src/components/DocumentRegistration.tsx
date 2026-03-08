@@ -586,7 +586,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   onChange={e => setFormData({...formData, conselheiro_referencia_id: e.target.value})}
                 >
                   <option value="">Selecione o Conselheiro...</option>
-                  {INITIAL_USERS.filter(u => u.perfil === 'CONSELHEIRO' && u.unidade_id === currentUser.unidade_id).map(u => (
+                  {INITIAL_USERS.filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === currentUser.unidade_id).map(u => (
                     <option key={u.id} value={u.id}>{u.nome}</option>
                   ))}
                 </select>

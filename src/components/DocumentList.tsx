@@ -101,7 +101,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, currentUser, onS
           </select>
           <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-blue-500" value={filters.conselheiro_ref_id} onChange={(e) => setFilters({...filters, conselheiro_ref_id: e.target.value})}>
             <option value="">Qualquer Conselheiro</option>
-            {INITIAL_USERS.filter(u => u.perfil === 'CONSELHEIRO').map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+            {INITIAL_USERS.filter(u => u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE').map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
           </select>
         </div>
 

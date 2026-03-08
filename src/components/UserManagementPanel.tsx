@@ -35,7 +35,7 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ users, onUpda
                 </div>
                 <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
                   user.perfil === 'ADMIN' ? 'bg-red-50 text-red-600' :
-                  user.perfil === 'CONSELHEIRO' ? 'bg-blue-50 text-blue-600' :
+                  (user.perfil === 'CONSELHEIRO' || user.perfil === 'SUPLENTE') ? 'bg-blue-50 text-blue-600' :
                   'bg-slate-100 text-slate-600'
                 }`}>
                   {user.perfil}
@@ -102,14 +102,17 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ users, onUpda
                           data_fim_prevista: tempDates.end 
                         });
                         
-                        // Ativa substituição para a Rosilda (id: suplente1)
-                        onUpdateUser('suplente1', {
-                          substituicao_ativa: true,
-                          substituindo_id: user.id,
-                          data_inicio_substituicao: tempDates.start,
-                          data_fim_prevista: tempDates.end,
-                          status: 'ATIVO'
-                        });
+                        // Ativa substituição para o suplente da unidade
+                        const suplente = users.find(u => u.perfil === 'SUPLENTE' && u.unidade_id === user.unidade_id);
+                        if (suplente) {
+                          onUpdateUser(suplente.id, {
+                            substituicao_ativa: true,
+                            substituindo_id: user.id,
+                            data_inicio_substituicao: tempDates.start,
+                            data_fim_prevista: tempDates.end,
+                            status: 'ATIVO'
+                          });
+                        }
                         
                         setSubstitutingId(null);
                       }}
@@ -164,11 +167,14 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ users, onUpda
                           status: 'INATIVO'
                         });
                       } else {
-                        onUpdateUser('suplente1', { 
-                          substituicao_ativa: false, 
-                          substituindo_id: undefined,
-                          status: 'INATIVO'
-                        });
+                        const suplente = users.find(u => u.perfil === 'SUPLENTE' && u.unidade_id === user.unidade_id);
+                        if (suplente) {
+                          onUpdateUser(suplente.id, { 
+                            substituicao_ativa: false, 
+                            substituindo_id: undefined,
+                            status: 'INATIVO'
+                          });
+                        }
                       }
                     }
                   }}

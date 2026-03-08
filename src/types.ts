@@ -17,6 +17,7 @@ export interface User {
   data_fim_prevista?: string;
   is_suplente_active?: boolean;
   real_user_id?: string;
+  substituted_name?: string;
 }
 
 export type DocumentStatus = 

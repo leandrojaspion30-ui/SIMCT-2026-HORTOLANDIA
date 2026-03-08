@@ -169,7 +169,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, curr
 
   const counselorPerformance = useMemo(() => {
     return INITIAL_USERS
-      .filter(u => u.perfil === 'CONSELHEIRO' && (isGlobal ? true : (u.unidade_id || 1) === (currentUser.unidade_id || 1)))
+      .filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && (isGlobal ? true : (u.unidade_id || 1) === (currentUser.unidade_id || 1)))
       .map(u => {
         const myDocs = documents.filter(d => d.conselheiro_referencia_id === u.id);
         const myAgenda = agenda.filter(a => a.conselheiro_id === u.id);

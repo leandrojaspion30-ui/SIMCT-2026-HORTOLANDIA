@@ -34,7 +34,7 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, allDocuments
   const [filterType, setFilterType] = useState<'MY' | 'UNIT'>(isAdmin ? 'UNIT' : 'MY');
   const todayStr = new Date().toISOString().split('T')[0];
   const councilors = INITIAL_USERS.filter(u => {
-    if (u.perfil !== 'CONSELHEIRO') return false;
+    if (u.perfil !== 'CONSELHEIRO' && u.perfil !== 'SUPLENTE') return false;
     // Se for ADM, vê apenas os da sua unidade
     if (isAdmin) return u.unidade_id === currentUser.unidade_id;
     return true;
@@ -207,7 +207,7 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, allDocuments
            </div>
         </div>
 
-        {currentUser.perfil === 'CONSELHEIRO' && (
+        {(currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE') && (
           <div className="flex bg-slate-100 p-1.5 rounded-2xl">
             <button 
               onClick={() => setFilterType('MY')}

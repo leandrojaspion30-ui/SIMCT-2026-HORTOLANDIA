@@ -99,7 +99,7 @@ const App: React.FC = () => {
   const imminentEvent = useMemo(() => {
     if (!currentUser) return null;
     const now = new Date();
-    const myEvents = agenda.filter(e => e.conselheiro_id === currentUser.id && !acknowledgedEventIds.includes(e.id));
+    const myEvents = agenda.filter(e => (e.conselheiro_id === currentUser.id || e.conselheiro_id === currentUser.real_user_id) && !acknowledgedEventIds.includes(e.id));
     
     return myEvents.find(e => {
       try {
@@ -116,11 +116,11 @@ const App: React.FC = () => {
   }, [agenda, currentUser, acknowledgedEventIds]);
 
   const twoHourReminder = useMemo(() => {
-    if (!currentUser || currentUser.perfil !== 'CONSELHEIRO') return null;
+    if (!currentUser || (currentUser.perfil !== 'CONSELHEIRO' && currentUser.perfil !== 'SUPLENTE')) return null;
     const now = new Date();
     
     return agenda.find(e => {
-      if (e.conselheiro_id !== currentUser.id || acknowledgedReminderIds.includes(`${e.id}-2h`)) return false;
+      if ((e.conselheiro_id !== currentUser.id && e.conselheiro_id !== currentUser.real_user_id) || acknowledgedReminderIds.includes(`${e.id}-2h`)) return false;
       try {
         const eventDate = new Date(`${e.data}T${e.hora}:00`);
         const diffMs = eventDate.getTime() - now.getTime();
@@ -189,12 +189,13 @@ const App: React.FC = () => {
   }, [currentUser]);
 
   const pendingValidations = useMemo(() => {
-    if (!currentUser || currentUser.perfil !== 'CONSELHEIRO') return [];
+    if (!currentUser || (currentUser.perfil !== 'CONSELHEIRO' && currentUser.perfil !== 'SUPLENTE')) return [];
     return documents.filter(d => {
        const isAwaiting = d.status.includes('AGUARDANDO_VALIDACAO');
-       const inTrio = d.conselheiros_providencia_nomes?.includes(currentUser.nome.toUpperCase());
+       const inTrio = d.conselheiros_providencia_nomes?.includes(currentUser.nome.toUpperCase()) || 
+                      (currentUser.is_suplente_active && currentUser.substituted_name && d.conselheiros_providencia_nomes?.includes(currentUser.substituted_name.toUpperCase()));
        const alreadyValidated = d.medidas_detalhadas?.some(m => 
-         m.confirmacoes?.some(c => c.usuario_id === currentUser.id)
+         m.confirmacoes?.some(c => c.usuario_id === currentUser.id || c.usuario_id === currentUser.real_user_id)
        );
        return isAwaiting && inTrio && !alreadyValidated;
     });
@@ -377,7 +378,7 @@ const App: React.FC = () => {
               return; 
             } 
 
-            // Lógica de Substituição/Suplência
+            // Lógica de Substituição/Suplência Generalizada
             const now = new Date().toISOString().split('T')[0];
             if (user.perfil === 'CONSELHEIRO' && user.substituicao_ativa) {
               if (now >= (user.data_inicio_substituicao || '') && now <= (user.data_fim_prevista || '')) {
@@ -393,20 +394,21 @@ const App: React.FC = () => {
               return; 
             } 
             
-            // Se for a Rosilda em substituição ativa, ela "assume" a identidade mas mantém o nome
+            // Se for um Suplente em substituição ativa, assume a identidade mas mantém rastro
             let sessionUser = { ...user };
-            if (user.nome === 'ROSILDA' && user.substituicao_ativa && user.substituindo_id) {
+            if (user.perfil === 'SUPLENTE' && user.substituicao_ativa && user.substituindo_id) {
               const substituted = users.find(u => u.id === user.substituindo_id);
               if (substituted && now >= (user.data_inicio_substituicao || '') && now <= (user.data_fim_prevista || '')) {
                 sessionUser = {
                   ...substituted,
-                  id: substituted.id, // Ela assume o ID para ver os documentos dele
-                  nome: `ROSILDA (Subst. ${substituted.nome})`,
+                  id: substituted.id, // Assume o ID para ver os documentos dele
+                  nome: `${user.nome} (Subst. ${substituted.nome})`,
                   perfil: 'CONSELHEIRO',
                   cargo: `Suplente de ${substituted.nome}`,
                   unidade_id: substituted.unidade_id,
                   is_suplente_active: true,
-                  real_user_id: user.id
+                  real_user_id: user.id,
+                  substituted_name: substituted.nome
                 };
               }
             }
@@ -441,7 +443,7 @@ const App: React.FC = () => {
         <nav className="flex-1 px-4 mt-8 space-y-2 overflow-y-auto min-h-0">
           <NavItem icon={<LayoutDashboard className="w-5 h-5" />} label="Painel Geral" active={activeTab === 'dashboard'} onClick={() => handleNavigate('dashboard')} collapsed={!isSidebarOpen} />
           {(currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO') && currentUser.nome !== 'LUDIMILA' && <NavItem icon={<FilePlus className="w-5 h-5" />} label="NOVO PROCEDIMENTO" active={activeTab === 'register'} onClick={() => handleNavigate('register')} collapsed={!isSidebarOpen} />}
-          {currentUser.perfil === 'CONSELHEIRO' && (<><NavItem icon={<Zap className="w-5 h-5" />} label="NOVO PROCED/PLANTÃO" active={activeTab === 'plantao'} onClick={() => handleNavigate('plantao')} collapsed={!isSidebarOpen} /><NavItem icon={<Briefcase className="w-5 h-5" />} label="Minha Referência" active={activeTab === 'my-docs'} onClick={() => handleNavigate('my-docs')} collapsed={!isSidebarOpen} /><NavItem icon={<Activity className="w-5 h-5" />} label="Monitoramento" active={activeTab === 'monitoring'} onClick={() => handleNavigate('monitoring')} collapsed={!isSidebarOpen} /></>)}
+          {(currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE') && (<><NavItem icon={<Zap className="w-5 h-5" />} label="NOVO PROCED/PLANTÃO" active={activeTab === 'plantao'} onClick={() => handleNavigate('plantao')} collapsed={!isSidebarOpen} /><NavItem icon={<Briefcase className="w-5 h-5" />} label="Minha Referência" active={activeTab === 'my-docs'} onClick={() => handleNavigate('my-docs')} collapsed={!isSidebarOpen} /><NavItem icon={<Activity className="w-5 h-5" />} label="Monitoramento" active={activeTab === 'monitoring'} onClick={() => handleNavigate('monitoring')} collapsed={!isSidebarOpen} /></>)}
           <NavItem icon={<CalendarDays className="w-5 h-5" />} label="Agenda" active={activeTab === 'agenda'} onClick={() => handleNavigate('agenda')} collapsed={!isSidebarOpen} />
           <NavItem icon={<Database className="w-5 h-5" />} label="Busca Ativa" active={activeTab === 'search'} onClick={() => handleNavigate('search')} collapsed={!isSidebarOpen} />
           <NavItem icon={<BarChart3 className="w-5 h-5" />} label="Relatórios" active={activeTab === 'statistics'} onClick={() => handleNavigate('statistics')} collapsed={!isSidebarOpen} />

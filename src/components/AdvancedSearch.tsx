@@ -85,7 +85,7 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ documents, currentUser,
               <label className="text-[10px] font-black text-slate-400 uppercase">Conselheiro de Referência</label>
               <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] font-bold" value={filters.conselheiro_ref_id} onChange={e => setFilters({...filters, conselheiro_ref_id: e.target.value})}>
                 <option value="">QUALQUER CONSELHEIRO</option>
-                {INITIAL_USERS.filter(u => u.perfil === 'CONSELHEIRO' && u.unidade_id === currentUser.unidade_id).map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                {INITIAL_USERS.filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === currentUser.unidade_id).map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
               </select>
             </div>
             <div className="space-y-2">
