@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, MapPin, Building2, Calendar, LayoutGrid, UserCheck, RefreshCw, Database, History } from 'lucide-react';
 import { Documento, User, DocumentStatus } from '../types';
-import { BAIRROS, INITIAL_USERS, STATUS_LABELS, ORIGENS_HIERARQUICAS, REDE_HORTOLANDIA } from '../constants';
+import { BAIRROS, INITIAL_USERS, STATUS_LABELS, ORIGENS_HIERARQUICAS, REDE_HORTOLANDIA, getBairrosByUnidade } from '../constants';
 
 interface AdvancedSearchProps {
   documents: Documento[];
@@ -71,7 +71,7 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ documents, currentUser,
               <label className="text-[10px] font-black text-slate-400 uppercase">Bairro</label>
               <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] font-bold" value={filters.bairro} onChange={e => setFilters({...filters, bairro: e.target.value})}>
                 <option value="">TODOS OS BAIRROS</option>
-                {BAIRROS.map(b => <option key={b} value={b}>{b}</option>)}
+                {getBairrosByUnidade(currentUser.unidade_id).map(b => <option key={b} value={b}>{b}</option>)}
               </select>
             </div>
             <div className="space-y-2">

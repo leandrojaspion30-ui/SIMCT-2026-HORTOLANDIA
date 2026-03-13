@@ -144,60 +144,51 @@ export const getEffectiveEscala = (dateStr: string, timeStr: string = "08:00", u
   let dt = new Date(`${dateStr}T12:00:00`);
   if (hours < 8) dt.setDate(dt.getDate() - 1);
   
-  // Lógica de Escala Contínua para Unidade 2 (Ano 2026)
-  if (unidade_id === 2 && dt.getFullYear() === 2026) {
-    const start2026 = new Date('2026-01-01T12:00:00');
-    const diffDays = Math.floor((dt.getTime() - start2026.getTime()) / (1000 * 60 * 60 * 24));
-    // Domingos não rotacionam a escala (mantêm o trio de sábado)
-    const effectiveDay = diffDays - Math.floor((diffDays + 4) / 7);
+  // Lógica de Escala para 2026 baseada no padrão de rodízio semanal/diário
+  if (dt.getFullYear() === 2026) {
+    const refDate = new Date('2026-03-02T12:00:00');
+    const diffTime = dt.getTime() - refDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     
-    const sequenceU2 = ['MARCIA', 'ALINE', 'MATHEUS', 'FABIO', 'EDSON LOPES'];
-    const baseIdx = effectiveDay % 5; 
+    const weeks = Math.floor(diffDays / 7);
+    const dayOfWeek = (dt.getDay() + 6) % 7; // 0=Seg, ..., 6=Dom
     
-    return [
-      sequenceU2[baseIdx],
-      sequenceU2[(baseIdx + 1) % 5],
-      sequenceU2[(baseIdx + 2) % 5]
-    ];
-  }
-
-  // Lógica de Escala Contínua para Unidade 1 (Ano 2026)
-  if (unidade_id === 1 && dt.getFullYear() === 2026) {
-    const start2026 = new Date('2026-01-01T12:00:00');
-    const diffDays = Math.floor((dt.getTime() - start2026.getTime()) / (1000 * 60 * 60 * 24));
-    // Domingos não rotacionam a escala (mantêm o trio de sábado)
-    const effectiveDay = diffDays - Math.floor((diffDays + 4) / 7);
+    if (unidade_id === 2) {
+      const sequenceU2 = ['EDSON LOPES', 'FABIO', 'MATHEUS', 'MARCIA', 'ALINE'];
+      // Cada semana o plantonista de segunda avança 1 posição na sequência
+      const mondayP = (weeks % 5 + 5) % 5;
+      // Durante a semana avança 1 posição por dia. Fim de semana repete a sexta.
+      const p = (mondayP + Math.min(dayOfWeek, 4)) % 5;
+      
+      // Mapeamento específico de trios conforme escala real da Unidade 2
+      const mapping2nd = [4, 3, 0, 1, 2];
+      const mapping3rd = [2, 4, 3, 0, 1];
+      
+      return [
+        sequenceU2[p],
+        sequenceU2[mapping2nd[p]],
+        sequenceU2[mapping3rd[p]]
+      ];
+    }
     
-    const sequenceU1 = ['SANDRA', 'MILENA', 'LEANDRO', 'MIRIAN', 'LUIZA'];
-    const baseIdx = effectiveDay % 5; 
-    
-    return [
-      sequenceU1[baseIdx],
-      sequenceU1[(baseIdx + 1) % 5],
-      sequenceU1[(baseIdx + 2) % 5]
-    ];
-  }
-
-  const day = dt.getDate();
-  const month = dt.getMonth() + 1;
-  const year = dt.getFullYear();
-
-  const sequence = CONSELHEIROS_ALFABETICO_POR_UNIDADE[unidade_id] || CONSELHEIROS_ALFABETICO_POR_UNIDADE[1];
-
-  if (year === 2026) {
-    if (month === 2) {
-      // Fevereiro 2026: Inicia com Milena (01/Dom) no CT 1
-      const index = (day - 1) % 5;
-      const febScale: Record<number, Record<number, string[]>> = {
-        1: {
-          17: ['MILENA', 'SANDRA', 'LEANDRO'],
-          18: ['LUIZA', 'SANDRA', 'MIRIAN']
-        }
-      };
-      return febScale[unidade_id]?.[day] || [sequence[index], sequence[(index + 1) % 5], sequence[(index + 2) % 5]];
+    if (unidade_id === 1) {
+      const sequenceU1 = ['LUIZA', 'MIRIAN', 'LEANDRO', 'SANDRA', 'MILENA'];
+      const mapping2nd = [4, 3, 0, 1, 2];
+      const mapping3rd = [2, 4, 3, 0, 1];
+      
+      // p define o plantonista. Math.min(dayOfWeek, 4) trava o plantonista de sexta no fim de semana.
+      const p = ((weeks + Math.min(dayOfWeek, 4)) % 5 + 5) % 5;
+      
+      return [
+        sequenceU1[p],
+        sequenceU1[mapping2nd[p]],
+        sequenceU1[mapping3rd[p]]
+      ];
     }
   }
 
+  const day = dt.getDate();
+  const sequence = CONSELHEIROS_ALFABETICO_POR_UNIDADE[unidade_id] || CONSELHEIROS_ALFABETICO_POR_UNIDADE[1];
   const index = (day - 1) % 5;
   return [sequence[index], sequence[(index + 1) % 5], sequence[(index + 2) % 5]];
 };
@@ -233,6 +224,127 @@ export const BAIRROS = [
   "RESIDENCIAL ANAUÁ", "RESIDENCIAL JARDIM DE MÔNACO", "RESIDENCIAL JARDIM DO JATOBÁ", 
   "SÍTIO PANORAMA", "VILA AMÉRICA", "VILA CONQUISTA", "VILA GUEDES", "VILA INEMA", "VILA REAL", 
   "VILA REAL CONTINUAÇÃO", "VILA REAL SANTISTA", "VILA SÃO FRANCISCO", "VILA SÃO PEDRO", "VILLA FLORA"
+].sort();
+
+export const BAIRROS_UNIDADE_1 = [
+  "CHÁCARA PARQUE ORTOLÂNDIA",
+  "CHÁCARA RECREIO ALVORADA",
+  "COLÉGIO ADVENTISTA CAMPINEIRO",
+  "GOLDEN PARK",
+  "JARDIM BOA ESPERANÇA",
+  "JARDIM CAMPOS VERDES",
+  "JARDIM CARMEN CRISTINA",
+  "JARDIM DAS COLINAS",
+  "JARDIM DAS FIGUEIRAS I",
+  "JARDIM DAS FIGUEIRAS II",
+  "JARDIM DAS LARANJEIRAS",
+  "JARDIM DAS PAINEIRAS",
+  "JARDIM DO BOSQUE",
+  "JARDIM ESTEFÂNIA",
+  "JARDIM ESTRELA",
+  "JARDIM EVEREST",
+  "JARDIM FLAMBOYANT",
+  "JARDIM GREEN PARK",
+  "JARDIM INTERLAGOS",
+  "JARDIM MINDA",
+  "JARDIM MIRANTE DE SUMARÉ",
+  "JARDIM NOSSA SENHORA AUXILIADORA",
+  "JARDIM NOVA ALVORADA",
+  "JARDIM NOVA HORTOLÂNDIA",
+  "JARDIM NOVO CAMBUÍ",
+  "JARDIM PRIMAVERA",
+  "JARDIM SANTA CLARA DO LAGO",
+  "JARDIM SANTA CLARA DO LAGO CONTINUAÇÃO",
+  "JARDIM SANTA FÉ",
+  "JARDIM SANTA LUZIA",
+  "JARDIM SANTA RITA DE CÁSSIA",
+  "JARDIM SANTANA",
+  "JARDIM SÃO BENTO",
+  "JARDIM SÃO PEDRO",
+  "JARDIM SÃO CAMILO",
+  "JARDIM SÃO JORGE",
+  "JARDIM SÃO SEBASTIÃO",
+  "LOTEAMENTO RECANTO DO SOL",
+  "PARQUE DO HORTO",
+  "PARQUE DOS PINHEIROS",
+  "PARQUE GABRIEL",
+  "PARQUE HORIZONTE",
+  "PARQUE ODIMAR",
+  "PARQUE ORESTES ONGARO",
+  "PARQUE ORTOLÂNDIA",
+  "PARQUE RESIDENCIAL MARIA DE LOURDES",
+  "PARQUE SANTO ANDRÉ",
+  "PARQUE SÃO MIGUEL",
+  "REMANSO CAMPINEIRO",
+  "RESIDENCIAL FIRENZE",
+  "RESIDENCIAL JOÃO LUIZ",
+  "RESIDENCIAL VILLAGIO GHIRALDELLI",
+  "VILA FLORA",
+  "VILA REAL",
+  "VILA REAL CONTINUAÇÃO",
+  "VILA REAL SANTISTA",
+  "VILA SÃO FRANCISCO",
+  "VILA SÃO PEDRO"
+].sort();
+
+export const getBairrosByUnidade = (unidadeId: number): string[] => {
+  if (unidadeId === 1) return BAIRROS_UNIDADE_1;
+  if (unidadeId === 2) return BAIRROS_UNIDADE_2;
+  return BAIRROS;
+};
+
+export const BAIRROS_UNIDADE_2 = [
+  "CHÁCARA ACARAI",
+  "CHÁCARA ASSAY",
+  "CHÁCARA HAVAI",
+  "CHÁCARA LUZITANA",
+  "CHÁCARA PANAÍNO",
+  "CHÁCARA PLANALTO",
+  "CHÁCARA RECREIO 2000",
+  "CHÁCARA REYMAR",
+  "CHÁCARAS FAZENDA COELHO",
+  "CHÁCARAS NOVA BOA VISTA",
+  "CHÁCARAS RECREIO NOVO ÂNGULO",
+  "GROTA AZUL",
+  "JARDIM ADELAIDE",
+  "JARDIM ALINE",
+  "JARDIM AMANDA I E II",
+  "JARDIM BOA VISTA",
+  "JARDIM CONCEIÇÃO",
+  "JARDIM DO BRAZ",
+  "JARDIM DO LAGO",
+  "JARDIM GIRASSOL",
+  "JARDIM LÍRIO",
+  "JARDIM MALTA",
+  "JARDIM NOSSA SENHORA DA PENHA",
+  "JARDIM NOSSA SENHORA DE FATIMA",
+  "JARDIM NOSSA SENHORA DE LOURDES",
+  "JARDIM NOVA AMÉRICA",
+  "JARDIM NOVA EUROPA",
+  "JARDIM NOVO ÂNGULO",
+  "JARDIM NOVO HORIZONTE",
+  "JARDIM PAULISTINHA",
+  "JARDIM RICARDO",
+  "JARDIM ROSOLEN",
+  "JARDIM SANTA CÂNDIDA",
+  "JARDIM SANTA EMÍLIA",
+  "JARDIM SANTA ESMERALDA",
+  "JARDIM SANTA IZABEL",
+  "JARDIM SANTIAGO",
+  "JARDIM SUMAREZINHO",
+  "JARDIM SANTO ANTÔNIO",
+  "JARDIM SÃO BENEDITO",
+  "JARDIM STELLA",
+  "JARDIM TERRAS DE SANTO ANTÔNIO",
+  "JARDIM VIAGEM",
+  "NÚCLEO SANTA IZABEL",
+  "PARQUE PERON",
+  "RESIDENCIAL DI MÔNACO",
+  "VILA AMÉRICA",
+  "VILA CONQUISTA",
+  "VILA GUEDES",
+  "VILA INEMA",
+  "VILA YPE"
 ].sort();
 
 export const STATUS_LABELS: Record<string, string> = {

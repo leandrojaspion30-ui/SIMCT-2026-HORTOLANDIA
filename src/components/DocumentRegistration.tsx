@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History } from 'lucide-react';
 import { Documento, User, ChildData, DocumentStatus, AgendaEntry } from '../types';
-import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, CANAIS_COMUNICADO_LIST, getEffectiveEscala, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE } from '../constants';
+import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, CANAIS_COMUNICADO_LIST, getEffectiveEscala, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
 
 interface DocumentRegistrationProps {
@@ -428,7 +428,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   onChange={e => setFormData({...formData, bairro: e.target.value})}
                 >
                   <option value="">Selecione o Bairro...</option>
-                  {BAIRROS.map(b => <option key={b} value={b}>{b}</option>)}
+                  {getBairrosByUnidade(currentUser.unidade_id).map(b => <option key={b} value={b}>{b}</option>)}
                 </select>
               </div>
             </div>
