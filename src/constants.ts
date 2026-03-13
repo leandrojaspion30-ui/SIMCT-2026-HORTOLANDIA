@@ -173,16 +173,32 @@ export const getEffectiveEscala = (dateStr: string, timeStr: string = "08:00", u
     
     if (unidade_id === 1) {
       const sequenceU1 = ['LUIZA', 'MIRIAN', 'LEANDRO', 'SANDRA', 'MILENA'];
-      const mapping2nd = [4, 3, 0, 1, 2];
-      const mapping3rd = [2, 4, 3, 0, 1];
       
-      // p define o plantonista. Math.min(dayOfWeek, 4) trava o plantonista de sexta no fim de semana.
-      const p = ((weeks + Math.min(dayOfWeek, 4)) % 5 + 5) % 5;
+      const refDate = new Date('2026-03-02T12:00:00');
+      const diffTime = dt.getTime() - refDate.getTime();
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      
+      const weeks = Math.floor(diffDays / 7);
+      const dayOfWeekRaw = (dt.getDay() + 6) % 7; // 0=Seg, ..., 6=Dom
+      const dayOfWeek = Math.min(dayOfWeekRaw, 4); // Regra de Sexta (repetir no FDS)
+      
+      // Plantonista (1º)
+      const p = ((weeks + dayOfWeek) % 5 + 5) % 5;
+      
+      // 2º Conselheiro
+      const b2 = ((weeks - 1) % 5 + 5) % 5;
+      const offsets2 = [0, -1, 1, 2, 3];
+      const s2 = (b2 + offsets2[dayOfWeek] + 5) % 5;
+      
+      // 3º Conselheiro
+      const b3 = ((weeks + 2) % 5 + 5) % 5;
+      const offsets3 = [0, 2, 1, 3, 4];
+      const s3 = (b3 + offsets3[dayOfWeek] + 5) % 5;
       
       return [
         sequenceU1[p],
-        sequenceU1[mapping2nd[p]],
-        sequenceU1[mapping3rd[p]]
+        sequenceU1[s2],
+        sequenceU1[s3]
       ];
     }
   }
