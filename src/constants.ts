@@ -155,20 +155,19 @@ export const getEffectiveEscala = (dateStr: string, timeStr: string = "08:00", u
     
     if (unidade_id === 2) {
       const sequenceU2 = ['EDSON LOPES', 'FABIO', 'MATHEUS', 'MARCIA', 'ALINE'];
-      // Cada semana o plantonista de segunda avança 1 posição na sequência
-      const mondayP = (weeks % 5 + 5) % 5;
-      // Durante a semana avança 1 posição por dia. Fim de semana repete a sexta.
-      const p = (mondayP + Math.min(dayOfWeek, 4)) % 5;
+      const dayOfWeekRaw = (dt.getDay() + 6) % 7;
+      const dayOfWeek = Math.min(dayOfWeekRaw, 4);
       
-      // Mapeamento específico de trios conforme escala real da Unidade 2
-      const mapping2nd = [4, 3, 0, 1, 2];
-      const mapping3rd = [2, 4, 3, 0, 1];
+      const p = ((weeks + dayOfWeek) % 5 + 5) % 5;
+      const b2 = ((weeks - 1) % 5 + 5) % 5;
+      const offsets2 = [0, -1, 1, 2, 3];
+      const s2 = (b2 + offsets2[dayOfWeek] + 5) % 5;
       
-      return [
-        sequenceU2[p],
-        sequenceU2[mapping2nd[p]],
-        sequenceU2[mapping3rd[p]]
-      ];
+      const b3 = ((weeks + 2) % 5 + 5) % 5;
+      const offsets3 = [0, 2, 1, 3, 4];
+      const s3 = (b3 + offsets3[dayOfWeek] + 5) % 5;
+      
+      return [sequenceU2[p], sequenceU2[s2], sequenceU2[s3]];
     }
     
     if (unidade_id === 1) {
