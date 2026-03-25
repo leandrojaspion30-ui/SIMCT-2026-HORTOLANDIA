@@ -568,7 +568,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-indigo-600" /> Conselheiro de Referência
                 </div>
-                {isADM && !isReferenceLocked && !initialData && (
+                {!isReferenceLocked && !initialData && (
                   <button 
                     type="button" 
                     onClick={() => setIsManualReference(!isManualReference)}
@@ -579,8 +579,9 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 )}
               </label>
               
-              {isManualReference && isADM && !isReferenceLocked && !initialData ? (
+              {isManualReference && !isReferenceLocked && !initialData ? (
                 <select 
+                  required
                   className="w-full p-4 bg-white border border-indigo-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-indigo-500 shadow-sm"
                   value={formData.conselheiro_referencia_id}
                   onChange={e => setFormData({...formData, conselheiro_referencia_id: e.target.value})}
