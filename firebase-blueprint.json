@@ -1,0 +1,85 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System users and their permissions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nome": { "type": "string" },
+        "perfil": { "type": "string" },
+        "cargo": { "type": "string" },
+        "unidade_id": { "type": "number" },
+        "status": { "type": "string" },
+        "senha": { "type": "string" }
+      },
+      "required": ["id", "nome", "perfil", "unidade_id", "senha"]
+    },
+    "Documento": {
+      "title": "Documento",
+      "description": "Main case files and records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "unidade_id": { "type": "number" },
+        "origem": { "type": "string" },
+        "canal_comunicado": { "type": "string" },
+        "data_aporte": { "type": "string" },
+        "hora_aporte": { "type": "string" },
+        "crianca_nome": { "type": "string" },
+        "genitora_nome": { "type": "string" },
+        "bairro": { "type": "string" },
+        "status": { "type": "array", "items": { "type": "string" } },
+        "conselheiro_referencia_id": { "type": "string" }
+      },
+      "required": ["id", "unidade_id", "origem", "data_aporte", "crianca_nome", "status"]
+    },
+    "Log": {
+      "title": "Log",
+      "description": "System audit logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "unidade_id": { "type": "number" },
+        "documento_id": { "type": "string" },
+        "usuario_id": { "type": "string" },
+        "usuario_nome": { "type": "string" },
+        "acao": { "type": "string" },
+        "tipo": { "type": "string" },
+        "data_hora": { "type": "string" }
+      }
+    },
+    "AgendaEntry": {
+      "title": "AgendaEntry",
+      "description": "Scheduled appointments and meetings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "unidade_id": { "type": "number" },
+        "conselheiro_id": { "type": "string" },
+        "data": { "type": "string" },
+        "hora": { "type": "string" },
+        "local": { "type": "string" },
+        "tipo": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Global user collection"
+    },
+    "/documents/{docId}": {
+      "schema": "Documento",
+      "description": "All system documents"
+    },
+    "/logs/{logId}": {
+      "schema": "Log",
+      "description": "Audit trail"
+    },
+    "/agenda/{eventId}": {
+      "schema": "AgendaEntry",
+      "description": "Calendar events"
+    }
+  }
+}

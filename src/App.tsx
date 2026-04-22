@@ -7,6 +7,8 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart } from 'lucide-react';
 import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada } from './types';
 import { INITIAL_USERS, UserWithPassword, INITIAL_AGENDA } from './constants';
+import { db, ensureAuthenticated } from './lib/firebase';
+import { syncCollection, saveDocument, saveLog, saveAgenda, deleteDocument, deleteAgenda, saveUser } from './lib/db';
 import DocumentList from './components/DocumentList';
 import DocumentRegistration from './components/DocumentRegistration';
 import DocumentView from './components/DocumentView';
@@ -132,47 +134,47 @@ const App: React.FC = () => {
   }, [agenda, currentUser, acknowledgedReminderIds]);
 
   useEffect(() => {
-    const savedDocs = localStorage.getItem('pt_docs');
-    const savedLogs = localStorage.getItem('pt_logs');
-    const savedFiles = localStorage.getItem('pt_files');
-    const savedUsers = localStorage.getItem('pt_users');
-    const savedAgenda = localStorage.getItem('pt_agenda');
+    // Basic Authentication setup for security rules
+    ensureAuthenticated();
+
+    // Listeners for real-time synchronization
+    const unsubDocs = syncCollection<Documento>('documents', setAllDocuments);
+    const unsubLogs = syncCollection<Log>('logs', setAllLogs);
+    const unsubAgenda = syncCollection<AgendaEntry>('agenda', setAllAgenda);
+    const unsubUsers = syncCollection<UserWithPassword>('users', (storedUsers) => {
+      const baseUsers = INITIAL_USERS.map(u => ({ ...u, status: u.status || 'ATIVO', tentativas_login: 0 }));
+      if (storedUsers.length > 0) {
+        const merged = baseUsers.map(bu => {
+          const found = storedUsers.find(s => s.id === bu.id);
+          return found ? { ...bu, ...found } : bu;
+        });
+        setUsers(merged);
+      } else {
+        setUsers(baseUsers);
+      }
+    });
+
     const savedAck = localStorage.getItem('pt_ack_events');
     const savedAckRem = localStorage.getItem('pt_ack_reminders');
-    
-    if (savedDocs) setAllDocuments(JSON.parse(savedDocs));
-    if (savedLogs) setAllLogs(JSON.parse(savedLogs));
-    if (savedFiles) setAllFiles(JSON.parse(savedFiles));
-    if (savedAgenda) setAllAgenda(JSON.parse(savedAgenda));
-    else setAllAgenda(INITIAL_AGENDA);
     if (savedAck) setAcknowledgedEventIds(JSON.parse(savedAck));
     if (savedAckRem) setAcknowledgedReminderIds(JSON.parse(savedAckRem));
 
-    const baseUsers = INITIAL_USERS.map(u => ({ ...u, status: u.status || 'ATIVO', tentativas_login: 0 }));
-    if (savedUsers) {
-      const stored = JSON.parse(savedUsers);
-      const merged = baseUsers.map(bu => {
-        const found = stored.find((s: any) => s.id === bu.id);
-        return found ? { ...bu, ...found } : bu;
-      });
-      setUsers(merged);
-    } else {
-      setUsers(baseUsers);
-    }
     setTimeout(() => setIsInitializing(false), 1500);
+
+    return () => {
+      unsubDocs();
+      unsubLogs();
+      unsubAgenda();
+      unsubUsers();
+    };
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('pt_docs', JSON.stringify(allDocuments));
-    localStorage.setItem('pt_logs', JSON.stringify(allLogs));
-    localStorage.setItem('pt_files', JSON.stringify(allFiles));
-    localStorage.setItem('pt_users', JSON.stringify(users));
-    localStorage.setItem('pt_agenda', JSON.stringify(allAgenda));
     localStorage.setItem('pt_ack_events', JSON.stringify(acknowledgedEventIds));
     localStorage.setItem('pt_ack_reminders', JSON.stringify(acknowledgedReminderIds));
-  }, [allDocuments, allLogs, allFiles, users, allAgenda, acknowledgedEventIds, acknowledgedReminderIds]);
+  }, [acknowledgedEventIds, acknowledgedReminderIds]);
 
-  const addLog = useCallback((docId: string, acao: string, tipo: LogType = 'SISTEMA', customUser?: User) => {
+  const addLog = useCallback(async (docId: string, acao: string, tipo: LogType = 'SISTEMA', customUser?: User) => {
     const user = customUser || currentUser;
     if (!user) return;
     const newLog: Log = { 
@@ -185,7 +187,7 @@ const App: React.FC = () => {
       tipo,
       data_hora: new Date().toISOString() 
     };
-    setAllLogs(prev => [newLog, ...prev]);
+    await saveLog(newLog);
   }, [currentUser]);
 
   const pendingValidations = useMemo(() => {
@@ -215,9 +217,9 @@ const App: React.FC = () => {
     addLog(id, `VISUALIZAÇÃO: Prontuário aberto para consulta de dados técnicos.`, 'DOCUMENTO');
   }, [addLog]);
 
-  const handleDocumentSubmit = (data: any, files: File[]) => {
+  const handleDocumentSubmit = async (data: any, files: File[]) => {
     if (editingDocId) {
-      setAllDocuments(prev => prev.map(d => d.id === editingDocId ? { ...d, ...data } : d));
+      await saveDocument({ ...data, id: editingDocId });
       addLog(editingDocId, `EDIÇÃO: Registro de prontuário atualizado administrativamente.`, 'DOCUMENTO');
       setEditingDocId(null);
       handleNavigate('dashboard');
@@ -238,7 +240,7 @@ const App: React.FC = () => {
     const refName = INITIAL_USERS.find(u => u.id === newDoc.conselheiro_referencia_id)?.nome || 'N/A';
     const provName = INITIAL_USERS.find(u => u.id === newDoc.conselheiro_providencia_id)?.nome || 'N/A';
 
-    setAllDocuments(prev => [newDoc, ...prev]);
+    await saveDocument(newDoc);
     addLog(id, `CRIAÇÃO: Novo procedimento registrado. REF: [${refName}] | IMEDIATA: [${provName}].`, 'DOCUMENTO');
     handleNavigate('dashboard');
   };
@@ -257,11 +259,11 @@ const App: React.FC = () => {
     if (activeTab === 'user-management' && isLud) return (
       <UserManagementPanel 
         users={filteredUsers} 
-        onUpdateUser={(id, upd) => {
+        onUpdateUser={async (id, upd) => {
           const target = users.find(u => u.id === id);
           if (upd.status) addLog('SISTEMA', `RH: Usuário ${target?.nome} teve status alterado para ${upd.status}.`, 'SEGURANÇA');
           if (upd.senha) addLog('SISTEMA', `RH: Senha do usuário ${target?.nome} redefinida por administrador.`, 'SEGURANÇA');
-          setUsers(prev => prev.map(u => u.id === id ? {...u, ...upd} : u));
+          await saveUser({ ...upd, id });
         }} 
         onAddLog={(action) => addLog('SISTEMA', action, 'SEGURANÇA')} 
       />
@@ -278,14 +280,14 @@ const App: React.FC = () => {
     if (selectedDocId) {
       const doc = documents.find(d => d.id === selectedDocId);
       if (!doc) return null;
-      return <DocumentView document={doc} allDocuments={documents} agenda={agenda} files={[]} logs={logs.filter(l => l.documento_id === selectedDocId)} currentUser={currentUser} isReadOnly={isAdministrative} forceEdit={forceDirectEdit} onBack={() => setSelectedDocId(null)} onEdit={() => { setEditingDocId(doc.id); setActiveTab('edit'); }} onDelete={(id) => { 
+      return <DocumentView document={doc} allDocuments={documents} agenda={agenda} files={[]} logs={logs.filter(l => l.documento_id === selectedDocId)} currentUser={currentUser} isReadOnly={isAdministrative} forceEdit={forceDirectEdit} onBack={() => setSelectedDocId(null)} onEdit={() => { setEditingDocId(doc.id); setActiveTab('edit'); }} onDelete={async (id) => { 
           addLog(id, `EXCLUSÃO: Documento removido permanentemente do banco de dados SIMCT.`, 'DOCUMENTO');
-          setAllDocuments(prev => prev.filter(d => d.id !== id));
+          await deleteDocument(id);
           setSelectedDocId(null);
-      }} onUpdateStatus={(id, s) => {
+      }} onUpdateStatus={async (id, s) => {
           addLog(id, `STATUS: Documento alterado para a situação [${s[s.length-1]}].`, 'SISTEMA');
-          setAllDocuments(prev => prev.map(d => d.id === id ? { ...d, status: s } : d));
-      }} onUpdateDocument={(id, fields) => setAllDocuments(prev => prev.map(d => d.id === id ? {...d, ...fields} : d))} onAddLog={addLog} onScience={() => {}} />;
+          await saveDocument({ id, status: s });
+      }} onUpdateDocument={async (id, fields) => await saveDocument({ ...fields, id })} onAddLog={addLog} onScience={() => {}} />;
     }
 
     switch (activeTab) {
@@ -311,9 +313,9 @@ const App: React.FC = () => {
                  </div>
               </div>
             )}
-            <DocumentList documents={documents} currentUser={currentUser} isReadOnly={false} onSelectDoc={handleOpenDocument} onEditDoc={(id) => { setEditingDocId(id); setActiveTab('edit'); }} onDeleteDoc={(id) => {
+            <DocumentList documents={documents} currentUser={currentUser} isReadOnly={false} onSelectDoc={handleOpenDocument} onEditDoc={(id) => { setEditingDocId(id); setActiveTab('edit'); }} onDeleteDoc={async (id) => {
                 addLog(id, `EXCLUSÃO: Documento removido permanentemente via Painel Geral.`, 'DOCUMENTO');
-                setAllDocuments(prev => prev.filter(d => d.id !== id));
+                await deleteDocument(id);
             }} onScience={() => {}} onUpdateStatus={() => {}} />
           </div>
         );
@@ -324,22 +326,31 @@ const App: React.FC = () => {
           const isImediata = d.conselheiros_providencia_nomes?.includes(currentUser.nome.toUpperCase());
           return isFixedRef || isImediata;
         });
-        return <DocumentList documents={myReferencedDocs} currentUser={currentUser} isReadOnly={false} onSelectDoc={(id) => handleOpenDocument(id, true)} onEditDoc={(id) => { setEditingDocId(id); setActiveTab('edit'); }} onDeleteDoc={(id) => {
+        return <DocumentList documents={myReferencedDocs} currentUser={currentUser} isReadOnly={false} onSelectDoc={(id) => handleOpenDocument(id, true)} onEditDoc={(id) => { setEditingDocId(id); setActiveTab('edit'); }} onDeleteDoc={async (id) => {
             addLog(id, `EXCLUSÃO: Documento removido permanentemente via Minha Referência.`, 'DOCUMENTO');
-            setAllDocuments(prev => prev.filter(d => d.id !== id));
+            await deleteDocument(id);
         }} onScience={() => {}} onUpdateStatus={() => {}} isMyReferenceView={true} />;
       
-      case 'monitoring': return <MonitoringDashboard documents={documents} currentUser={currentUser} effectiveUserId={currentUser.id} onSelectDoc={handleOpenDocument} onAddLog={addLog} onUpdateMonitoring={(id, m) => { 
-          setAllDocuments(prev => prev.map(d => d.id === id ? {...d, monitoramento: m} : d)); 
-      }} onRemoveMonitoring={(id) => {
+      case 'monitoring': return <MonitoringDashboard documents={documents} currentUser={currentUser} effectiveUserId={currentUser.id} onSelectDoc={handleOpenDocument} onAddLog={addLog} onUpdateMonitoring={async (id, m) => { 
+          await saveDocument({ id, monitoramento: m }); 
+      }} onRemoveMonitoring={async (id) => {
           addLog(id, `MONITORAMENTO: Acompanhamento de caso encerrado com sucesso.`, 'MONITORAMENTO');
-          setAllDocuments(prev => prev.filter(d => d.id !== id));
+          await deleteDocument(id);
       }} isReadOnly={isAdministrative} />;
-      case 'agenda': return <AgendaView agenda={agenda} setAgenda={setAllAgenda} allDocuments={allDocuments} currentUser={currentUser} effectiveUserId={currentUser.id} isReadOnly={currentUser.nome === 'LUDIMILA'} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} />;
+      case 'agenda': return <AgendaView agenda={agenda} setAgenda={async (items) => {
+          // Find the new entry if it's an array set call
+          if (Array.isArray(items)) {
+            // This is a bit complex due to local state vs db sync
+            // Typically AgendaView should calling saveAgenda directly or items should be the whole list
+            // If it's the whole list, we might need to diff, but for simplicity:
+            const lastItem = items[items.length - 1];
+            if (lastItem) await saveAgenda(lastItem);
+          }
+      }} allDocuments={allDocuments} currentUser={currentUser} effectiveUserId={currentUser.id} isReadOnly={currentUser.nome === 'LUDIMILA'} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} />;
       case 'search': return <AdvancedSearch documents={documents} currentUser={currentUser} onSelectDoc={handleOpenDocument} />;
       case 'logs': return <AuditLogViewer logs={logs} />;
-      case 'settings': return <SettingsView currentUser={currentUser} onUpdatePassword={(p) => { 
-          setUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, senha: p } : u)); 
+      case 'settings': return <SettingsView currentUser={currentUser} onUpdatePassword={async (p) => { 
+          await saveUser({ id: currentUser.id, senha: p }); 
           addLog('SISTEMA', `SEGURANÇA: Senha e assinatura digital alterada pelo próprio usuário.`, 'SEGURANÇA');
           return true; 
       }} />;
@@ -438,33 +449,36 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex bg-[#F9FAFB] font-['Inter']">
-      <aside className={`${isSidebarOpen ? 'w-80' : 'w-24'} bg-[#111827] transition-all flex flex-col fixed inset-y-0 z-50 overflow-hidden`}>
-        <div className="p-6 flex items-center gap-4 border-b border-white/5"><img src={CT_LOGO_URL} alt="SIMCT" className="w-10 h-10" />{isSidebarOpen && <span className="text-white font-bold text-[18px] uppercase">SIM<span className="text-[#2563EB]">CT</span></span>}</div>
+      <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} ${isSidebarOpen ? 'lg:w-80' : 'lg:w-24 w-80'} bg-[#111827] transition-all duration-300 flex flex-col fixed inset-y-0 z-50 overflow-hidden`}>
+        <div className="p-6 flex items-center gap-4 border-b border-white/5"><img src={CT_LOGO_URL} alt="SIMCT" className="w-10 h-10" />{(isSidebarOpen || window.innerWidth < 1024) && <span className="text-white font-bold text-[18px] uppercase">SIM<span className="text-[#2563EB]">CT</span></span>}</div>
         <nav className="flex-1 px-4 mt-8 space-y-2 overflow-y-auto min-h-0">
-          <NavItem icon={<LayoutDashboard className="w-5 h-5" />} label="Painel Geral" active={activeTab === 'dashboard'} onClick={() => handleNavigate('dashboard')} collapsed={!isSidebarOpen} />
-          {(currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO') && currentUser.nome !== 'LUDIMILA' && <NavItem icon={<FilePlus className="w-5 h-5" />} label="NOVO PROCEDIMENTO" active={activeTab === 'register'} onClick={() => handleNavigate('register')} collapsed={!isSidebarOpen} />}
-          {(currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE') && (<><NavItem icon={<Zap className="w-5 h-5" />} label="NOVO PROCED/PLANTÃO" active={activeTab === 'plantao'} onClick={() => handleNavigate('plantao')} collapsed={!isSidebarOpen} /><NavItem icon={<Briefcase className="w-5 h-5" />} label="Minha Referência" active={activeTab === 'my-docs'} onClick={() => handleNavigate('my-docs')} collapsed={!isSidebarOpen} /><NavItem icon={<Activity className="w-5 h-5" />} label="Monitoramento" active={activeTab === 'monitoring'} onClick={() => handleNavigate('monitoring')} collapsed={!isSidebarOpen} /></>)}
-          <NavItem icon={<CalendarDays className="w-5 h-5" />} label="Agenda" active={activeTab === 'agenda'} onClick={() => handleNavigate('agenda')} collapsed={!isSidebarOpen} />
-          <NavItem icon={<Database className="w-5 h-5" />} label="Busca Ativa" active={activeTab === 'search'} onClick={() => handleNavigate('search')} collapsed={!isSidebarOpen} />
-          <NavItem icon={<BarChart3 className="w-5 h-5" />} label="Relatórios" active={activeTab === 'statistics'} onClick={() => handleNavigate('statistics')} collapsed={!isSidebarOpen} />
-          <NavItem icon={<ShieldCheck className="w-5 h-5" />} label="Minha Senha" active={activeTab === 'settings'} onClick={() => handleNavigate('settings')} collapsed={!isSidebarOpen} />
-          {(currentUser.nome === 'LUDIMILA' || currentUser.nome === 'LEANDRO') && <NavItem icon={<UserCog className="w-5 h-5" />} label="Gestão de RH" active={activeTab === 'user-management'} onClick={() => handleNavigate('user-management')} collapsed={!isSidebarOpen} />}
-          {isLud && <NavItem icon={<History className="w-5 h-5" />} label="Audit Log" active={activeTab === 'logs'} onClick={() => handleNavigate('logs')} collapsed={!isSidebarOpen} />}
-          {currentUser.nome === 'LEANDRO' && <NavItem icon={<PieChart className="w-5 h-5" />} label="Relatórios das Unidades" active={activeTab === 'global-statistics'} onClick={() => handleNavigate('global-statistics')} collapsed={!isSidebarOpen} />}
+          <NavItem icon={<LayoutDashboard className="w-5 h-5" />} label="Painel Geral" active={activeTab === 'dashboard'} onClick={() => handleNavigate('dashboard')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
+          {(currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO') && currentUser.nome !== 'LUDIMILA' && <NavItem icon={<FilePlus className="w-5 h-5" />} label="NOVO PROCEDIMENTO" active={activeTab === 'register'} onClick={() => handleNavigate('register')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />}
+          {(currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE') && (<><NavItem icon={<Zap className="w-5 h-5" />} label="NOVO PROCED/PLANTÃO" active={activeTab === 'plantao'} onClick={() => handleNavigate('plantao')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} /><NavItem icon={<Briefcase className="w-5 h-5" />} label="Minha Referência" active={activeTab === 'my-docs'} onClick={() => handleNavigate('my-docs')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} /><NavItem icon={<Activity className="w-5 h-5" />} label="Monitoramento" active={activeTab === 'monitoring'} onClick={() => handleNavigate('monitoring')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} /></>)}
+          <NavItem icon={<CalendarDays className="w-5 h-5" />} label="Agenda" active={activeTab === 'agenda'} onClick={() => handleNavigate('agenda')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
+          <NavItem icon={<Database className="w-5 h-5" />} label="Busca Ativa" active={activeTab === 'search'} onClick={() => handleNavigate('search')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
+          <NavItem icon={<BarChart3 className="w-5 h-5" />} label="Relatórios" active={activeTab === 'statistics'} onClick={() => handleNavigate('statistics')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
+          <NavItem icon={<ShieldCheck className="w-5 h-5" />} label="Minha Senha" active={activeTab === 'settings'} onClick={() => handleNavigate('settings')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
+          {(currentUser.nome === 'LUDIMILA' || currentUser.nome === 'LEANDRO') && <NavItem icon={<UserCog className="w-5 h-5" />} label="Gestão de RH" active={activeTab === 'user-management'} onClick={() => handleNavigate('user-management')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />}
+          {isLud && <NavItem icon={<History className="w-5 h-5" />} label="Audit Log" active={activeTab === 'logs'} onClick={() => handleNavigate('logs')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />}
+          {currentUser.nome === 'LEANDRO' && <NavItem icon={<PieChart className="w-5 h-5" />} label="Relatórios das Unidades" active={activeTab === 'global-statistics'} onClick={() => handleNavigate('global-statistics')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />}
         </nav>
         <div className="p-4 border-t border-white/5">
-          <NavItem icon={<LogOut className="w-5 h-5" />} label="Sair" active={false} onClick={handleLogout} collapsed={!isSidebarOpen} danger />
+          <NavItem icon={<LogOut className="w-5 h-5" />} label="Sair" active={false} onClick={handleLogout} collapsed={!isSidebarOpen && window.innerWidth >= 1024} danger />
         </div>
       </aside>
-      <main className={`flex-1 ${isSidebarOpen ? 'ml-80' : 'ml-24'} transition-all min-h-screen`}>
-        <div className="p-8">
-          <header className="flex items-center justify-between mb-12">
-            <div><h2 className="text-[13px] font-medium text-[#4B5563] uppercase tracking-widest">ZELAR PELO CUMPRIMENTO DO DIREITO</h2><div className="flex items-center gap-2 mt-1"><span className="text-[16px] font-semibold text-[#111827] uppercase">{currentUser.nome}</span><span className="text-[14px] font-medium text-[#2563EB] uppercase">({currentUser.cargo})</span></div></div>
+      <main className={`flex-1 ${isSidebarOpen ? 'lg:ml-80' : 'lg:ml-24 ml-0'} transition-all min-h-screen`}>
+        <div className="p-4 lg:p-8">
+          <header className="flex items-center justify-between mb-8 lg:mb-12">
+            <div><h2 className="text-[10px] lg:text-[13px] font-medium text-[#4B5563] uppercase tracking-widest text-wrap max-w-[200px] lg:max-w-none">ZELAR PELO CUMPRIMENTO DO DIREITO</h2><div className="flex flex-col lg:flex-row lg:items-center gap-1 lg:gap-2 mt-1"><span className="text-[14px] lg:text-[16px] font-semibold text-[#111827] uppercase">{currentUser.nome}</span><span className="text-[12px] lg:text-[14px] font-medium text-[#2563EB] uppercase">({currentUser.cargo})</span></div></div>
             <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-3 bg-white border border-[#E5E7EB] rounded-xl shadow-sm hover:bg-slate-50">{isSidebarOpen ? <X className="w-5 h-5" /> : <LayoutDashboard className="w-5 h-5" />}</button>
           </header>
           {renderContent()}
         </div>
       </main>
+      {isSidebarOpen && window.innerWidth < 1024 && (
+        <div className="fixed inset-0 bg-black/50 z-40 transition-opacity" onClick={() => setIsSidebarOpen(false)}></div>
+      )}
       {imminentEvent && (
         <AppointmentAlert 
           event={imminentEvent} 

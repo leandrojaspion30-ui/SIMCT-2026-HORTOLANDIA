@@ -5,7 +5,7 @@ import { ShieldCheck, Lock, Save, CheckCircle2 } from 'lucide-react';
 
 interface SettingsViewProps {
   currentUser: User;
-  onUpdatePassword: (password: string) => boolean;
+  onUpdatePassword: (password: string) => Promise<boolean>;
 }
 
 const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, onUpdatePassword }) => {
@@ -13,10 +13,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, onUpdatePasswo
   const [confirmPassword, setConfirmPassword] = useState('');
   const [success, setSuccess] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password && password === confirmPassword) {
-      if (onUpdatePassword(password)) {
+      if (await onUpdatePassword(password)) {
         setSuccess(true);
         setPassword('');
         setConfirmPassword('');

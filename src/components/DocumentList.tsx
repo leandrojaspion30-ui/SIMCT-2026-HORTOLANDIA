@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database } from 'lucide-react';
+import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database, Trash2 } from 'lucide-react';
 import { Documento, User as UserType, DocumentStatus } from '../types';
 import { STATUS_LABELS, INITIAL_USERS, BAIRROS, getBairrosByUnidade } from '../constants';
 
@@ -40,7 +40,7 @@ interface DocumentListProps {
   isMyReferenceView?: boolean;
 }
 
-const DocumentList: React.FC<DocumentListProps> = ({ documents, currentUser, onSelectDoc, onEditDoc, isReadOnly, isMyReferenceView }) => {
+const DocumentList: React.FC<DocumentListProps> = ({ documents, currentUser, onSelectDoc, onEditDoc, onDeleteDoc, isReadOnly, isMyReferenceView }) => {
   const [myViewMode, setMyViewMode] = useState<'ALL' | 'REF' | 'IMED' | 'VALID'>(isMyReferenceView ? 'REF' : 'ALL');
   const initialFilters = { term: '', bairro: '', status: '', conselheiro_ref_id: '' };
   const [filters, setFilters] = useState(initialFilters);
@@ -208,6 +208,19 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, currentUser, onS
                   </div>
                   <div className="shrink-0 flex items-center gap-3">
                      {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); onEditDoc(doc.id); }} className="p-3 bg-white border border-[#E5E7EB] text-[#4B5563] rounded-xl hover:bg-[#111827] hover:text-white transition-all"><FileText className="w-4 h-4" /></button>}
+                     {(currentUser.perfil === 'ADMIN' || currentUser.nome === 'LEANDRO') && (
+                        <button 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            if (window.confirm(`Deseja EXCLUIR permanentemente o prontuário #${doc.id}? Esta ação é irreversível.`)) {
+                              onDeleteDoc(doc.id); 
+                            }
+                          }} 
+                          className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                     )}
                      <button className="p-3 bg-[#111827] text-white rounded-xl shadow-lg hover:bg-[#2563EB] transition-all"><Eye className="w-4 h-4" /></button>
                   </div>
                </div>

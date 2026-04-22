@@ -45,8 +45,12 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   currentUser, 
   logs,
   onBack, 
+  onEdit,
+  onDelete,
+  onUpdateStatus,
   onUpdateDocument,
-  onAddLog
+  onAddLog,
+  onScience
 }) => {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [tempViolacoes, setTempViolacoes] = useState<SipiaViolation[]>(doc.violacoesSipia || []);
@@ -421,7 +425,22 @@ const DocumentView: React.FC<DocumentViewProps> = ({
         <header className="p-8 bg-[#111827] text-white flex items-center justify-between">
           <button onClick={onBack} className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl transition-all"><ArrowLeft className="w-6 h-6" /></button>
           <div className="text-center"><h2 className="text-[20px] font-black uppercase">{doc.crianca_nome}</h2><p className="text-[10px] opacity-60 uppercase">SIMCT #{doc.id}</p></div>
-          <div className="w-12 h-12"></div>
+          <div className="flex items-center gap-3">
+            {(currentUser.perfil === 'ADMIN' || currentUser.nome === 'LEANDRO') && (
+              <button 
+                onClick={() => {
+                  if (window.confirm(`Deseja EXCLUIR permanentemente o prontuário #${doc.id}? Esta ação é irreversível.`)) {
+                    onDelete(doc.id);
+                  }
+                }}
+                className="p-3 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white rounded-2xl transition-all"
+                title="Excluir Prontuário"
+              >
+                <Trash2 className="w-6 h-6" />
+              </button>
+            )}
+            <div className="w-6"></div>
+          </div>
         </header>
 
         {/* ALERTA DE REVALIDAÇÃO OBRIGATÓRIA */}

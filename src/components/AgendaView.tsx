@@ -16,10 +16,11 @@ import {
 } from 'lucide-react';
 import { AgendaEntry, User, Documento } from '../types';
 import { INITIAL_USERS } from '../constants';
+import { saveAgenda, deleteAgenda } from '../lib/db';
 
 interface AgendaViewProps {
   agenda: AgendaEntry[];
-  setAgenda: React.Dispatch<React.SetStateAction<AgendaEntry[]>>;
+  setAgenda: (agenda: AgendaEntry[]) => void;
   allDocuments: Documento[];
   currentUser: User;
   effectiveUserId: string;
@@ -53,7 +54,7 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, allDocuments
     status: 'PENDENTE'
   });
 
-  const handleAddEntry = (e: React.FormEvent) => {
+  const handleAddEntry = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEntry.conselheiro_id) {
       alert("ERRO: Selecione um conselheiro para este compromisso.");
@@ -89,11 +90,11 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, allDocuments
     }
 
     if (editingId) {
-      setAgenda(prev => prev.map(a => a.id === editingId ? { ...newEntry, id: editingId, unidade_id: currentUser.unidade_id } : a));
+      await saveAgenda({ ...newEntry, id: editingId, unidade_id: currentUser.unidade_id });
       onAddLog(`AGENDA: Compromisso atualizado: ${newEntry.descricao}.`);
     } else {
-      const entry: AgendaEntry = { ...newEntry, id: `agenda-${Date.now()}`, unidade_id: currentUser.unidade_id };
-      setAgenda(prev => [...prev, entry]);
+      const entry: AgendaEntry = { ...newEntry, id: `agenda-${Date.now()}`, unidade_id: currentUser.unidade_id } as AgendaEntry;
+      await saveAgenda(entry);
       
       const assignedUser = INITIAL_USERS.find(u => u.id === entry.conselheiro_id);
       onAddLog(`AGENDA: Novo compromisso agendado para ${assignedUser?.nome}: ${entry.descricao} em ${entry.data} às ${entry.hora}.`);
@@ -120,8 +121,8 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, allDocuments
       if (filterType === 'MY') {
         return item.conselheiro_id === effectiveUserId;
       }
-      // Filtra pela unidade do usuário logado
-      return item.unidade_id === currentUser.unidade_id;
+      // Filtra pela unidade do usuário logado ou itens sem unidade (legado)
+      return !item.unidade_id || item.unidade_id === currentUser.unidade_id;
     })
     .sort((a, b) => {
       const dateCompare = new Date(a.data).getTime() - new Date(b.data).getTime();
@@ -129,10 +130,29 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, allDocuments
       return a.hora.localeCompare(b.hora);
     });
 
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{id: string, desc: string} | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   const handleDelete = (id: string, desc: string) => {
-    if (window.confirm(`SICT: Tem certeza que deseja remover o compromisso: "${desc}"?`)) {
-      setAgenda(prev => prev.filter(a => a.id !== id));
-      onAddLog(`AGENDA: Compromisso removido: ${desc}.`);
+    setItemToDelete({ id, desc });
+    setShowConfirmDelete(true);
+  };
+
+  const confirmDeleteAction = async () => {
+    if (!itemToDelete || deletingId) return;
+    
+    setDeletingId(itemToDelete.id);
+    try {
+      await deleteAgenda(itemToDelete.id);
+      onAddLog(`AGENDA: Compromisso removido: ${itemToDelete.desc}.`);
+      setShowConfirmDelete(false);
+    } catch (error) {
+      console.error("Critical Delete Error:", error);
+      alert("ERRO DE CONEXÃO: Não foi possível excluir agora. Tente novamente.");
+    } finally {
+      setDeletingId(null);
+      setItemToDelete(null);
     }
   };
 
@@ -153,46 +173,47 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, allDocuments
     setShowAddModal(true);
   };
 
-  const handleOutcome = (id: string, outcome: 'COMPARECEU' | 'NAO_COMPARECEU') => {
-    const entry = agenda.find(a => a.id === id);
-    if (!entry) return;
+  const handleOutcome = async (id: string, outcome: 'COMPARECEU' | 'NAO_COMPARECEU' | 'PENDENTE') => {
+    try {
+      const entry = agenda.find(a => a.id === id);
+      if (!entry) return;
 
-    if (outcome === 'NAO_COMPARECEU') {
-      let nextTipo = '';
-      let message = '';
+      if (outcome === 'NAO_COMPARECEU') {
+        let nextTipo = '';
+        let message = '';
 
-      if (entry.tipo === 'NOTIFICACAO 1') {
-        nextTipo = 'NOTIFICACAO 2';
-        message = 'A família não compareceu. Deseja notificar pela segunda vez?';
-      } else if (entry.tipo === 'NOTIFICACAO 2') {
-        nextTipo = 'NOTIFICACAO 3';
-        message = 'A família não compareceu. Deseja notificar pela terceira vez?';
-      } else {
-        message = 'A família não compareceu. Deseja agendar um novo compromisso ou apenas excluir este?';
+        if (entry.tipo === 'NOTIFICACAO 1') {
+          nextTipo = 'NOTIFICACAO 2';
+          message = 'A família não compareceu. Deseja notificar pela segunda vez?';
+        } else if (entry.tipo === 'NOTIFICACAO 2') {
+          nextTipo = 'NOTIFICACAO 3';
+          message = 'A família não compareceu. Deseja notificar pela terceira vez?';
+        } else {
+          message = 'A família não compareceu. Deseja agendar um novo compromisso ou apenas registrar como não compareceu?';
+        }
+
+        const choice = window.confirm(message);
+        onAddLog(`AGENDA: Família não compareceu ao compromisso: ${entry.tipo} - ${entry.descricao}.`);
+
+        if (choice) {
+          await saveAgenda({ ...entry, id, status: 'REAGENDADO' });
+          setNewEntry({
+            ...entry,
+            tipo: (nextTipo || entry.tipo) as any,
+            data: todayStr,
+            status: 'PENDENTE'
+          });
+          setShowAddModal(true);
+          return;
+        }
       }
 
-      const choice = window.confirm(message);
+      await saveAgenda({ ...entry, id, status: outcome });
+      onAddLog(`AGENDA: Status do compromisso "${entry.descricao}" alterado para ${outcome}.`);
       
-      // Log the non-attendance
-      onAddLog(`AGENDA: Família não compareceu ao compromisso: ${entry.tipo} - ${entry.descricao}. Genitores: ${entry.genitores_responsavel || 'N/A'}`);
-
-      if (choice) {
-        // Mark as re-scheduled and open modal with pre-filled data
-        setAgenda(prev => prev.map(a => a.id === id ? { ...a, status: 'REAGENDADO' } : a));
-        setNewEntry({
-          ...entry,
-          tipo: (nextTipo || entry.tipo) as any,
-          data: todayStr,
-          status: 'PENDENTE'
-        });
-        setShowAddModal(true);
-      } else {
-        // Mark as not showed
-        setAgenda(prev => prev.map(a => a.id === id ? { ...a, status: 'NAO_COMPARECEU' } : a));
-      }
-    } else {
-      setAgenda(prev => prev.map(a => a.id === id ? { ...a, status: 'COMPARECEU' } : a));
-      onAddLog(`AGENDA: Compromisso concluído (Compareceu): ${entry.descricao}.`);
+    } catch (error) {
+      console.error("Error updating agenda status:", error);
+      alert("Erro ao atualizar status. Tente novamente.");
     }
   };
 
@@ -263,36 +284,45 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, allDocuments
                      )}
                   </div>
                </div>
-               {!isReadOnly && (
-                 <div className="shrink-0 flex items-center gap-2 justify-end">
-                    {item.status === 'PENDENTE' && (
-                      <>
-                        <button 
-                          onClick={() => handleOutcome(item.id, 'COMPARECEU')}
-                          className="p-4 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-2xl transition-all shadow-sm"
-                          title="Compareceu"
-                        >
-                          <ClipboardCheck className="w-6 h-6" />
-                        </button>
-                        <button 
-                          onClick={() => handleOutcome(item.id, 'NAO_COMPARECEU')}
-                          className="p-4 bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white rounded-2xl transition-all shadow-sm"
-                          title="Não Compareceu"
-                        >
-                          <X className="w-6 h-6" />
-                        </button>
-                      </>
-                    )}
-                    <button onClick={() => handleDelete(item.id, item.descricao)} className="p-4 bg-red-50 text-red-400 hover:bg-red-600 hover:text-white rounded-2xl transition-all shadow-sm" title="Excluir"><Trash2 className="w-6 h-6" /></button>
+                {!isReadOnly && (
+                  <div className="shrink-0 flex items-center gap-2 justify-end">
+                    {/* Botões de Status: Sempre visíveis para gestão se não estiver em visualização apenas leitura */}
+                    <button 
+                      onClick={() => handleOutcome(item.id, 'COMPARECEU')}
+                      className={`p-4 rounded-2xl transition-all shadow-sm ${item.status === 'COMPARECEU' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white'}`}
+                      title="Compareceu"
+                    >
+                      <ClipboardCheck className="w-6 h-6" />
+                    </button>
+                    <button 
+                      onClick={() => handleOutcome(item.id, 'NAO_COMPARECEU')}
+                      className={`p-4 rounded-2xl transition-all shadow-sm ${item.status === 'NAO_COMPARECEU' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white'}`}
+                      title="Não Compareceu"
+                    >
+                      <X className="w-6 h-6" />
+                    </button>
+                    
+                    <button 
+                      onClick={() => handleDelete(item.id, item.descricao)} 
+                      disabled={deletingId === item.id}
+                      className={`p-4 rounded-2xl transition-all shadow-sm ${deletingId === item.id ? 'bg-slate-100 text-slate-300 animate-pulse' : 'bg-red-50 text-red-400 hover:bg-red-600 hover:text-white'}`} 
+                      title="Excluir"
+                    >
+                      {deletingId === item.id ? (
+                        <div className="w-6 h-6 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Trash2 className="w-6 h-6" />
+                      )}
+                    </button>
                     <button 
                       onClick={() => handleEdit(item)}
-                      className="p-4 bg-blue-50 text-blue-400 hover:bg-blue-600 hover:text-white rounded-2xl transition-all shadow-sm opacity-0 group-hover:opacity-100"
+                      className="p-4 bg-blue-50 text-blue-400 hover:bg-blue-600 hover:text-white rounded-2xl transition-all shadow-sm"
                       title="Editar"
                     >
                       <Edit3 className="w-6 h-6" />
                     </button>
-                 </div>
-               )}
+                  </div>
+                )}
             </div>
           );
         })}
@@ -303,6 +333,37 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, allDocuments
           </div>
         )}
       </div>
+
+      {/* Modal de Confirmação de Exclusão */}
+      {showConfirmDelete && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 backdrop-blur-md bg-slate-900/40 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-sm w-full p-10 border border-slate-100 animate-in zoom-in-95 text-center">
+            <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6 text-red-500">
+              <AlertCircle className="w-10 h-10" />
+            </div>
+            <h3 className="text-xl font-black uppercase text-slate-800 mb-2">Excluir Compromisso?</h3>
+            <p className="text-xs font-bold text-slate-400 uppercase leading-relaxed mb-8">
+              Tem certeza que deseja remover permanentemente o compromisso:<br/> 
+              <span className="text-red-500">"{itemToDelete?.desc}"</span>?
+            </p>
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={confirmDeleteAction}
+                disabled={deletingId !== null}
+                className="w-full py-5 bg-red-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-lg shadow-red-100 hover:bg-red-700 transition-all flex items-center justify-center gap-2"
+              >
+                {deletingId ? 'Processando...' : 'Sim, Excluir Agora'}
+              </button>
+              <button 
+                onClick={() => { setShowConfirmDelete(false); setItemToDelete(null); }}
+                className="w-full py-5 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-slate-200 transition-all"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAddModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-xl bg-slate-900/60 animate-in fade-in duration-300">
