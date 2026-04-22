@@ -68,3 +68,8 @@ export const saveUser = async (userData: Partial<User & { senha?: string }>) => 
   if (!userData.id) throw new Error('User ID required');
   await setDoc(doc(db, 'users', userData.id), userData, { merge: true });
 };
+
+export const deleteUser = async (id: string) => {
+  await ensureAuthenticated();
+  await deleteDoc(doc(db, 'users', id));
+};

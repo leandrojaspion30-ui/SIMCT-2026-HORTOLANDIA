@@ -8,7 +8,7 @@ import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, B
 import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada } from './types';
 import { INITIAL_USERS, UserWithPassword, INITIAL_AGENDA } from './constants';
 import { db, ensureAuthenticated } from './lib/firebase';
-import { syncCollection, saveDocument, saveLog, saveAgenda, deleteDocument, deleteAgenda, saveUser } from './lib/db';
+import { syncCollection, saveDocument, saveLog, saveAgenda, deleteDocument, deleteAgenda, saveUser, deleteUser } from './lib/db';
 import DocumentList from './components/DocumentList';
 import DocumentRegistration from './components/DocumentRegistration';
 import DocumentView from './components/DocumentView';
@@ -256,15 +256,25 @@ const App: React.FC = () => {
     if (!currentUser) return null;
     const isAdministrative = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
     
-    if (activeTab === 'user-management' && isLud) return (
+    if (activeTab === 'user-management' && (isLud || currentUser.nome === 'LEANDRO')) return (
       <UserManagementPanel 
         users={filteredUsers} 
         onUpdateUser={async (id, upd) => {
           const target = users.find(u => u.id === id);
           if (upd.status) addLog('SISTEMA', `RH: Usuário ${target?.nome} teve status alterado para ${upd.status}.`, 'SEGURANÇA');
           if (upd.senha) addLog('SISTEMA', `RH: Senha do usuário ${target?.nome} redefinida por administrador.`, 'SEGURANÇA');
+          if (upd.nome && target && upd.nome !== target.nome) addLog('SISTEMA', `RH: Nome do usuário alterado de ${target.nome} para ${upd.nome}.`, 'SEGURANÇA');
           await saveUser({ ...upd, id });
         }} 
+        onDeleteUser={async (id) => {
+          const target = users.find(u => u.id === id);
+          addLog('SISTEMA', `RH: EXCLUSÃO DEFINITIVA de usuário: ${target?.nome || 'ID '+id}.`, 'SEGURANÇA');
+          await deleteUser(id);
+        }}
+        onAddUser={async (newUser) => {
+          addLog('SISTEMA', `RH: NOVO USUÁRIO ADICIONADO: ${newUser.nome}.`, 'SEGURANÇA');
+          await saveUser(newUser);
+        }}
         onAddLog={(action) => addLog('SISTEMA', action, 'SEGURANÇA')} 
       />
     );
