@@ -9,11 +9,12 @@ import AIStatisticsAnalyzer from './AIStatisticsAnalyzer';
 interface StatisticsViewProps {
   documents: Documento[];
   agenda: AgendaEntry[];
+  users: User[];
   currentUser: User;
   isGlobal?: boolean;
 }
 
-const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, currentUser, isGlobal }) => {
+const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, users, currentUser, isGlobal }) => {
   const COLORS = ['#2563EB', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
   const aiStats = useMemo(() => {
@@ -83,7 +84,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, curr
         stats.medidasAplicadas[m.texto] = (stats.medidasAplicadas[m.texto] || 0) + 1;
       });
 
-      const ref = INITIAL_USERS.find(u => u.id === doc.conselheiro_referencia_id);
+      const ref = users.find(u => u.id === doc.conselheiro_referencia_id);
       if (ref) {
         stats.acoesPorConselheiro[ref.nome] = (stats.acoesPorConselheiro[ref.nome] || 0) + (doc.atribuicoes_136?.length || 0);
       }
@@ -168,7 +169,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, curr
   , [documents]);
 
   const counselorPerformance = useMemo(() => {
-    return INITIAL_USERS
+    return users
       .filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && (isGlobal ? true : (u.unidade_id || 1) === (currentUser.unidade_id || 1)))
       .map(u => {
         const myDocs = documents.filter(d => d.conselheiro_referencia_id === u.id);

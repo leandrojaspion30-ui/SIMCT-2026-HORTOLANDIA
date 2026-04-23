@@ -4,11 +4,12 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart } from 'lucide-react';
+import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart, Timer, Save } from 'lucide-react';
 import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada } from './types';
 import { INITIAL_USERS, UserWithPassword, INITIAL_AGENDA } from './constants';
 import { db, ensureAuthenticated } from './lib/firebase';
 import { syncCollection, saveDocument, saveLog, saveAgenda, deleteDocument, deleteAgenda, saveUser, deleteUser } from './lib/db';
+import ConfidentialityTermModal from './components/ConfidentialityTermModal';
 import DocumentList from './components/DocumentList';
 import DocumentRegistration from './components/DocumentRegistration';
 import DocumentView from './components/DocumentView';
@@ -75,11 +76,11 @@ const App: React.FC = () => {
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [acknowledgedEventIds, setAcknowledgedEventIds] = useState<string[]>([]);
   const [acknowledgedReminderIds, setAcknowledgedReminderIds] = useState<string[]>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
   const [password, setPassword] = useState('');
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [forceDirectEdit, setForceDirectEdit] = useState(false);
   const [allDocuments, setAllDocuments] = useState<Documento[]>([]);
@@ -190,6 +191,26 @@ const App: React.FC = () => {
     await saveLog(newLog);
   }, [currentUser]);
 
+  const userNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    users.forEach(u => {
+      // 1. Mapeamento por Edição de Nome (mesmo ID)
+      const originalUser = INITIAL_USERS.find(iu => iu.id === u.id);
+      if (originalUser && u.nome.toUpperCase() !== originalUser.nome.toUpperCase()) {
+        map[originalUser.nome.toUpperCase()] = u.nome.toUpperCase();
+      }
+      
+      // 2. Mapeamento por Substituição Permanente (Novo ID assumindo o lugar)
+      if (u.status === 'INATIVO' && u.substituicao_permanente_por) {
+        const successor = users.find(s => s.id === u.substituicao_permanente_por);
+        if (successor) {
+          map[u.nome.toUpperCase()] = successor.nome.toUpperCase();
+        }
+      }
+    });
+    return map;
+  }, [users]);
+
   const pendingValidations = useMemo(() => {
     if (!currentUser || (currentUser.perfil !== 'CONSELHEIRO' && currentUser.perfil !== 'SUPLENTE')) return [];
     return documents.filter(d => {
@@ -203,12 +224,55 @@ const App: React.FC = () => {
     });
   }, [documents, currentUser]);
 
+  // DIRETRIZ: Alertas de Monitoramento Vencido
+  const expiredMonitoringItems = useMemo(() => {
+    if (!currentUser) return [];
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    return documents.filter(d => {
+      if (!d.monitoramento || d.monitoramento.concluido) return false;
+      
+      // Apenas o conselheiro de referência ou membros da unidade no caso de supervisão
+      const isRef = d.conselheiro_referencia_id === currentUser.id;
+      const isAdminTask = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
+      if (!isRef && !isAdminTask) return false;
+
+      return d.monitoramento.requisicoes?.some(r => {
+        if (r.concluido || (r as any).excluidoDoMonitoramento) return false;
+        const deadline = new Date(r.dataFinal);
+        deadline.setHours(0,0,0,0);
+        return deadline.getTime() < today.getTime();
+      });
+    });
+  }, [documents, currentUser]);
+
   const handleLogout = () => {
-    const confirmSave = window.confirm("Deseja salvar as alterações pendentes em rascunho antes de sair?");
-    addLog('SISTEMA', `Efetuou Logoff (Salvamento Rascunho: ${confirmSave ? 'SIM' : 'NÃO'})`, 'SEGURANÇA');
+    setIsLogoutModalOpen(true);
+  };
+
+  const confirmLogout = (savePending: boolean) => {
+    addLog('SISTEMA', `Efetuou Logoff Seguro (Salvamento de rascunhos pendentes: ${savePending ? 'SIM' : 'NÃO'})`, 'SEGURANÇA');
+    setIsLogoutModalOpen(false);
     setCurrentUser(null);
     setSelectedDocId(null);
     setActiveTab('dashboard');
+  };
+
+  const handleAcceptTerm = async (version: string) => {
+    if (!currentUser) return;
+    
+    const timestamp = new Date().toISOString();
+    const updatedUser = { 
+      ...currentUser, 
+      termo_aceito_em: timestamp,
+      termo_versao: version
+    };
+    
+    setCurrentUser(updatedUser);
+    await saveUser(updatedUser);
+    
+    addLog('SISTEMA', `Aceite do Termo de Sigilo e Confidencialidade (Versão: ${version})`, 'SEGURANÇA');
   };
 
   const handleOpenDocument = useCallback((id: string, isFromReference: boolean = false) => {
@@ -237,8 +301,9 @@ const App: React.FC = () => {
       distribuicao_automatica: !data.is_manual_override 
     };
     
-    const refName = INITIAL_USERS.find(u => u.id === newDoc.conselheiro_referencia_id)?.nome || 'N/A';
-    const provName = INITIAL_USERS.find(u => u.id === newDoc.conselheiro_providencia_id)?.nome || 'N/A';
+    // USAR LISTA VIVA DE USUÁRIOS PARA O LOG
+    const refName = users.find(u => u.id === newDoc.conselheiro_referencia_id)?.nome || 'N/A';
+    const provName = users.find(u => u.id === newDoc.conselheiro_providencia_id)?.nome || 'N/A';
 
     await saveDocument(newDoc);
     addLog(id, `CRIAÇÃO: Novo procedimento registrado. REF: [${refName}] | IMEDIATA: [${provName}].`, 'DOCUMENTO');
@@ -261,10 +326,183 @@ const App: React.FC = () => {
         users={filteredUsers} 
         onUpdateUser={async (id, upd) => {
           const target = users.find(u => u.id === id);
-          if (upd.status) addLog('SISTEMA', `RH: Usuário ${target?.nome} teve status alterado para ${upd.status}.`, 'SEGURANÇA');
-          if (upd.senha) addLog('SISTEMA', `RH: Senha do usuário ${target?.nome} redefinida por administrador.`, 'SEGURANÇA');
-          if (upd.nome && target && upd.nome !== target.nome) addLog('SISTEMA', `RH: Nome do usuário alterado de ${target.nome} para ${upd.nome}.`, 'SEGURANÇA');
+          if (!target) return;
+
+          const oldName = target.nome.toUpperCase();
+          const newName = upd.nome ? upd.nome.toUpperCase() : oldName;
+
+          // Se o nome foi alterado, inicia a propagação global
+          if (upd.nome && upd.nome !== target.nome) {
+            addLog('SISTEMA', `RH: INICIANDO SUBSTITUIÇÃO GLOBAL de "${oldName}" para "${newName}".`, 'SEGURANÇA');
+            
+            const docsToUpdate = documents.filter(d => 
+              d.conselheiros_providencia_nomes?.some(n => n.toUpperCase() === oldName) || 
+              d.notificacao?.toUpperCase() === oldName ||
+              (d.notificacoes_trio || []).some(n => n.toUpperCase() === oldName) ||
+              d.conselheiro_referencia_id === id ||
+              d.conselheiro_providencia_id === id
+            );
+
+            for (const doc of docsToUpdate) {
+              const updatedProvidencia = doc.conselheiros_providencia_nomes?.map(n => n.toUpperCase() === oldName ? newName : n);
+              const updatedNotificacaoTrio = doc.notificacoes_trio?.map(n => n.toUpperCase() === oldName ? newName : n);
+              const isOldNotificacao = doc.notificacao?.toUpperCase() === oldName;
+
+              await saveDocument({ 
+                id: doc.id, 
+                conselheiros_providencia_nomes: updatedProvidencia,
+                notificacao: isOldNotificacao ? newName : doc.notificacao,
+                notificacoes_trio: updatedNotificacaoTrio,
+                conselheiro_referencia_id: doc.conselheiro_referencia_id === id ? id : doc.conselheiro_referencia_id,
+                conselheiro_providencia_id: doc.conselheiro_providencia_id === id ? id : doc.conselheiro_providencia_id
+              });
+            }
+
+            const agendaToUpdate = allAgenda.filter(a => a.conselheiro_id === id);
+            for (const evt of agendaToUpdate) {
+              await saveAgenda({ id: evt.id, conselheiro_id: id });
+            }
+            
+            addLog('SISTEMA', `RH: Nome do usuário alterado de ${oldName} para ${newName}.`, 'SEGURANÇA');
+          }
+
+          // LÓGICA DE SUBSTITUIÇÃO PERMANENTE (MIGRAÇÃO DE ID E NOMES)
+          if (upd.substituicao_permanente_por) {
+            const successorId = upd.substituicao_permanente_por;
+            const successorObj = users.find(u => u.id === successorId);
+            // Normalização para comparação (remove acentos e espaços extras)
+            const normalize = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+            const normalizedOldName = normalize(target.nome);
+            const oldName = target.nome.toUpperCase(); // Mantém o original para o regex
+            const newName = successorObj ? successorObj.nome.toUpperCase() : successorId.toUpperCase();
+            
+            console.log(`[RH] Iniciando migração de ${id} (${oldName}) para ${successorId} (${newName})`);
+            addLog('SISTEMA', `RH: INICIANDO MIGRAÇÃO PERMANENTE de [${oldName}] para [${newName}].`, 'SEGURANÇA');
+            
+            const currentDocs = await new Promise<any[]>(resolve => {
+              setAllDocuments(prev => {
+                resolve(prev);
+                return prev;
+              });
+            });
+
+            // Filtro robusto ignorando acentos
+            const docsToMigrate = currentDocs.filter(d => {
+              const isRef = d.conselheiro_referencia_id === id || d.conselheiro_providencia_id === id;
+              
+              // Verifica se o nome aparece em algum campo de texto ou lista
+              const checkText = (t?: string) => t && normalize(t).includes(normalizedOldName);
+              const checkList = (l?: string[]) => l && l.some(n => normalize(n).includes(normalizedOldName));
+
+              return isRef || 
+                     checkText(d.notificacao) || 
+                     checkList(d.notificacoes_trio) || 
+                     checkList(d.conselheiros_providencia_nomes) || 
+                     checkText(d.historico) ||
+                     checkText(d.conselheiro_referencia_nome) ||
+                     checkText(d.conselheiro_providencia_nome) ||
+                     checkText(d.relato_providencias) ||
+                     checkText(d.despacho_situacao);
+            });
+
+            console.log(`[RH] Encontrados ${docsToMigrate.length} documentos para atualizar.`);
+
+            for (const doc of docsToMigrate) {
+              let updatedDoc: any = { id: doc.id };
+
+              // 1. Atualizar IDs
+              if (doc.conselheiro_referencia_id === id) updatedDoc.conselheiro_referencia_id = successorId;
+              if (doc.conselheiro_providencia_id === id) updatedDoc.conselheiro_providencia_id = successorId;
+
+              // 2. Atualizar Campos de Texto com Regex inteligente (preserva outros nomes no texto)
+              const replaceName = (text: string) => {
+                // Tenta substituir com e sem acento no texto original
+                let res = text;
+                const pattern = normalizedOldName === oldName ? oldName : `(${oldName}|${target.nome})`;
+                const regex = new RegExp(pattern, 'gi');
+                return res.replace(regex, newName);
+              };
+
+              // Lista de campos para varredura
+              const textFields: (keyof any)[] = [
+                'notificacao', 'historico', 'relato_providencias', 'despacho_situacao', 
+                'conselheiro_referencia_nome', 'conselheiro_providencia_nome', 
+                'observacoes_iniciais', 'fundamentacao_tecnica'
+              ];
+
+              textFields.forEach(field => {
+                if (doc[field] && (normalize(doc[field] as string).includes(normalizedOldName))) {
+                  updatedDoc[field] = replaceName(doc[field] as string);
+                }
+              });
+
+              // 3. Atualizar Listas
+              if (doc.conselheiros_providencia_nomes) {
+                updatedDoc.conselheiros_providencia_nomes = doc.conselheiros_providencia_nomes.map(n => 
+                  normalize(n) === normalizedOldName ? newName : n
+                );
+              }
+
+              if (doc.notificacoes_trio) {
+                updatedDoc.notificacoes_trio = doc.notificacoes_trio.map(n => 
+                  normalize(n) === normalizedOldName ? newName : n
+                );
+              }
+
+              await saveDocument(updatedDoc);
+            }
+
+            const currentAgenda = await new Promise<any[]>(resolve => {
+              setAllAgenda(prev => {
+                resolve(prev);
+                return prev;
+              });
+            });
+
+            const agendaToMigrate = currentAgenda.filter(a => a.conselheiro_id === id);
+            console.log(`[RH] Encontrados ${agendaToMigrate.length} eventos de agenda.`);
+
+            for (const evt of agendaToMigrate) {
+              await saveAgenda({ ...evt, conselheiro_id: successorId });
+              console.log(`[RH] Evento de agenda ${evt.id} migrado.`);
+            }
+
+            // FORÇAR ATUALIZAÇÃO DOS ESTADOS LOCAIS PARA REFLETIR NA TELA NA HORA
+            setAllDocuments(prev => prev.map(d => {
+              if (d.conselheiro_referencia_id === id || d.conselheiro_providencia_id === id) {
+                return { 
+                  ...d, 
+                  conselheiro_referencia_id: d.conselheiro_referencia_id === id ? successorId : d.conselheiro_referencia_id,
+                  conselheiro_providencia_id: d.conselheiro_providencia_id === id ? successorId : d.conselheiro_providencia_id
+                };
+              }
+              return d;
+            }));
+
+            setAllAgenda(prev => prev.map(a => {
+              if (a.conselheiro_id === id) return { ...a, conselheiro_id: successorId };
+              return a;
+            }));
+
+            addLog('SISTEMA', `RH: MIGRAÇÃO CONCLUÍDA. ID [${successorId}] assumiu as funções de ${target.nome}.`, 'SEGURANÇA');
+            
+            // Remove o campo temporário antes de salvar no banco
+            delete (upd as any).substituicao_permanente_por;
+          }
+
+          // PERSISTIR ALTERAÇÃO DO USUÁRIO NO BANCO
           await saveUser({ ...upd, id });
+          
+          // Atualiza lista local de usuários para reconhecimento imediato
+          setUsers(prev => prev.map(u => u.id === id ? { ...u, ...upd } : u));
+          
+          if (upd.status) addLog('SISTEMA', `RH: Usuário ${target.nome} teve status alterado para ${upd.status}.`, 'SEGURANÇA');
+          if (upd.senha) addLog('SISTEMA', `RH: Senha do usuário ${target.nome} redefinida por administrador.`, 'SEGURANÇA');
+          
+          // FORÇAR RECONHECIMENTO: Se o usuário editado for o próprio logado, atualiza o estado local
+          if (id === currentUser.id) {
+            setCurrentUser(prev => prev ? { ...prev, ...upd } : null);
+          }
         }} 
         onDeleteUser={async (id) => {
           const target = users.find(u => u.id === id);
@@ -276,6 +514,7 @@ const App: React.FC = () => {
           await saveUser(newUser);
         }}
         onAddLog={(action) => addLog('SISTEMA', action, 'SEGURANÇA')} 
+        setActiveTab={(tab: any) => setActiveTab(tab)}
       />
     );
     
@@ -284,20 +523,20 @@ const App: React.FC = () => {
       return null;
     }
 
-    if (activeTab === 'register' || activeTab === 'plantao') return <DocumentRegistration documents={documents} agenda={agenda} currentUser={currentUser} onSubmit={handleDocumentSubmit} onCancel={() => handleNavigate('dashboard')} isReadOnly={activeTab === 'register' ? !isAdministrative : false} title={activeTab === 'plantao' ? 'SIMCT - Novo Proced/Plantão' : undefined} />;
-    if (activeTab === 'edit' && editingDocId) return <DocumentRegistration documents={documents} agenda={agenda} currentUser={currentUser} initialData={documents.find(d => d.id === editingDocId)} onSubmit={handleDocumentSubmit} onCancel={() => handleNavigate('dashboard')} isReadOnly={!isAdministrative} />;
+    if (activeTab === 'register' || activeTab === 'plantao') return <DocumentRegistration documents={documents} users={users} agenda={agenda} currentUser={currentUser} onSubmit={handleDocumentSubmit} onCancel={() => handleNavigate('dashboard')} isReadOnly={activeTab === 'register' ? !isAdministrative : false} title={activeTab === 'plantao' ? 'SIMCT - Novo Proced/Plantão' : undefined} nameMap={userNameMap} />;
+    if (activeTab === 'edit' && editingDocId) return <DocumentRegistration documents={documents} users={users} agenda={agenda} currentUser={currentUser} initialData={documents.find(d => d.id === editingDocId)} onSubmit={handleDocumentSubmit} onCancel={() => handleNavigate('dashboard')} isReadOnly={!isAdministrative} nameMap={userNameMap} />;
     
     if (selectedDocId) {
       const doc = documents.find(d => d.id === selectedDocId);
       if (!doc) return null;
-      return <DocumentView document={doc} allDocuments={documents} agenda={agenda} files={[]} logs={logs.filter(l => l.documento_id === selectedDocId)} currentUser={currentUser} isReadOnly={isAdministrative} forceEdit={forceDirectEdit} onBack={() => setSelectedDocId(null)} onEdit={() => { setEditingDocId(doc.id); setActiveTab('edit'); }} onDelete={async (id) => { 
+      return <DocumentView document={doc} allDocuments={documents} users={users} agenda={agenda} files={[]} logs={logs.filter(l => l.documento_id === selectedDocId)} currentUser={currentUser} isReadOnly={isAdministrative} forceEdit={forceDirectEdit} onBack={() => setSelectedDocId(null)} onEdit={() => { setEditingDocId(doc.id); setActiveTab('edit'); }} onDelete={async (id) => { 
           addLog(id, `EXCLUSÃO: Documento removido permanentemente do banco de dados SIMCT.`, 'DOCUMENTO');
           await deleteDocument(id);
           setSelectedDocId(null);
       }} onUpdateStatus={async (id, s) => {
           addLog(id, `STATUS: Documento alterado para a situação [${s[s.length-1]}].`, 'SISTEMA');
           await saveDocument({ id, status: s });
-      }} onUpdateDocument={async (id, fields) => await saveDocument({ ...fields, id })} onAddLog={addLog} onScience={() => {}} />;
+      }} onUpdateDocument={async (id, fields) => await saveDocument({ ...fields, id })} onAddLog={addLog} onScience={() => {}} nameMap={userNameMap} />;
     }
 
     switch (activeTab) {
@@ -323,7 +562,27 @@ const App: React.FC = () => {
                  </div>
               </div>
             )}
-            <DocumentList documents={documents} currentUser={currentUser} isReadOnly={false} onSelectDoc={handleOpenDocument} onEditDoc={(id) => { setEditingDocId(id); setActiveTab('edit'); }} onDeleteDoc={async (id) => {
+
+            {expiredMonitoringItems.length > 0 && (
+              <div 
+                className="p-6 bg-amber-500 rounded-[2rem] border-4 border-amber-400 shadow-xl flex items-center justify-between group hover:scale-[1.01] transition-all cursor-pointer" 
+                onClick={() => setActiveTab('monitoring')}
+              >
+                 <div className="flex items-center gap-6">
+                    <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center">
+                       <Timer className="w-8 h-8 text-white" />
+                    </div>
+                    <div>
+                       <h3 className="text-white font-black text-[18px] uppercase tracking-tight">Monitoramento com Prazo Vencido!</h3>
+                       <p className="text-white/80 text-[12px] font-bold uppercase tracking-widest mt-1">Existem {expiredMonitoringItems.length} {expiredMonitoringItems.length === 1 ? 'requisição de serviço' : 'requisições de serviços'} com prazo expirado sob sua responsabilidade.</p>
+                    </div>
+                 </div>
+                 <div className="px-6 py-3 bg-white text-amber-600 rounded-xl font-black text-[11px] uppercase tracking-widest flex items-center gap-2">
+                    Ver Monitoramento <ArrowRight className="w-4 h-4" />
+                 </div>
+              </div>
+            )}
+            <DocumentList documents={documents} users={users} currentUser={currentUser} isReadOnly={false} onSelectDoc={handleOpenDocument} onEditDoc={(id) => { setEditingDocId(id); setActiveTab('edit'); }} onDeleteDoc={async (id) => {
                 addLog(id, `EXCLUSÃO: Documento removido permanentemente via Painel Geral.`, 'DOCUMENTO');
                 await deleteDocument(id);
             }} onScience={() => {}} onUpdateStatus={() => {}} />
@@ -336,7 +595,7 @@ const App: React.FC = () => {
           const isImediata = d.conselheiros_providencia_nomes?.includes(currentUser.nome.toUpperCase());
           return isFixedRef || isImediata;
         });
-        return <DocumentList documents={myReferencedDocs} currentUser={currentUser} isReadOnly={false} onSelectDoc={(id) => handleOpenDocument(id, true)} onEditDoc={(id) => { setEditingDocId(id); setActiveTab('edit'); }} onDeleteDoc={async (id) => {
+        return <DocumentList documents={myReferencedDocs} users={users} currentUser={currentUser} isReadOnly={false} onSelectDoc={(id) => handleOpenDocument(id, true)} onEditDoc={(id) => { setEditingDocId(id); setActiveTab('edit'); }} onDeleteDoc={async (id) => {
             addLog(id, `EXCLUSÃO: Documento removido permanentemente via Minha Referência.`, 'DOCUMENTO');
             await deleteDocument(id);
         }} onScience={() => {}} onUpdateStatus={() => {}} isMyReferenceView={true} />;
@@ -347,7 +606,7 @@ const App: React.FC = () => {
           addLog(id, `MONITORAMENTO: Acompanhamento de caso encerrado com sucesso.`, 'MONITORAMENTO');
           await deleteDocument(id);
       }} isReadOnly={isAdministrative} />;
-      case 'agenda': return <AgendaView agenda={agenda} setAgenda={async (items) => {
+      case 'agenda': return <AgendaView agenda={agenda} users={users} setAgenda={async (items) => {
           // Find the new entry if it's an array set call
           if (Array.isArray(items)) {
             // This is a bit complex due to local state vs db sync
@@ -357,15 +616,15 @@ const App: React.FC = () => {
             if (lastItem) await saveAgenda(lastItem);
           }
       }} allDocuments={allDocuments} currentUser={currentUser} effectiveUserId={currentUser.id} isReadOnly={currentUser.nome === 'LUDIMILA'} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} />;
-      case 'search': return <AdvancedSearch documents={documents} currentUser={currentUser} onSelectDoc={handleOpenDocument} />;
+      case 'search': return <AdvancedSearch documents={documents} users={users} currentUser={currentUser} onSelectDoc={handleOpenDocument} />;
       case 'logs': return <AuditLogViewer logs={logs} />;
       case 'settings': return <SettingsView currentUser={currentUser} onUpdatePassword={async (p) => { 
           await saveUser({ id: currentUser.id, senha: p }); 
           addLog('SISTEMA', `SEGURANÇA: Senha e assinatura digital alterada pelo próprio usuário.`, 'SEGURANÇA');
           return true; 
       }} />;
-      case 'statistics': return <StatisticsView documents={documents} agenda={agenda} currentUser={currentUser} />;
-      case 'global-statistics': return <StatisticsView documents={allDocuments} agenda={allAgenda} currentUser={currentUser} isGlobal />;
+      case 'statistics': return <StatisticsView documents={documents} agenda={agenda} users={users} currentUser={currentUser} />;
+      case 'global-statistics': return <StatisticsView documents={allDocuments} agenda={allAgenda} users={users} currentUser={currentUser} isGlobal />;
       default: return null;
     }
   };
@@ -387,17 +646,22 @@ const App: React.FC = () => {
             const userInput = (selectedUserId || '').trim().toUpperCase();
             const user = users.find(u => (u.nome || '').toUpperCase() === userInput); 
             
-            if (!user || user.senha !== password) { 
-              setLoginError("Erro: Credenciais inválidas."); 
-              if (user) addLog('SISTEMA', `FALHA DE SEGURANÇA: Tentativa de login com senha incorreta para o usuário [${user.nome}].`, 'SEGURANÇA', user);
+            if (!user) {
+              setLoginError("Erro: Usuário não cadastrado.");
+              return;
+            }
+            
+            if (user.senha !== password) { 
+              setLoginError("Erro: Senha incorreta."); 
+              addLog('SISTEMA', `FALHA DE SEGURANÇA: Tentativa de login com senha incorreta para o usuário [${user.nome}].`, 'SEGURANÇA', user);
               return; 
             } 
             
-            if (user.status === 'BLOQUEADO') { 
-              setLoginError("ACESSO BLOQUEADO: PROCURE A ADM GERAL."); 
-              addLog('SISTEMA', `BLOQUEIO: Usuário bloqueado [${user.nome}] tentou acessar o sistema.`, 'SEGURANÇA', user);
+            if (user.status !== 'ATIVO') { 
+              setLoginError("ACESSO NEGADO: USUÁRIO INATIVO OU BLOQUEADO."); 
+              addLog('SISTEMA', `BLOQUEIO: Usuário inativo [${user.nome}] tentou acessar o sistema.`, 'SEGURANÇA', user);
               return; 
-            } 
+            }
 
             // Lógica de Substituição/Suplência Generalizada
             const now = new Date().toISOString().split('T')[0];
@@ -408,12 +672,6 @@ const App: React.FC = () => {
                 return;
               }
             }
-            
-            if (!acceptedTerms) { 
-              setLoginError("Obrigatório aceitar termos LGPD."); 
-              addLog('SISTEMA', `SEGURANÇA: Acesso negado. Usuário [${user.nome}] recusou termos LGPD.`, 'SEGURANÇA', user);
-              return; 
-            } 
             
             // Se for um Suplente em substituição ativa, assume a identidade mas mantém rastro
             let sessionUser = { ...user };
@@ -435,7 +693,7 @@ const App: React.FC = () => {
             }
             
             setCurrentUser(sessionUser); 
-            addLog('SISTEMA', `LOGIN: Autenticação realizada com sucesso. Termos LGPD aceitos.`, 'SEGURANÇA', sessionUser);
+            addLog('SISTEMA', `LOGIN: Autenticação realizada com sucesso.`, 'SEGURANÇA', sessionUser);
           }} className="space-y-6">
             <div className="relative">
               <input placeholder="USUÁRIO" className="w-full p-4 pl-12 bg-slate-50 border border-[#E5E7EB] rounded-xl outline-none font-bold uppercase focus:border-[#2563EB] transition-all" value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)} />
@@ -445,10 +703,6 @@ const App: React.FC = () => {
               <input type="password" placeholder="SENHA" className="w-full p-4 pl-12 bg-slate-50 border border-[#E5E7EB] rounded-xl outline-none font-bold focus:border-[#2563EB] transition-all" value={password} onChange={e => setPassword(e.target.value)} />
               <ShieldCheck className="w-5 h-5 text-slate-300 absolute left-4 top-1/2 -translate-y-1/2" />
             </div>
-            <div className="flex items-center gap-3 p-1">
-              <input type="checkbox" className="w-4 h-4 text-[#2563EB] border-[#E5E7EB] rounded" checked={acceptedTerms} onChange={e => setAcceptedTerms(e.target.checked)} />
-              <label className="text-[12px] font-medium uppercase text-[#4B5563]">Aceito LGPD e Sigilo Profissional</label>
-            </div>
             {loginError && <div className="p-4 bg-red-50 text-red-700 text-[12px] font-bold uppercase rounded-xl border border-red-100">{loginError}</div>}
             <button type="submit" className="w-full py-4 bg-[#111827] text-white rounded-xl font-bold uppercase text-[13px] tracking-widest shadow-lg hover:bg-[#2563EB] transition-all">Acessar SIMCT</button>
           </form>
@@ -457,8 +711,18 @@ const App: React.FC = () => {
     </div>
   );
 
+  // NOVO: Fluxo de Aceite do Termo Obrigatório (Especialista em Dados Sensíveis)
+  if (currentUser && !currentUser.termo_aceito_em) {
+    return (
+      <ConfidentialityTermModal 
+        userName={currentUser.nome} 
+        onAccept={handleAcceptTerm} 
+      />
+    );
+  }
+
   return (
-    <div className="min-h-screen flex bg-[#F9FAFB] font-['Inter']">
+    <div className="min-h-screen flex bg-[#F9FAFB] font-['Inter'] overflow-x-hidden">
       <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} ${isSidebarOpen ? 'lg:w-80' : 'lg:w-24 w-80'} bg-[#111827] transition-all duration-300 flex flex-col fixed inset-y-0 z-50 overflow-hidden`}>
         <div className="p-6 flex items-center gap-4 border-b border-white/5"><img src={CT_LOGO_URL} alt="SIMCT" className="w-10 h-10" />{(isSidebarOpen || window.innerWidth < 1024) && <span className="text-white font-bold text-[18px] uppercase">SIM<span className="text-[#2563EB]">CT</span></span>}</div>
         <nav className="flex-1 px-4 mt-8 space-y-2 overflow-y-auto min-h-0">
@@ -488,6 +752,39 @@ const App: React.FC = () => {
       </main>
       {isSidebarOpen && window.innerWidth < 1024 && (
         <div className="fixed inset-0 bg-black/50 z-40 transition-opacity" onClick={() => setIsSidebarOpen(false)}></div>
+      )}
+      {isLogoutModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+           <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-md w-full overflow-hidden border border-slate-100 animate-in zoom-in-95 duration-300">
+              <div className="p-8 pb-4 flex flex-col items-center text-center space-y-4">
+                 <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center">
+                    <LogOut className="w-10 h-10 text-red-600" />
+                 </div>
+                 <h3 className="text-[20px] font-black uppercase text-slate-800 tracking-tight">Encerrar Sessão com Segurança?</h3>
+                 <p className="text-[13px] font-medium text-slate-500">Você está prestes a sair do sistema. Deseja realizar o salvamento preventivo de rascunhos e alterações pendentes antes de efetuar o logoff?</p>
+              </div>
+              <div className="p-8 pt-4 space-y-3">
+                 <button 
+                   onClick={() => confirmLogout(true)}
+                   className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-md hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                 >
+                    <Save className="w-4 h-4" /> Sim, Salvar e Sair
+                 </button>
+                 <button 
+                   onClick={() => confirmLogout(false)}
+                   className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-200 transition-all"
+                 >
+                    Apenas Sair (Descartar Pendências)
+                 </button>
+                 <button 
+                   onClick={() => setIsLogoutModalOpen(false)}
+                   className="w-full py-4 bg-white text-slate-400 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:text-slate-600 transition-all"
+                 >
+                    Cancelar e Permanecer Conectado
+                 </button>
+              </div>
+           </div>
+        </div>
       )}
       {imminentEvent && (
         <AppointmentAlert 

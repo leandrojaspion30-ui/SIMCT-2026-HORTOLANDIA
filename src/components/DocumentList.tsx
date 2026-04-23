@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database, Trash2 } from 'lucide-react';
+import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database, Trash2, Timer } from 'lucide-react';
 import { Documento, User as UserType, DocumentStatus } from '../types';
 import { STATUS_LABELS, INITIAL_USERS, BAIRROS, getBairrosByUnidade } from '../constants';
 
@@ -30,6 +30,7 @@ const getStatusStyle = (status: DocumentStatus, isImprocedente?: boolean, valida
 
 interface DocumentListProps {
   documents: Documento[];
+  users: UserType[];
   currentUser: UserType;
   onSelectDoc: (id: string) => void;
   onEditDoc: (id: string) => void;
@@ -40,7 +41,7 @@ interface DocumentListProps {
   isMyReferenceView?: boolean;
 }
 
-const DocumentList: React.FC<DocumentListProps> = ({ documents, currentUser, onSelectDoc, onEditDoc, onDeleteDoc, isReadOnly, isMyReferenceView }) => {
+const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUser, onSelectDoc, onEditDoc, onDeleteDoc, isReadOnly, isMyReferenceView }) => {
   const [myViewMode, setMyViewMode] = useState<'ALL' | 'REF' | 'IMED' | 'VALID'>(isMyReferenceView ? 'REF' : 'ALL');
   const initialFilters = { term: '', bairro: '', status: '', conselheiro_ref_id: '' };
   const [filters, setFilters] = useState(initialFilters);
@@ -101,7 +102,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, currentUser, onS
           </select>
           <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-blue-500" value={filters.conselheiro_ref_id} onChange={(e) => setFilters({...filters, conselheiro_ref_id: e.target.value})}>
             <option value="">Qualquer Conselheiro</option>
-            {INITIAL_USERS.filter(u => u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE').map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+            {users.filter(u => u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE').map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
           </select>
         </div>
 
@@ -116,8 +117,8 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, currentUser, onS
       <div className="grid grid-cols-1 gap-4">
         {filteredDocs.map(doc => {
           const mainStatus = doc.status[doc.status.length - 1] || 'AGUARDANDO_ANALISE';
-          const refCouncilor = INITIAL_USERS.find(u => u.id === doc.conselheiro_referencia_id);
-          const provCouncilor = INITIAL_USERS.find(u => u.id === doc.conselheiro_providencia_id);
+          const refCouncilor = users.find(u => u.id === doc.conselheiro_referencia_id);
+          const provCouncilor = users.find(u => u.id === doc.conselheiro_providencia_id);
           const confirmacoes = doc.medidas_detalhadas?.[0]?.confirmacoes || [];
           const iValidated = confirmacoes.some(c => c.usuario_id === currentUser.id);
           const isInTrio = doc.conselheiros_providencia_nomes?.includes(currentUser.nome.toUpperCase());
@@ -196,6 +197,16 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, currentUser, onS
                      </div>
                      <div>
                         <h3 className="text-[17px] font-black text-[#111827] uppercase group-hover:text-[#2563EB] transition-colors">{doc.crianca_nome || 'PRONTUÁRIO INCOMPLETO'}</h3>
+                        {doc.monitoramento && !doc.monitoramento.concluido && doc.monitoramento.requisicoes?.some(r => {
+                           if (r.concluido || (r as any).excluidoDoMonitoramento) return false;
+                           const deadline = new Date(r.dataFinal);
+                           deadline.setHours(0,0,0,0);
+                           return deadline.getTime() < new Date().setHours(0,0,0,0);
+                        }) && (
+                           <div className="mt-2 flex items-center gap-2 px-3 py-1 bg-amber-500 text-white text-[10px] font-bold uppercase rounded-lg w-fit animate-pulse shadow-sm">
+                              <Timer className="w-3.5 h-3.5" /> Atenção: Prazo de Monitoramento Expirado
+                           </div>
+                        )}
                         <div className="flex flex-wrap items-center gap-x-6 mt-2">
                            <div className="flex items-center gap-2 text-[11px] text-[#4B5563] font-bold uppercase"><UserRound className="w-3.5 h-3.5" /> MÃE: {doc.genitora_nome}</div>
                            <div className="flex items-center gap-2 text-[11px] text-emerald-600 font-bold uppercase"><MapPin className="w-3.5 h-3.5" /> {doc.bairro}</div>

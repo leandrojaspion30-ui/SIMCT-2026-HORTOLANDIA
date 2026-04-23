@@ -6,7 +6,7 @@ import {
   CheckCircle, CheckCircle2, ChevronDown, Play, Users, Tag, FileCheck2,
   Database, Fingerprint, MapPin, Building2, UserCog, Search, LayoutList,
   ChevronRight, Timer, ArrowUpRight, ShieldCheck, Box, FileText, Baby,
-  AlertTriangle, Trash2
+  AlertTriangle, Trash2, Zap
 } from 'lucide-react';
 import { 
   Documento, Log, User as UserType, DocumentStatus, 
@@ -23,6 +23,7 @@ import FamilyHistoryModal from './FamilyHistoryModal';
 interface DocumentViewProps {
   document: Documento;
   allDocuments: Documento[]; 
+  users: UserType[];
   agenda: AgendaEntry[];
   currentUser: UserType;
   files: any[];
@@ -36,11 +37,13 @@ interface DocumentViewProps {
   onUpdateDocument: (id: string, fields: Partial<Documento>) => void;
   onAddLog: (docId: string, acao: string, tipo?: LogType) => void;
   onScience: (id: string) => void;
+  nameMap?: Record<string, string>;
 }
 
 const DocumentView: React.FC<DocumentViewProps> = ({ 
   document: doc, 
   allDocuments,
+  users,
   agenda,
   currentUser, 
   logs,
@@ -50,7 +53,8 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   onUpdateStatus,
   onUpdateDocument,
   onAddLog,
-  onScience
+  onScience,
+  nameMap
 }) => {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [tempViolacoes, setTempViolacoes] = useState<SipiaViolation[]>(doc.violacoesSipia || []);
@@ -204,10 +208,15 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   };
 
   const validationTracker = useMemo(() => {
-    const trio = doc.conselheiros_providencia_nomes || [];
+    const trioRaw = doc.conselheiros_providencia_nomes || [];
+    const trio = trioRaw.map(n => (nameMap && nameMap[n.toUpperCase()]) ? nameMap[n.toUpperCase()] : n);
+    
     const confirmacoes = doc.medidas_detalhadas?.[0]?.confirmacoes || [];
     return trio.map(name => {
-      const match = confirmacoes.find(c => c.usuario_nome.toUpperCase().includes(name.toUpperCase()));
+      const match = confirmacoes.find(c => {
+        const signatureName = c.usuario_nome.toUpperCase();
+        return signatureName.includes(name.toUpperCase()) || INITIAL_USERS.some(iu => iu.id === c.usuario_id && iu.nome.toUpperCase() === name.toUpperCase());
+      });
       return { 
         name, 
         validated: !!match, 
@@ -215,7 +224,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
         needsRevalidation: doc.status.includes('AGUARDANDO_VALIDACAO') && !match && confirmacoes.length > 0
       };
     });
-  }, [doc.conselheiros_providencia_nomes, doc.medidas_detalhadas, doc.status]);
+  }, [doc.conselheiros_providencia_nomes, doc.medidas_detalhadas, doc.status, nameMap]);
 
   const handleSave = (finalize: boolean) => {
     if (!canEditTechnicalFields) return;
@@ -245,7 +254,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     if (isTechnicalChange && isImediata) {
       // REFORÇO: Se houver mudança técnica, invalidamos assinaturas anteriores e notificamos o trio
       confirmacoes = confirmacoes.filter(c => c.usuario_id === currentUser.id);
-      const escala = getEffectiveEscala(doc.data_aporte, doc.hora_aporte, currentUser.unidade_id);
+      const escala = getEffectiveEscala(doc.data_aporte, doc.hora_aporte, currentUser.unidade_id, nameMap);
       notificacoesTrio = escala.filter(nome => nome !== currentUser.nome.toUpperCase());
     }
     
@@ -348,7 +357,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
         }
 
         // Notificar automaticamente os outros membros do trio de imediata
-        const escala = getEffectiveEscala(doc.data_aporte, doc.hora_aporte, currentUser.unidade_id);
+        const escala = getEffectiveEscala(doc.data_aporte, doc.hora_aporte, currentUser.unidade_id, nameMap);
         const outrosDoTrio = escala.filter(nome => nome !== currentUser.nome.toUpperCase());
         
         const novasNotificacoes = [...notificacoesTrio];
@@ -418,6 +427,9 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     onAddLog(doc.id, `VALIDAÇÃO TÉCNICA: Assinatura confirmada pelo trio.`, 'VALIDAÇÃO');
   };
 
+  const provName = users.find(u => u.id === doc.conselheiro_providencia_id)?.nome || 'Não Encontrado';
+  const refName = users.find(u => u.id === doc.conselheiro_referencia_id)?.nome || 'Não Encontrado';
+
   return (
     <>
       <div className="max-w-6xl mx-auto pb-40 animate-in fade-in flex flex-col gap-10">
@@ -443,8 +455,26 @@ const DocumentView: React.FC<DocumentViewProps> = ({
           </div>
         </header>
 
+        {/* INFO CARDS (Diretriz: Hierarquia Visual de Identidade) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-8 bg-slate-50 border-b border-slate-200">
+           <div className="p-4 bg-white rounded-2xl border border-slate-200 flex items-center gap-4">
+              <div className="p-3 bg-blue-50 rounded-xl text-blue-600"><UserCog className="w-5 h-5" /></div>
+              <div>
+                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Referência Fixa</p>
+                 <p className="text-[13px] font-black text-slate-800 uppercase">{refName}</p>
+              </div>
+           </div>
+           <div className="p-4 bg-white rounded-2xl border border-slate-200 flex items-center gap-4">
+              <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600"><Zap className="w-5 h-5" /></div>
+              <div>
+                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Atendimento Imediato</p>
+                 <p className="text-[13px] font-black text-slate-800 uppercase">{provName}</p>
+              </div>
+           </div>
+        </div>
+
         {/* ALERTA DE REVALIDAÇÃO OBRIGATÓRIA */}
-        {(doc.notificacoes_trio || []).includes(currentUser.nome.toUpperCase()) && (
+        {(doc.notificacoes_trio || []).some(n => n.toUpperCase() === currentUser.nome.toUpperCase() || (nameMap && nameMap[n.toUpperCase()] === currentUser.nome.toUpperCase())) && (
           <div className="bg-red-600 p-6 flex items-center justify-between animate-pulse">
             <div className="flex items-center gap-4 text-white">
               <ShieldAlert className="w-8 h-8" />
@@ -1088,6 +1118,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
         <FamilyHistoryModal 
           history={[...familyDossier.history, doc]} 
           agenda={agenda}
+          users={users}
           currentUser={currentUser} 
           onClose={() => setShowHistoryModal(false)} 
         />

@@ -18,6 +18,9 @@ export interface User {
   is_suplente_active?: boolean;
   real_user_id?: string;
   substituted_name?: string;
+  substituicao_permanente_por?: string;
+  termo_aceito_em?: string;
+  termo_versao?: string;
 }
 
 export type DocumentStatus = 

@@ -27,11 +27,22 @@ export const syncCollection = <T extends { id: string }>(
   });
 };
 
+const cleanData = (obj: any) => {
+  const newObj = { ...obj };
+  Object.keys(newObj).forEach(key => {
+    if (newObj[key] === undefined) {
+      delete newObj[key];
+    }
+  });
+  return newObj;
+};
+
 export const saveDocument = async (docData: Partial<Documento>) => {
   await ensureAuthenticated();
   const id = docData.id || `doc-${Math.random().toString(36).substr(2, 9)}`;
   const docRef = doc(db, 'documents', id);
-  await setDoc(docRef, { ...docData, id, updated_at: serverTimestamp() }, { merge: true });
+  const data = cleanData({ ...docData, id, updated_at: serverTimestamp() });
+  await setDoc(docRef, data, { merge: true });
   return id;
 };
 
@@ -43,13 +54,15 @@ export const deleteDocument = async (id: string) => {
 export const saveLog = async (logData: Partial<Log>) => {
   await ensureAuthenticated();
   const id = logData.id || `log-${Date.now()}`;
-  await setDoc(doc(db, 'logs', id), { ...logData, id, created_at: serverTimestamp() });
+  const data = cleanData({ ...logData, id, created_at: serverTimestamp() });
+  await setDoc(doc(db, 'logs', id), data);
 };
 
 export const saveAgenda = async (agendaData: Partial<AgendaEntry>) => {
   const id = agendaData.id || `evt-${Date.now()}`;
   const docRef = doc(db, 'agenda', id);
-  await setDoc(docRef, { ...agendaData, id }, { merge: true });
+  const data = cleanData({ ...agendaData, id });
+  await setDoc(docRef, data, { merge: true });
 };
 
 export const deleteAgenda = async (id: string) => {
@@ -66,7 +79,8 @@ export const deleteAgenda = async (id: string) => {
 export const saveUser = async (userData: Partial<User & { senha?: string }>) => {
   await ensureAuthenticated();
   if (!userData.id) throw new Error('User ID required');
-  await setDoc(doc(db, 'users', userData.id), userData, { merge: true });
+  const data = cleanData(userData);
+  await setDoc(doc(db, 'users', userData.id), data, { merge: true });
 };
 
 export const deleteUser = async (id: string) => {

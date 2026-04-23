@@ -20,6 +20,7 @@ import { saveAgenda, deleteAgenda } from '../lib/db';
 
 interface AgendaViewProps {
   agenda: AgendaEntry[];
+  users: User[];
   setAgenda: (agenda: AgendaEntry[]) => void;
   allDocuments: Documento[];
   currentUser: User;
@@ -28,13 +29,14 @@ interface AgendaViewProps {
   onAddLog: (action: string) => void;
 }
 
-const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, allDocuments, currentUser, effectiveUserId, isReadOnly, onAddLog }) => {
+const AgendaView: React.FC<AgendaViewProps> = ({ agenda, users, setAgenda, allDocuments, currentUser, effectiveUserId, isReadOnly, onAddLog }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const isAdmin = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
   const [filterType, setFilterType] = useState<'MY' | 'UNIT'>(isAdmin ? 'UNIT' : 'MY');
-  const todayStr = new Date().toISOString().split('T')[0];
-  const councilors = INITIAL_USERS.filter(u => {
+  const localNow = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000));
+  const todayStr = localNow.toISOString().split('T')[0];
+  const councilors = users.filter(u => {
     if (u.perfil !== 'CONSELHEIRO' && u.perfil !== 'SUPLENTE') return false;
     // Se for ADM, vê apenas os da sua unidade
     if (isAdmin) return u.unidade_id === currentUser.unidade_id;
@@ -62,21 +64,27 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, allDocuments
     }
 
     const now = new Date();
-    const todayStrLocal = now.toISOString().split('T')[0];
+    const localNow = new Date(now.getTime() - (now.getTimezoneOffset() * 60000));
+    const todayStrLocal = localNow.toISOString().split('T')[0];
     const currentTimeStrLocal = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
 
+    // Validação de Data/Hora Retroativa (Segurança de Auditoria)
     if (newEntry.data < todayStrLocal) {
-      alert("ERRO DE SEGURANÇA: Não é permitido realizar agendamentos em datas retroativas.");
+      alert("BLOQUEIO DE SEGURANÇA: Não é permitido realizar agendamentos em datas retroativas. O SIMCT exige conformidade com o cronograma atual.");
       return;
     }
 
-    if (newEntry.data === todayStrLocal && newEntry.hora < currentTimeStrLocal) {
-      alert("ERRO DE SEGURANÇA: O horário selecionado já passou. Não é permitido agendamento retroativo para o dia de hoje.");
+    if (newEntry.data === todayStrLocal && newEntry.hora < currentTimeStrLocal && !editingId) {
+      alert("BLOQUEIO DE SEGURANÇA: O horário selecionado já passou. Novos agendamentos ou reagendamentos devem ser para horários futuros.");
       return;
     }
 
+    // Validação de Conflito de Agenda (Intervalo Mínimo de 30min)
     const hasConflict = agenda.some(entry => {
+      if (entry.id === editingId) return false; // Ignora o próprio registro na edição
       if (entry.conselheiro_id !== newEntry.conselheiro_id || entry.data !== newEntry.data) return false;
+      if (entry.status === 'REAGENDADO') return false; // Ignora slots de reagendamento anterior
+
       const [h1, m1] = entry.hora.split(':').map(Number);
       const [h2, m2] = newEntry.hora.split(':').map(Number);
       const totalMinutes1 = h1 * 60 + m1;
@@ -84,8 +92,8 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, allDocuments
       return Math.abs(totalMinutes1 - totalMinutes2) < 30;
     });
 
-    if (hasConflict && !editingId) {
-      alert("CONFLITO DE AGENDA: Já existe um compromisso agendado para este conselheiro em um intervalo inferior a 30 minutos neste mesmo dia.");
+    if (hasConflict) {
+      alert("CONFLITO DE AGENDA: Já existe um compromisso agendado para este conselheiro em um intervalo inferior a 30 minutos. Por favor, ajuste o horário para evitar sobreposições.");
       return;
     }
 
@@ -96,7 +104,7 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, allDocuments
       const entry: AgendaEntry = { ...newEntry, id: `agenda-${Date.now()}`, unidade_id: currentUser.unidade_id } as AgendaEntry;
       await saveAgenda(entry);
       
-      const assignedUser = INITIAL_USERS.find(u => u.id === entry.conselheiro_id);
+      const assignedUser = users.find(u => u.id === entry.conselheiro_id);
       onAddLog(`AGENDA: Novo compromisso agendado para ${assignedUser?.nome}: ${entry.descricao} em ${entry.data} às ${entry.hora}.`);
     }
     
@@ -254,7 +262,7 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, allDocuments
 
       <div className="grid grid-cols-1 gap-4">
         {visibleEvents.map((item) => {
-          const assignedUser = INITIAL_USERS.find(u => u.id === item.conselheiro_id);
+          const assignedUser = users.find(u => u.id === item.conselheiro_id);
           return (
             <div key={item.id} className="bg-white p-8 rounded-[2rem] border-2 border-slate-50 flex flex-col md:flex-row gap-8 shadow-sm group hover:border-blue-100 transition-all">
                <div className="w-24 h-24 shrink-0 flex flex-col items-center justify-center bg-slate-50 rounded-[1.5rem] border border-slate-100 group-hover:bg-blue-50 group-hover:border-blue-100 transition-all">

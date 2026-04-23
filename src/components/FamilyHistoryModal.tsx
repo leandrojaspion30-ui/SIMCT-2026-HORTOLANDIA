@@ -7,11 +7,12 @@ import { INITIAL_USERS } from '../constants';
 interface FamilyHistoryModalProps {
   history: Documento[];
   agenda: AgendaEntry[];
+  users: User[];
   currentUser: User;
   onClose: () => void;
 }
 
-const FamilyHistoryModal: React.FC<FamilyHistoryModalProps> = ({ history, agenda, currentUser, onClose }) => {
+const FamilyHistoryModal: React.FC<FamilyHistoryModalProps> = ({ history, agenda, users, currentUser, onClose }) => {
   const isAdministrative = currentUser.perfil === 'ADMINISTRATIVO';
   
   // Ordenar histórico pelo mais recente
@@ -96,8 +97,8 @@ const FamilyHistoryModal: React.FC<FamilyHistoryModalProps> = ({ history, agenda
               {chronology.map((item, idx) => {
                 if (item.type === 'DOC') {
                   const doc = item.data as Documento;
-                  const ref = INITIAL_USERS.find(u => u.id === doc.conselheiro_referencia_id);
-                  const prov = INITIAL_USERS.find(u => u.id === doc.conselheiro_providencia_id);
+                  const ref = users.find(u => u.id === doc.conselheiro_referencia_id);
+                  const prov = users.find(u => u.id === doc.conselheiro_providencia_id);
 
                   return (
                     <div key={`doc-${doc.id}-${idx}`} className="p-6 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm hover:shadow-md transition-all group">
@@ -151,7 +152,7 @@ const FamilyHistoryModal: React.FC<FamilyHistoryModalProps> = ({ history, agenda
                   );
                 } else {
                   const entry = item.data as AgendaEntry;
-                  const assignedUser = INITIAL_USERS.find(u => u.id === entry.conselheiro_id);
+                  const assignedUser = users.find(u => u.id === entry.conselheiro_id);
                   
                   return (
                     <div key={`agenda-${entry.id}-${idx}`} className="p-6 bg-slate-50 border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-all group border-l-4 border-l-blue-500">

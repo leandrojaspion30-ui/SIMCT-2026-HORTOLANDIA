@@ -6,11 +6,12 @@ import { BAIRROS, INITIAL_USERS, STATUS_LABELS, ORIGENS_HIERARQUICAS, REDE_HORTO
 
 interface AdvancedSearchProps {
   documents: Documento[];
+  users: User[];
   currentUser: User;
   onSelectDoc: (id: string) => void;
 }
 
-const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ documents, currentUser, onSelectDoc }) => {
+const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ documents, users, currentUser, onSelectDoc }) => {
   const initialFilters = {
     categoria: '',
     genitora_nome: '',
@@ -85,7 +86,7 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ documents, currentUser,
               <label className="text-[10px] font-black text-slate-400 uppercase">Conselheiro de Referência</label>
               <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] font-bold" value={filters.conselheiro_ref_id} onChange={e => setFilters({...filters, conselheiro_ref_id: e.target.value})}>
                 <option value="">QUALQUER CONSELHEIRO</option>
-                {INITIAL_USERS.filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === currentUser.unidade_id).map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                {users.filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === currentUser.unidade_id).map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
               </select>
             </div>
             <div className="space-y-2">
