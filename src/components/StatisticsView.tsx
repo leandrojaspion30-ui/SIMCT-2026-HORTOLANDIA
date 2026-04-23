@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { Documento, AgendaEntry, User } from '../types';
 import { INITIAL_USERS, STATUS_LABELS } from '../constants';
-import { BarChart3, PieChart, TrendingUp, Users, FileText, ShieldAlert, Sparkles, UserCheck, Bell, PhoneCall, Activity } from 'lucide-react';
+import { BarChart3, PieChart, TrendingUp, Users, FileText, ShieldAlert, Sparkles, UserCheck, Bell, PhoneCall, Activity, Download, Printer } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell } from 'recharts';
 import AIStatisticsAnalyzer from './AIStatisticsAnalyzer';
 
@@ -189,9 +189,41 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       .sort((a, b) => b.docs - a.docs);
   }, [documents, agenda]);
 
+  const handleExportCSV = () => {
+    const headers = ["Conselheiro", "Unidade", "Documentos", "Disque 100", "Notificações", "Atendimentos", "Monitoramentos"];
+    const rows = counselorPerformance.map(p => [
+      p.nome,
+      `CT ${p.unidade}`,
+      p.docs,
+      p.disque100,
+      p.notifications,
+      p.attendances,
+      p.monitoring
+    ]);
+
+    const csvContent = [
+      headers.join(";"),
+      ...rows.map(row => row.map(val => `"${val}"`).join(";"))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `estatisticas_conselheiros_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
-    <div className="space-y-8 pb-20">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="space-y-8 pb-20 print:p-0 print:space-y-4">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 print:hidden">
         <div className="flex items-center gap-4">
           <div className="p-4 bg-violet-50 rounded-3xl text-violet-600">
             <BarChart3 className="w-8 h-8" />
@@ -201,72 +233,87 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
             <p className="text-[12px] font-bold text-slate-400 uppercase tracking-widest">Análise quantitativa da rede de proteção</p>
           </div>
         </div>
+        
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 rounded-2xl text-[11px] font-black uppercase text-slate-600 hover:bg-slate-50 transition-all shadow-sm active:scale-95"
+          >
+            <Download className="w-4 h-4" /> Exportar CSV
+          </button>
+          <button 
+            onClick={handlePrint}
+            className="flex items-center gap-2 px-6 py-3 bg-[#111827] rounded-2xl text-[11px] font-black uppercase text-white hover:bg-blue-600 transition-all shadow-sm active:scale-95"
+          >
+            <Printer className="w-4 h-4" /> Imprimir PDF
+          </button>
+        </div>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-100 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
             <FileText className="w-5 h-5 text-blue-500" />
-            <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Total de Casos</span>
+            <span className="text-[10px] sm:text-[11px] font-black text-slate-400 uppercase tracking-widest">Total de Casos</span>
           </div>
-          <p className="text-[42px] font-black text-slate-900 leading-none">{documents.length}</p>
+          <p className="text-3xl sm:text-[42px] font-black text-slate-900 leading-none">{documents.length}</p>
         </div>
-        <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-100 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
             <TrendingUp className="w-5 h-5 text-emerald-500" />
-            <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Em Monitoramento</span>
+            <span className="text-[10px] sm:text-[11px] font-black text-slate-400 uppercase tracking-widest">Em Monitoramento</span>
           </div>
-          <p className="text-[42px] font-black text-slate-900 leading-none">
+          <p className="text-3xl sm:text-[42px] font-black text-slate-900 leading-none">
             {documents.filter(d => d.status.includes('MONITORAMENTO')).length}
           </p>
         </div>
-        <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-100 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
             <ShieldAlert className="w-5 h-5 text-red-500" />
-            <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Aguardando Validação</span>
+            <span className="text-[10px] sm:text-[11px] font-black text-slate-400 uppercase tracking-widest">Aguardando Validação</span>
           </div>
-          <p className="text-[42px] font-black text-slate-900 leading-none">
+          <p className="text-3xl sm:text-[42px] font-black text-slate-900 leading-none">
             {documents.filter(d => d.status.includes('AGUARDANDO_VALIDACAO')).length}
           </p>
         </div>
-        <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-100 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
             <Sparkles className="w-5 h-5 text-purple-500" />
-            <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Requisições Art. 136 III</span>
+            <span className="text-[10px] sm:text-[11px] font-black text-slate-400 uppercase tracking-widest">Ações Art. 136 III</span>
           </div>
-          <p className="text-[42px] font-black text-slate-900 leading-none">{aiStats.requisicoes136III}</p>
+          <p className="text-3xl sm:text-[42px] font-black text-slate-900 leading-none">{aiStats.requisicoes136III}</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-          <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-8">Distribuição por Bairro</h3>
-          <div className="h-80">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm">
+          <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6 sm:mb-8">Distribuição por Bairro</h3>
+          <div className="h-64 sm:h-80 print:h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={bairroData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700, fill: '#94A3B8'}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700, fill: '#94A3B8'}} />
+              <BarChart data={bairroData} layout="vertical" margin={{ left: 0, right: 30 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
+                <XAxis type="number" hide />
+                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fontSize: 9, fontWeight: 700, fill: '#64748B'}} width={80} />
                 <Tooltip 
-                  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
+                  contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '9px', fontWeight: '900'}}
                 />
-                <Bar dataKey="value" fill="#2563EB" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="value" fill="#2563EB" radius={[0, 4, 4, 0]} barSize={12} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-          <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-8">Situação dos Procedimentos</h3>
-          <div className="h-80">
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm text-center">
+          <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6 sm:mb-8 md:text-left">Situação dos Procedimentos</h3>
+          <div className="h-64 sm:h-80 print:h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
               <RePieChart>
                 <Pie
                   data={statusData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
+                  innerRadius={50}
+                  outerRadius={80}
                   paddingAngle={5}
                   dataKey="value"
                 >
@@ -275,7 +322,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
                   ))}
                 </Pie>
                 <Tooltip 
-                  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
+                  contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '9px', fontWeight: '900'}}
                 />
               </RePieChart>
             </ResponsiveContainer>
@@ -288,7 +335,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         {/* Gráfico de Faixa Etária */}
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
           <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-8">Distribuição por Faixa Etária</h3>
-          <div className="h-80">
+          <div className="h-80 print:h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
               <RePieChart>
                 <Pie
@@ -357,7 +404,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
             <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Medidas Art. 101 (Criança/Adolescente)</h3>
             <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase">Proteção</span>
           </div>
-          <div className="h-80">
+          <div className="h-80 print:h-[450px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={measures101Data} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
@@ -384,7 +431,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
             <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Medidas Art. 129 (Pais/Responsáveis)</h3>
             <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-black uppercase">Orientação</span>
           </div>
-          <div className="h-80">
+          <div className="h-80 print:h-[450px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={measures129Data} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
@@ -413,7 +460,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
           <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Detalhamento das Medidas Aplicadas</h3>
           <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-black uppercase">Frequência de Ações</span>
         </div>
-        <div className="h-96">
+        <div className="h-96 print:h-[500px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={measuresData} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
@@ -441,7 +488,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
           <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Serviços Requisitados (Art. 136 III)</h3>
           <span className="px-3 py-1 bg-purple-50 text-purple-600 rounded-lg text-[10px] font-black uppercase">Detalhamento por Serviço</span>
         </div>
-        <div className="h-96">
+        <div className="h-96 print:h-[500px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={servicos136IIIData} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
@@ -468,7 +515,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         {/* Gráfico de Origem */}
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
           <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-8">Identificação da Origem</h3>
-          <div className="h-80">
+          <div className="h-80 print:h-[450px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={originsData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
@@ -486,7 +533,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         {/* Gráfico de Canais de Comunicação */}
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
           <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-8">Canais de Comunicado</h3>
-          <div className="h-80">
+          <div className="h-80 print:h-[450px]">
             <ResponsiveContainer width="100%" height="100%">
               <RePieChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                 <Pie
@@ -515,74 +562,128 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       <AIStatisticsAnalyzer stats={aiStats} totalDocs={documents.length} />
 
       {/* NOVA SEÇÃO: DESEMPENHO DOS CONSELHEIROS */}
-      <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm">
-        <div className="flex items-center gap-4 mb-10">
+      <div className="bg-white p-6 sm:p-10 rounded-[2rem] sm:rounded-[3rem] border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-4 mb-6 sm:mb-10">
           <div className="p-3 bg-blue-50 rounded-2xl text-blue-600">
             <UserCheck className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-[18px] font-black text-slate-900 uppercase tracking-tight">Desempenho dos Conselheiros</h3>
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Produtividade Individual por Categoria de Ação</p>
+            <h3 className="text-base sm:text-[18px] font-black text-slate-900 uppercase tracking-tight">Desempenho dos Conselheiros</h3>
+            <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Produtividade Individual por Categoria</p>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-separate border-spacing-y-3">
+        {/* LAYOUT PARA MOBILE (CARDS) */}
+        <div className="grid grid-cols-1 gap-4 md:hidden px-2">
+          {counselorPerformance.map(perf => (
+            <div key={perf.id} className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 space-y-4">
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center font-black text-blue-600 text-xs border border-slate-100 shadow-sm shrink-0">
+                    {perf.nome.substring(0, 2)}
+                  </div>
+                  <div>
+                    <h4 className="text-[14px] font-black text-slate-800 uppercase leading-none">{perf.nome}</h4>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 block">CT {perf.unidade}</span>
+                  </div>
+                </div>
+                <div className="bg-white px-3 py-1 rounded-lg border border-slate-100">
+                  <span className="text-[12px] font-black text-slate-800">{perf.docs} <span className="text-[9px] text-slate-400">DOCS</span></span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white p-3 rounded-2xl border border-slate-100 flex items-center gap-2">
+                  <PhoneCall className="w-3.5 h-3.5 text-red-400" />
+                  <div className="flex flex-col">
+                    <span className="text-[12px] font-black text-slate-700 leading-none">{perf.disque100}</span>
+                    <span className="text-[8px] font-bold text-slate-400 uppercase">D100</span>
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-2xl border border-slate-100 flex items-center gap-2">
+                  <Bell className="w-3.5 h-3.5 text-amber-400" />
+                  <div className="flex flex-col">
+                    <span className="text-[12px] font-black text-slate-700 leading-none">{perf.notifications}</span>
+                    <span className="text-[8px] font-bold text-slate-400 uppercase">Notif</span>
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-2xl border border-slate-100 flex items-center gap-2">
+                  <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                  <div className="flex flex-col">
+                    <span className="text-[12px] font-black text-slate-700 leading-none">{perf.attendances}</span>
+                    <span className="text-[8px] font-bold text-slate-400 uppercase">Atend</span>
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-2xl border border-slate-100 flex items-center gap-2">
+                  <TrendingUp className="w-3.5 h-3.5 text-violet-400" />
+                  <div className="flex flex-col">
+                    <span className="text-[12px] font-black text-slate-700 leading-none">{perf.monitoring}</span>
+                    <span className="text-[8px] font-bold text-slate-400 uppercase">Moni</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* LAYOUT PARA DESKTOP (TABELA) */}
+        <div className="hidden md:block overflow-x-auto -mx-6 sm:-mx-10 px-6 sm:px-10">
+          <table className="w-full text-left border-separate border-spacing-y-3 min-w-[750px]">
             <thead>
-              <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                <th className="px-6 py-4">Conselheiro</th>
-                <th className="px-6 py-4 text-center">Unidade</th>
-                <th className="px-6 py-4 text-center">Documentos</th>
-                <th className="px-6 py-4 text-center">Disque 100</th>
-                <th className="px-6 py-4 text-center">Notificações</th>
-                <th className="px-6 py-4 text-center">Atendimentos</th>
-                <th className="px-6 py-4 text-center">Monitoramentos</th>
+              <tr className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <th className="px-4 sm:px-6 py-4">Conselheiro</th>
+                <th className="px-4 sm:px-6 py-4 text-center">Unidade</th>
+                <th className="px-4 sm:px-6 py-4 text-center">Documentos</th>
+                <th className="px-4 sm:px-6 py-4 text-center">Disque 100</th>
+                <th className="px-4 sm:px-6 py-4 text-center">Notificações</th>
+                <th className="px-4 sm:px-6 py-4 text-center">Atendimentos</th>
+                <th className="px-4 sm:px-6 py-4 text-center">Monitoramentos</th>
               </tr>
             </thead>
             <tbody>
               {counselorPerformance.map(perf => (
                 <tr key={perf.id} className="group hover:bg-slate-50 transition-all">
-                  <td className="px-6 py-5 bg-slate-50 group-hover:bg-white rounded-l-2xl border-y border-l border-transparent group-hover:border-slate-100 transition-all">
+                  <td className="px-4 sm:px-6 py-5 bg-slate-50 group-hover:bg-white rounded-l-2xl border-y border-l border-transparent group-hover:border-slate-100 transition-all">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center font-black text-blue-600 text-xs border border-slate-100 shadow-sm">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white rounded-xl flex items-center justify-center font-black text-blue-600 text-[10px] sm:text-xs border border-slate-100 shadow-sm shrink-0">
                         {perf.nome.substring(0, 2)}
                       </div>
-                      <span className="text-[13px] font-black text-slate-700 uppercase">{perf.nome}</span>
+                      <span className="text-[12px] sm:text-[13px] font-black text-slate-700 uppercase whitespace-nowrap">{perf.nome}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-5 bg-slate-50 group-hover:bg-white border-y border-transparent group-hover:border-slate-100 text-center">
-                    <span className="px-3 py-1 bg-slate-200 text-slate-600 rounded-lg text-[10px] font-black uppercase">CT {perf.unidade}</span>
+                  <td className="px-4 sm:px-6 py-5 bg-slate-50 group-hover:bg-white border-y border-transparent group-hover:border-slate-100 text-center">
+                    <span className="px-2 sm:px-3 py-1 bg-slate-200 text-slate-600 rounded-lg text-[9px] sm:text-[10px] font-black uppercase">CT {perf.unidade}</span>
                   </td>
-                  <td className="px-6 py-5 bg-slate-50 group-hover:bg-white border-y border-transparent group-hover:border-slate-100 text-center">
+                  <td className="px-4 sm:px-6 py-5 bg-slate-50 group-hover:bg-white border-y border-transparent group-hover:border-slate-100 text-center">
                     <div className="flex flex-col items-center">
-                      <span className="text-[16px] font-black text-slate-800">{perf.docs}</span>
+                      <span className="text-[14px] sm:text-[16px] font-black text-slate-800">{perf.docs}</span>
                       <div className="w-8 h-1 bg-blue-100 rounded-full mt-1 overflow-hidden">
                         <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, (perf.docs / (documents.length || 1)) * 500)}%` }}></div>
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-5 bg-slate-50 group-hover:bg-white border-y border-transparent group-hover:border-slate-100 text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      <PhoneCall className="w-3.5 h-3.5 text-red-400" />
-                      <span className="text-[14px] font-black text-slate-600">{perf.disque100}</span>
+                  <td className="px-4 sm:px-6 py-5 bg-slate-50 group-hover:bg-white border-y border-transparent group-hover:border-slate-100 text-center">
+                    <div className="flex items-center justify-center gap-1 sm:gap-2">
+                      <PhoneCall className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-red-400" />
+                      <span className="text-[12px] sm:text-[14px] font-black text-slate-600">{perf.disque100}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-5 bg-slate-50 group-hover:bg-white border-y border-transparent group-hover:border-slate-100 text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      <Bell className="w-3.5 h-3.5 text-amber-400" />
-                      <span className="text-[14px] font-black text-slate-600">{perf.notifications}</span>
+                  <td className="px-4 sm:px-6 py-5 bg-slate-50 group-hover:bg-white border-y border-transparent group-hover:border-slate-100 text-center">
+                    <div className="flex items-center justify-center gap-1 sm:gap-2">
+                      <Bell className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400" />
+                      <span className="text-[12px] sm:text-[14px] font-black text-slate-600">{perf.notifications}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-5 bg-slate-50 group-hover:bg-white border-y border-transparent group-hover:border-slate-100 text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      <Activity className="w-3.5 h-3.5 text-emerald-400" />
-                      <span className="text-[14px] font-black text-slate-600">{perf.attendances}</span>
+                  <td className="px-4 sm:px-6 py-5 bg-slate-50 group-hover:bg-white border-y border-transparent group-hover:border-slate-100 text-center">
+                    <div className="flex items-center justify-center gap-1 sm:gap-2">
+                      <Activity className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400" />
+                      <span className="text-[12px] sm:text-[14px] font-black text-slate-600">{perf.attendances}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-5 bg-slate-50 group-hover:bg-white rounded-r-2xl border-y border-r border-transparent group-hover:border-slate-100 text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      <TrendingUp className="w-3.5 h-3.5 text-violet-400" />
-                      <span className="text-[14px] font-black text-slate-600">{perf.monitoring}</span>
+                  <td className="px-4 sm:px-6 py-5 bg-slate-50 group-hover:bg-white rounded-r-2xl border-y border-r border-transparent group-hover:border-slate-100 text-center">
+                    <div className="flex items-center justify-center gap-1 sm:gap-2">
+                      <TrendingUp className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-violet-400" />
+                      <span className="text-[12px] sm:text-[14px] font-black text-slate-600">{perf.monitoring}</span>
                     </div>
                   </td>
                 </tr>

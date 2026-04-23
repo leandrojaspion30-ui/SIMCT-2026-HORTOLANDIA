@@ -266,50 +266,50 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
 
   return (
     <div className="max-w-5xl mx-auto pb-20 animate-in fade-in duration-500">
-      <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-2xl overflow-hidden">
-        <header className="p-8 bg-[#111827] text-white flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-blue-600 rounded-2xl shadow-lg">
-              <ShieldCheck className="w-7 h-7 text-white" />
+      <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-200 shadow-2xl overflow-hidden">
+        <header className="p-5 sm:p-8 bg-[#111827] text-white flex justify-between items-center">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="p-2 sm:p-3 bg-blue-600 rounded-xl sm:rounded-2xl shadow-lg">
+              <ShieldCheck className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
             </div>
             <div>
-              <h2 className="text-[22px] font-black uppercase tracking-tight leading-none">{title || 'SIMCT - Novo Procedimento'}</h2>
-              <p className="text-[9px] font-bold text-blue-400 uppercase tracking-[0.2em] mt-1">Hortolândia - Gestão de Prontuários</p>
+              <h2 className="text-base sm:text-[22px] font-black uppercase tracking-tight leading-none">{title || 'SIMCT - Novo Procedimento'}</h2>
+              <p className="text-[8px] sm:text-[9px] font-bold text-blue-400 uppercase tracking-[0.2em] mt-1">Hortolândia - Gestão de Prontuários</p>
             </div>
           </div>
-          <button onClick={onCancel} className="p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all">
-            <X className="w-5 h-5" />
+          <button onClick={onCancel} className="p-2 sm:p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all">
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </header>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-8">
+        <form onSubmit={handleSubmit} className="p-5 sm:p-8 space-y-6 sm:space-y-8">
           <fieldset disabled={isReadOnly} className="contents">
             {/* BLOCO 1: NOVO DOCUMENTO (DATA E HORA) */}
-          <section className="space-y-6">
+          <section className="space-y-4 sm:space-y-6">
             <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
               <Calendar className="w-5 h-5 text-blue-600" />
-              <h3 className="text-[12px] font-black uppercase text-slate-800 tracking-widest">1. Novo Documento</h3>
+              <h3 className="text-[11px] sm:text-[12px] font-black uppercase text-slate-800 tracking-widest">1. Novo Documento</h3>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data do Documento *</label>
+                <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Data do Documento *</label>
                 <input 
                   type="date" 
                   required 
                   max={todayDate}
                   disabled={!!initialData && !isADM}
-                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-blue-500 disabled:opacity-50"
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-blue-500 disabled:opacity-50 text-sm sm:text-[15px]"
                   value={formData.data_aporte}
                   onChange={e => setFormData({...formData, data_aporte: e.target.value})}
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hora *</label>
+                <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Hora *</label>
                 <input 
                   type="time" 
                   required 
                   disabled={!!initialData && !isADM}
-                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-blue-500 disabled:opacity-50"
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-blue-500 disabled:opacity-50 text-sm sm:text-[15px]"
                   value={formData.hora_aporte}
                   onChange={e => setFormData({...formData, hora_aporte: e.target.value})}
                 />
@@ -318,18 +318,19 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
           </section>
 
           {/* BLOCO 2: ORIGEM E CANAL DO COMUNICADO (NOVO MODELO) */}
-          <section className="p-8 bg-slate-50/50 rounded-[2.5rem] border border-slate-100 space-y-6">
+          <section className="p-4 sm:p-8 bg-slate-50/50 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 space-y-4 sm:space-y-6">
             <div className="flex items-center gap-3">
               <ClipboardCheck className="w-6 h-6 text-blue-600" />
-              <h3 className="text-[13px] font-black uppercase text-slate-800 tracking-widest">Origem e Canal do Comunicado</h3>
+              <h3 className="text-[11px] sm:text-[13px] font-black uppercase text-slate-800 tracking-widest">2. Origem e Canal do Comunicado</h3>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
               {/* COLUNA 1: CATEGORIA */}
               <div className="space-y-2">
+                <label className="md:hidden text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoria</label>
                 <select 
                   required
-                  className="w-full p-5 bg-white border border-slate-200 rounded-[1.5rem] font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm cursor-pointer"
+                  className="w-full p-4 sm:p-5 bg-white border border-slate-200 rounded-xl sm:rounded-[1.5rem] font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm cursor-pointer"
                   value={formData.origem_categoria}
                   onChange={e => setFormData({...formData, origem_categoria: e.target.value, origem: ''})}
                 >
@@ -340,10 +341,11 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
 
               {/* COLUNA 2: INSTITUIÇÃO */}
               <div className="space-y-2">
+                <label className="md:hidden text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Instituição</label>
                 <select 
                   required
                   disabled={!formData.origem_categoria}
-                  className="w-full p-5 bg-white border border-slate-200 rounded-[1.5rem] font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full p-4 sm:p-5 bg-white border border-slate-200 rounded-xl sm:rounded-[1.5rem] font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   value={formData.origem}
                   onChange={e => setFormData({...formData, origem: e.target.value})}
                 >
@@ -356,9 +358,10 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
 
               {/* COLUNA 3: CANAL */}
               <div className="space-y-2">
+                <label className="md:hidden text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Canal</label>
                 <select 
                   required
-                  className="w-full p-5 bg-white border border-slate-200 rounded-[1.5rem] font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm cursor-pointer"
+                  className="w-full p-4 sm:p-5 bg-white border border-slate-200 rounded-xl sm:rounded-[1.5rem] font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm cursor-pointer"
                   value={formData.canal_comunicado}
                   onChange={e => setFormData({...formData, canal_comunicado: e.target.value})}
                 >
@@ -368,29 +371,35 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
               </div>
             </div>
 
-            {/* CAMPO ADICIONAL: Nº OFÍCIO (MANTIDO PARA INTEGRIDADE) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-              <input 
-                type="text" 
-                disabled={!!initialData && !isADM}
-                className="w-full p-4 bg-white border border-slate-100 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm disabled:opacity-50"
-                value={formData.tipo_documento}
-                onChange={e => setFormData({...formData, tipo_documento: e.target.value.toUpperCase()})}
-                placeholder="Nº OFÍCIO / DOCUMENTO (OPCIONAL)"
-              />
-              <select 
-                className="w-full p-4 bg-white border border-slate-100 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm cursor-pointer"
-                value={formData.notificacao}
-                onChange={e => setFormData({...formData, notificacao: e.target.value})}
-              >
-                <option value="">NOTIFICAÇÃO (OPCIONAL)</option>
-                {users
-                  .filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === currentUser.unidade_id && u.status === 'ATIVO')
-                  .sort((a, b) => a.nome.localeCompare(b.nome))
-                  .map(u => (
-                    <option key={u.id} value={u.nome.toUpperCase()}>{u.nome.toUpperCase()}</option>
-                  ))}
-              </select>
+            {/* CAMPO ADICIONAL: Nº OFÍCIO */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 pt-2">
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nº Ofício / Documento</label>
+                <input 
+                  type="text" 
+                  disabled={!!initialData && !isADM}
+                  className="w-full p-3 sm:p-4 bg-white border border-slate-100 rounded-xl font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm disabled:opacity-50"
+                  value={formData.tipo_documento}
+                  onChange={e => setFormData({...formData, tipo_documento: e.target.value.toUpperCase()})}
+                  placeholder="Nº OFÍCIO / DOCUMENTO"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Notificação (Opcional)</label>
+                <select 
+                  className="w-full p-3 sm:p-4 bg-white border border-slate-100 rounded-xl font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm cursor-pointer"
+                  value={formData.notificacao}
+                  onChange={e => setFormData({...formData, notificacao: e.target.value})}
+                >
+                  <option value="">NENHUMA...</option>
+                  {users
+                    .filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === currentUser.unidade_id && u.status === 'ATIVO')
+                    .sort((a, b) => a.nome.localeCompare(b.nome))
+                    .map(u => (
+                      <option key={u.id} value={u.nome.toUpperCase()}>{u.nome.toUpperCase()}</option>
+                    ))}
+                </select>
+              </div>
             </div>
           </section>
 

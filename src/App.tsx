@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart, Timer, Save } from 'lucide-react';
+import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart, Timer, Save, Eye, EyeOff } from 'lucide-react';
 import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada } from './types';
 import { INITIAL_USERS, UserWithPassword, INITIAL_AGENDA } from './constants';
 import { db, ensureAuthenticated } from './lib/firebase';
@@ -81,6 +81,7 @@ const App: React.FC = () => {
   const [acknowledgedReminderIds, setAcknowledgedReminderIds] = useState<string[]>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
   const [password, setPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [forceDirectEdit, setForceDirectEdit] = useState(false);
   const [allDocuments, setAllDocuments] = useState<Documento[]>([]);
@@ -700,8 +701,16 @@ const App: React.FC = () => {
               <Lock className="w-5 h-5 text-slate-300 absolute left-4 top-1/2 -translate-y-1/2" />
             </div>
             <div className="relative">
-              <input type="password" placeholder="SENHA" className="w-full p-4 pl-12 bg-slate-50 border border-[#E5E7EB] rounded-xl outline-none font-bold focus:border-[#2563EB] transition-all" value={password} onChange={e => setPassword(e.target.value)} />
+              <input type={showLoginPassword ? "text" : "password"} placeholder="SENHA" className="w-full p-4 pl-12 pr-12 bg-slate-50 border border-[#E5E7EB] rounded-xl outline-none font-bold focus:border-[#2563EB] transition-all" value={password} onChange={e => setPassword(e.target.value)} />
               <ShieldCheck className="w-5 h-5 text-slate-300 absolute left-4 top-1/2 -translate-y-1/2" />
+              <button 
+                type="button"
+                onClick={() => setShowLoginPassword(!showLoginPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors"
+                title={showLoginPassword ? "Ocultar Senha" : "Ver Senha"}
+              >
+                {showLoginPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
             </div>
             {loginError && <div className="p-4 bg-red-50 text-red-700 text-[12px] font-bold uppercase rounded-xl border border-red-100">{loginError}</div>}
             <button type="submit" className="w-full py-4 bg-[#111827] text-white rounded-xl font-bold uppercase text-[13px] tracking-widest shadow-lg hover:bg-[#2563EB] transition-all">Acessar SIMCT</button>
@@ -723,7 +732,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex bg-[#F9FAFB] font-['Inter'] overflow-x-hidden">
-      <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} ${isSidebarOpen ? 'lg:w-80' : 'lg:w-24 w-80'} bg-[#111827] transition-all duration-300 flex flex-col fixed inset-y-0 z-50 overflow-hidden`}>
+      <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} ${isSidebarOpen ? 'lg:w-80' : 'lg:w-24 w-80'} bg-[#111827] transition-all duration-300 flex flex-col fixed inset-y-0 z-50 overflow-hidden print:hidden`}>
         <div className="p-6 flex items-center gap-4 border-b border-white/5"><img src={CT_LOGO_URL} alt="SIMCT" className="w-10 h-10" />{(isSidebarOpen || window.innerWidth < 1024) && <span className="text-white font-bold text-[18px] uppercase">SIM<span className="text-[#2563EB]">CT</span></span>}</div>
         <nav className="flex-1 px-4 mt-8 space-y-2 overflow-y-auto min-h-0">
           <NavItem icon={<LayoutDashboard className="w-5 h-5" />} label="Painel Geral" active={activeTab === 'dashboard'} onClick={() => handleNavigate('dashboard')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
@@ -741,9 +750,9 @@ const App: React.FC = () => {
           <NavItem icon={<LogOut className="w-5 h-5" />} label="Sair" active={false} onClick={handleLogout} collapsed={!isSidebarOpen && window.innerWidth >= 1024} danger />
         </div>
       </aside>
-      <main className={`flex-1 ${isSidebarOpen ? 'lg:ml-80' : 'lg:ml-24 ml-0'} transition-all min-h-screen`}>
-        <div className="p-4 lg:p-8">
-          <header className="flex items-center justify-between mb-8 lg:mb-12">
+      <main className={`flex-1 ${isSidebarOpen ? 'lg:ml-80' : 'lg:ml-24 ml-0'} transition-all min-h-screen print:ml-0`}>
+        <div className="p-4 lg:p-8 print:p-0">
+          <header className="flex items-center justify-between mb-8 lg:mb-12 print:hidden">
             <div><h2 className="text-[10px] lg:text-[13px] font-medium text-[#4B5563] uppercase tracking-widest text-wrap max-w-[200px] lg:max-w-none">ZELAR PELO CUMPRIMENTO DO DIREITO</h2><div className="flex flex-col lg:flex-row lg:items-center gap-1 lg:gap-2 mt-1"><span className="text-[14px] lg:text-[16px] font-semibold text-[#111827] uppercase">{currentUser.nome}</span><span className="text-[12px] lg:text-[14px] font-medium text-[#2563EB] uppercase">({currentUser.cargo})</span></div></div>
             <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-3 bg-white border border-[#E5E7EB] rounded-xl shadow-sm hover:bg-slate-50">{isSidebarOpen ? <X className="w-5 h-5" /> : <LayoutDashboard className="w-5 h-5" />}</button>
           </header>

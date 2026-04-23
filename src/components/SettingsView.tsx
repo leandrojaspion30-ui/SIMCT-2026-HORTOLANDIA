@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User } from '../types';
-import { ShieldCheck, Lock, Save, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, Lock, Save, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 
 interface SettingsViewProps {
   currentUser: User;
@@ -11,6 +11,8 @@ interface SettingsViewProps {
 const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, onUpdatePassword }) => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [success, setSuccess] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -43,12 +45,19 @@ const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, onUpdatePasswo
             <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Nova Senha / Assinatura</label>
             <div className="relative">
               <input 
-                type="password"
-                className="w-full p-4 pl-12 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-indigo-500 transition-all font-bold"
+                type={showPassword ? "text" : "password"}
+                className="w-full p-4 pl-12 pr-12 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-indigo-500 transition-all font-bold"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
               />
               <Lock className="w-5 h-5 text-slate-300 absolute left-4 top-1/2 -translate-y-1/2" />
+              <button 
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
             </div>
           </div>
 
@@ -56,12 +65,19 @@ const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, onUpdatePasswo
             <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Confirmar Nova Senha</label>
             <div className="relative">
               <input 
-                type="password"
-                className="w-full p-4 pl-12 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-indigo-500 transition-all font-bold"
+                type={showConfirmPassword ? "text" : "password"}
+                className="w-full p-4 pl-12 pr-12 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-indigo-500 transition-all font-bold"
                 value={confirmPassword}
                 onChange={e => setConfirmPassword(e.target.value)}
               />
               <Lock className="w-5 h-5 text-slate-300 absolute left-4 top-1/2 -translate-y-1/2" />
+              <button 
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors"
+              >
+                {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
             </div>
           </div>
 
