@@ -214,6 +214,11 @@ const App: React.FC = () => {
           map[u.nome.toUpperCase()] = successor.nome.toUpperCase();
         }
       }
+
+      // 3. Mapeamento para Contas Excluídas (Para exclusão visual e lógica do sistema ativo)
+      if (u.status === 'EXCLUIDO' && !u.substituicao_permanente_por) {
+        map[u.nome.toUpperCase()] = `${u.nome.toUpperCase()} (EXCLUÍDO)`;
+      }
     });
     return map;
   }, [users]);
@@ -668,8 +673,20 @@ const App: React.FC = () => {
               return; 
             } 
             
-            if (user.status !== 'ATIVO') { 
-              setLoginError("ACESSO NEGADO: USUÁRIO INATIVO OU BLOQUEADO."); 
+            if (user.status === 'EXCLUIDO') {
+              setLoginError("CONTA EXCLUÍDA: Este usuário não possui mais acesso ao sistema.");
+              addLog('SISTEMA', `ACESSO NEGADO: Tentativa de login em conta excluída [${user.nome}].`, 'SEGURANÇA', user);
+              return;
+            }
+
+            if (user.status === 'BLOQUEADO') { 
+              setLoginError("CONTA BLOQUEADA: Acesso suspenso por decisão administrativa."); 
+              addLog('SISTEMA', `BLOQUEIO: Usuário bloqueado [${user.nome}] tentou acessar o sistema.`, 'SEGURANÇA', user);
+              return; 
+            }
+
+            if (user.status === 'INATIVO') { 
+              setLoginError("CONTA INATIVA: Este usuário não está mais em exercício."); 
               addLog('SISTEMA', `BLOQUEIO: Usuário inativo [${user.nome}] tentou acessar o sistema.`, 'SEGURANÇA', user);
               return; 
             }
@@ -722,7 +739,15 @@ const App: React.FC = () => {
                 {showLoginPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
-            {loginError && <div className="p-4 bg-red-50 text-red-700 text-[12px] font-bold uppercase rounded-xl border border-red-100">{loginError}</div>}
+            {loginError && (
+              <div className="p-4 bg-red-50 border-2 border-red-200 rounded-2xl flex items-start gap-3 animate-in shake duration-500">
+                <TriangleAlert className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] font-black text-red-700 uppercase tracking-tight leading-tight">{loginError}</span>
+                  <span className="text-[9px] font-bold text-red-500 uppercase tracking-widest">Procedimento de Segurança SICT</span>
+                </div>
+              </div>
+            )}
             <button type="submit" className="w-full py-4 bg-[#111827] text-white rounded-xl font-bold uppercase text-[13px] tracking-widest shadow-lg hover:bg-[#2563EB] transition-all">Acessar SIMCT</button>
           </form>
         </div>

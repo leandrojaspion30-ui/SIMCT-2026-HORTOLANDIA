@@ -136,7 +136,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     const nextIndex = (currentIndex + 1) % trioNames.length;
     const nextName = trioNames[nextIndex];
     
-    return users.find(u => u.nome.toUpperCase() === nextName && u.unidade_id === currentUser.unidade_id);
+    return users.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === nextName && u.unidade_id === currentUser.unidade_id);
   }, [trioNames, documents, todayDate, formData.notificacao, initialData, currentUser.unidade_id, users, nameMap]);
 
   const handleChildChange = (index: number, field: keyof ChildData, value: any) => {
