@@ -1,5 +1,5 @@
 export type UserRole = 'ADMIN' | 'CONSELHEIRO' | 'ADMINISTRATIVO' | 'SUPLENTE';
-export type UserStatus = 'ATIVO' | 'BLOQUEADO' | 'INATIVO' | 'AFASTADO';
+export type UserStatus = 'ATIVO' | 'BLOQUEADO' | 'INATIVO' | 'AFASTADO' | 'EXCLUIDO';
 export type ViolenceType = 'FÍSICA' | 'PSICOLÓGICA' | 'SEXUAL' | 'NEGLIGÊNCIA' | 'OUTROS';
 export type SuspectType = 'PAI' | 'MAE' | 'PADRASTO' | 'MADRASTA' | 'TIOS' | 'TERCEIROS' | 'DESCONHECIDO';
 
@@ -21,6 +21,7 @@ export interface User {
   substituicao_permanente_por?: string;
   termo_aceito_em?: string;
   termo_versao?: string;
+  deletado_em?: string;
 }
 
 export type DocumentStatus = 

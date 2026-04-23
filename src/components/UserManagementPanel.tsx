@@ -21,6 +21,7 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ users, onUpda
   const [editingUser, setEditingUser] = useState<UserWithPassword | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [tempDates, setTempDates] = useState({ start: '', end: '' });
+  const [userToDelete, setUserToDelete] = useState<UserWithPassword | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [replaceSuccess, setReplaceSuccess] = useState<{from: string, to: string} | null>(null);
   const [newUser, setNewUser] = useState<UserWithPassword>({
@@ -176,11 +177,7 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ users, onUpda
                     <Edit3 className="w-4 h-4" />
                   </button>
                   <button 
-                    onClick={() => {
-                      if (window.confirm(`SICT RH: Deseja EXCLUIR DEFINITIVAMENTE o usuário ${user.nome}? Esta ação não pode ser desfeita.`)) {
-                        onDeleteUser && onDeleteUser(user.id);
-                      }
-                    }}
+                    onClick={() => setUserToDelete(user)}
                     className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                     title="Excluir Usuário"
                   >
@@ -338,6 +335,41 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ users, onUpda
           </div>
         ))}
       </div>
+
+      {/* Modal: Confirmação de Exclusão */}
+      {userToDelete && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 backdrop-blur-md bg-slate-900/60 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-md w-full overflow-hidden border border-slate-100 animate-in zoom-in-95">
+            <div className="p-8 pb-4 flex flex-col items-center text-center space-y-4">
+              <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center">
+                <Trash2 className="w-10 h-10 text-red-600" />
+              </div>
+              <h3 className="text-[20px] font-black uppercase text-slate-800 tracking-tight">Confirmar Exclusão?</h3>
+              <p className="text-[13px] font-medium text-slate-500">
+                Você está prestes a excluir <span className="font-bold text-slate-900">{userToDelete.nome}</span>. 
+                O acesso será revogado imediatamente e ele será removido da distribuição, mas o histórico de ações será preservado.
+              </p>
+            </div>
+            <div className="p-8 pt-6 flex flex-col gap-3">
+              <button 
+                onClick={async () => {
+                  if (onDeleteUser) await onDeleteUser(userToDelete.id);
+                  setUserToDelete(null);
+                }}
+                className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-md hover:bg-red-700 transition-all"
+              >
+                Sim, Confirmar Exclusão
+              </button>
+              <button 
+                onClick={() => setUserToDelete(null)}
+                className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-200 transition-all font-bold"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal: Adicionar Novo Usuário */}
       {isAddingNew && (

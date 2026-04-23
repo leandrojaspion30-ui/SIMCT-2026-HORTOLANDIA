@@ -96,8 +96,9 @@ const App: React.FC = () => {
   const isLud = useMemo(() => currentUser?.nome === 'LUDIMILA' || currentUser?.nome === 'LEANDRO', [currentUser]);
 
   const filteredUsers = useMemo(() => {
-    if (isLud) return users;
-    return users.filter(u => (u.unidade_id || 1) === currentUser?.unidade_id);
+    const activeUsers = users.filter(u => u.status !== 'EXCLUIDO');
+    if (isLud) return activeUsers;
+    return activeUsers.filter(u => (u.unidade_id || 1) === currentUser?.unidade_id);
   }, [users, currentUser, isLud]);
 
   const imminentEvent = useMemo(() => {
@@ -145,15 +146,20 @@ const App: React.FC = () => {
     const unsubAgenda = syncCollection<AgendaEntry>('agenda', setAllAgenda);
     const unsubUsers = syncCollection<UserWithPassword>('users', (storedUsers) => {
       const baseUsers = INITIAL_USERS.map(u => ({ ...u, status: u.status || 'ATIVO', tentativas_login: 0 }));
-      if (storedUsers.length > 0) {
-        const merged = baseUsers.map(bu => {
+      
+      // Mapeamento de usuários existentes no Firestore para evitar duplicidade com INITIAL_USERS
+      const storedIds = new Set(storedUsers.map(s => s.id));
+      
+      // Mesclar: INITIAL_USERS (podendo ser sobrescrito pelo Firestore) + novos usuários exclusivos do Firestore
+      const merged = [
+        ...baseUsers.map(bu => {
           const found = storedUsers.find(s => s.id === bu.id);
           return found ? { ...bu, ...found } : bu;
-        });
-        setUsers(merged);
-      } else {
-        setUsers(baseUsers);
-      }
+        }),
+        ...storedUsers.filter(s => !baseUsers.some(bu => bu.id === s.id))
+      ];
+      
+      setUsers(merged);
     });
 
     const savedAck = localStorage.getItem('pt_ack_events');
@@ -322,7 +328,7 @@ const App: React.FC = () => {
     if (!currentUser) return null;
     const isAdministrative = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
     
-    if (activeTab === 'user-management' && (isLud || currentUser.nome === 'LEANDRO')) return (
+    if (activeTab === 'user-management' && isLud) return (
       <UserManagementPanel 
         users={filteredUsers} 
         onUpdateUser={async (id, upd) => {
@@ -507,12 +513,16 @@ const App: React.FC = () => {
         }} 
         onDeleteUser={async (id) => {
           const target = users.find(u => u.id === id);
-          addLog('SISTEMA', `RH: EXCLUSÃO DEFINITIVA de usuário: ${target?.nome || 'ID '+id}.`, 'SEGURANÇA');
-          await deleteUser(id);
+          if (!target) return;
+          addLog('SISTEMA', `RH: EXCLUSÃO DE USUÁRIO: ${target.nome}. Acesso revogado, histórico preservado.`, 'SEGURANÇA');
+          await saveUser({ id, status: 'EXCLUIDO', deletado_em: new Date().toISOString() });
+          setUsers(prev => prev.map(u => u.id === id ? { ...u, status: 'EXCLUIDO' } : u));
         }}
         onAddUser={async (newUser) => {
           addLog('SISTEMA', `RH: NOVO USUÁRIO ADICIONADO: ${newUser.nome}.`, 'SEGURANÇA');
           await saveUser(newUser);
+          // Adiciona localmente para reconhecimento instantâneo
+          setUsers(prev => [...prev.filter(u => u.id !== newUser.id), newUser]);
         }}
         onAddLog={(action) => addLog('SISTEMA', action, 'SEGURANÇA')} 
         setActiveTab={(tab: any) => setActiveTab(tab)}
@@ -742,9 +752,9 @@ const App: React.FC = () => {
           <NavItem icon={<Database className="w-5 h-5" />} label="Busca Ativa" active={activeTab === 'search'} onClick={() => handleNavigate('search')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
           <NavItem icon={<BarChart3 className="w-5 h-5" />} label="Relatórios" active={activeTab === 'statistics'} onClick={() => handleNavigate('statistics')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
           <NavItem icon={<ShieldCheck className="w-5 h-5" />} label="Minha Senha" active={activeTab === 'settings'} onClick={() => handleNavigate('settings')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
-          {(currentUser.nome === 'LUDIMILA' || currentUser.nome === 'LEANDRO') && <NavItem icon={<UserCog className="w-5 h-5" />} label="Gestão de RH" active={activeTab === 'user-management'} onClick={() => handleNavigate('user-management')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />}
+          {isLud && <NavItem icon={<UserCog className="w-5 h-5" />} label="Gestão de RH" active={activeTab === 'user-management'} onClick={() => handleNavigate('user-management')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />}
           {isLud && <NavItem icon={<History className="w-5 h-5" />} label="Audit Log" active={activeTab === 'logs'} onClick={() => handleNavigate('logs')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />}
-          {currentUser.nome === 'LEANDRO' && <NavItem icon={<PieChart className="w-5 h-5" />} label="Relatórios das Unidades" active={activeTab === 'global-statistics'} onClick={() => handleNavigate('global-statistics')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />}
+          {isLud && <NavItem icon={<PieChart className="w-5 h-5" />} label="Relatórios das Unidades" active={activeTab === 'global-statistics'} onClick={() => handleNavigate('global-statistics')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />}
         </nav>
         <div className="p-4 border-t border-white/5">
           <NavItem icon={<LogOut className="w-5 h-5" />} label="Sair" active={false} onClick={handleLogout} collapsed={!isSidebarOpen && window.innerWidth >= 1024} danger />
