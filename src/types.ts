@@ -165,6 +165,8 @@ export interface Documento {
   justificativa_distribuicao?: string;
   historico_versoes?: any[];
   notificacoes_trio?: string[];
+  numero_comunicado_violacao?: string;
+  numero_sipia?: string;
 }
 
 export interface Atribuicao136Entry {

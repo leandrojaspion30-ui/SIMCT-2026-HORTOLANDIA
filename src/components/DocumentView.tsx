@@ -496,6 +496,58 @@ const DocumentView: React.FC<DocumentViewProps> = ({
         )}
 
         <div className="p-10 space-y-10">
+          {/* IDENTIFICAÇÃO DO PROCEDIMENTO */}
+          <section className="space-y-6">
+            <div className="flex items-center gap-3 ml-2">
+              <Fingerprint className="w-5 h-5 text-slate-400" />
+              <h3 className="text-[12px] font-black uppercase text-slate-800 tracking-widest">Dados de Identificação do Procedimento</h3>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-1 hover:border-slate-300 transition-all">
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Nº Ofício / Documento</span>
+                <span className="text-[12px] font-black text-slate-800 uppercase">{doc.informacoes_documento || 'N/A'}</span>
+              </div>
+              <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-1 hover:border-slate-300 transition-all">
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Nº Com. de Violação</span>
+                <span className="text-[12px] font-black text-slate-800 uppercase">{doc.numero_comunicado_violacao || 'N/A'}</span>
+              </div>
+              <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-1 hover:border-slate-300 transition-all">
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Nº Procedimento / SIPIA</span>
+                <span className="text-[12px] font-black text-slate-800 uppercase">{doc.numero_sipia || 'N/A'}</span>
+              </div>
+              <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-1 hover:border-slate-300 transition-all">
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Origem do Caso</span>
+                <span className="text-[12px] font-black text-slate-800 uppercase">{doc.origem || 'N/A'}</span>
+              </div>
+              <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-1 hover:border-slate-300 transition-all">
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Data de Aporte</span>
+                <span className="text-[12px] font-black text-slate-800 uppercase">{doc.data_aporte ? new Date(doc.data_aporte).toLocaleDateString('pt-BR') : 'N/A'}</span>
+              </div>
+              <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-1 hover:border-slate-300 transition-all">
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Hora de Aporte</span>
+                <span className="text-[12px] font-black text-slate-800 uppercase">{doc.hora_aporte || 'N/A'}</span>
+              </div>
+              <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-1 hover:border-slate-300 transition-all">
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Canal de Comunicado</span>
+                <span className="text-[12px] font-black text-slate-800 uppercase">{doc.canal_comunicado || 'N/A'}</span>
+              </div>
+              <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-1 hover:border-slate-300 transition-all">
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Notificação</span>
+                <span className="text-[12px] font-black text-slate-800 uppercase">{doc.notificacao || 'NENHUMA'}</span>
+              </div>
+            </div>
+
+            <div className="p-6 bg-blue-50/50 rounded-3xl border border-blue-100 space-y-2">
+              <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                <LayoutList className="w-4 h-4" /> Relato Inicial / Objeto da Demanda
+              </label>
+              <div className="p-4 bg-white rounded-2xl border border-blue-100 text-[13px] font-bold text-slate-700 uppercase leading-relaxed whitespace-pre-wrap">
+                {doc.observacoes_iniciais || 'NÃO INFORMADO'}
+              </div>
+            </div>
+          </section>
+
           {/* DESPACHO RÁPIDO */}
           <section className="p-8 bg-slate-50 rounded-[2.5rem] border-2 border-slate-100 space-y-6">
             <div className="flex items-center gap-3">

@@ -28,7 +28,9 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     origem: initialData?.origem?.split(' - ')[1] || '',
     canal_comunicado: initialData?.canal_comunicado || '',
     notificacao: initialData?.notificacao || '',
-    tipo_documento: initialData?.informacoes_documento?.split(' - ')[0] || '',
+    tipo_documento: initialData?.informacoes_documento || '',
+    numero_comunicado_violacao: initialData?.numero_comunicado_violacao || '',
+    numero_sipia: initialData?.numero_sipia || '',
     data_aporte: initialData?.data_aporte || todayDate,
     hora_aporte: initialData?.hora_aporte || todayTime,
     genitora_nome: initialData?.genitora_nome || '',
@@ -237,7 +239,11 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     }
 
     const finalData = {
+      ...initialData,
       ...formData,
+      informacoes_documento: formData.tipo_documento,
+      numero_comunicado_violacao: formData.numero_comunicado_violacao,
+      numero_sipia: formData.numero_sipia,
       notificacao: formData.notificacao,
       origem: `${formData.origem_categoria} - ${formData.origem}`,
       crianca_nome: formData.criancas[0].nome,
@@ -371,8 +377,8 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
               </div>
             </div>
 
-            {/* CAMPO ADICIONAL: Nº OFÍCIO */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 pt-2">
+            {/* CAMPO ADICIONAL: Nº OFÍCIO E NOVOS CAMPOS */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 pt-2">
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nº Ofício / Documento</label>
                 <input 
@@ -384,6 +390,31 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   placeholder="Nº OFÍCIO / DOCUMENTO"
                 />
               </div>
+
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nº Com. de Violação</label>
+                <input 
+                  type="text" 
+                  disabled={!!initialData && !isADM}
+                  className="w-full p-3 sm:p-4 bg-white border border-slate-100 rounded-xl font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm disabled:opacity-50"
+                  value={formData.numero_comunicado_violacao}
+                  onChange={e => setFormData({...formData, numero_comunicado_violacao: e.target.value.toUpperCase()})}
+                  placeholder="Nº COMUNICADO"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nº Procedimento / SIPIA</label>
+                <input 
+                  type="text" 
+                  disabled={!!initialData && !isADM}
+                  className="w-full p-3 sm:p-4 bg-white border border-slate-100 rounded-xl font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm disabled:opacity-50"
+                  value={formData.numero_sipia}
+                  onChange={e => setFormData({...formData, numero_sipia: e.target.value.toUpperCase()})}
+                  placeholder="Nº SIPIA"
+                />
+              </div>
+
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Notificação (Opcional)</label>
                 <select 
