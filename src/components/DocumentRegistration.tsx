@@ -88,16 +88,13 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
   // DIRETRIZ 48: Escala baseada na data de HOJE
   const trioNames = useMemo(() => getEffectiveEscala(todayDate, todayTime, currentUser.unidade_id, nameMap), [todayDate, todayTime, currentUser.unidade_id, nameMap]);
 
-  // DIRETRIZ 51/52: Rodízio Alfabético Estável para Referência
+    // DIRETRIZ 51/52: Rodízio Alfabético Estável para Referência
   const assignedReference = useMemo(() => {
-    // Para manter a seqüência mesmo com substituições, usamos a lista original para definir a ordem
-    // Mas mapeamos para os nomes atuais (sucessores)
-    const baseNames = INITIAL_USERS
-      .filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === currentUser.unidade_id)
+    // Usamos a lista viva de usuários ativos para definir a ordem de rodízio
+    const activeConselheiros = users
+      .filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === currentUser.unidade_id && u.status === 'ATIVO')
       .map(u => u.nome.toUpperCase())
       .sort();
-    
-    const activeConselheiros = baseNames.map(name => (nameMap && nameMap[name]) ? nameMap[name] : name);
     
     if (initialData) return users.find(u => u.id === initialData.conselheiro_referencia_id);
     if (isReferenceLocked) return users.find(u => u.id === formData.conselheiro_referencia_id);
@@ -107,15 +104,14 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     const newCases = documents.filter(d => !d.is_manual_override);
     const lastAssignedRefId = newCases[0]?.conselheiro_referencia_id;
     const lastRefUser = users.find(u => u.id === lastAssignedRefId);
-    const lastRefNameRaw = lastRefUser?.nome.toUpperCase();
-    const lastRefName = (lastRefNameRaw && nameMap && nameMap[lastRefNameRaw]) ? nameMap[lastRefNameRaw] : lastRefNameRaw;
+    const lastRefName = lastRefUser?.nome.toUpperCase();
     
     const currentIndex = activeConselheiros.indexOf(lastRefName || '');
     const nextIndex = activeConselheiros.length > 0 ? (currentIndex + 1) % activeConselheiros.length : 0;
     const nextName = activeConselheiros[nextIndex];
     
-    return users.find(u => u.status === 'ATIVO' && (u.nome.toUpperCase() === nextName || (nameMap && nameMap[u.nome.toUpperCase()] === nextName)) && u.unidade_id === currentUser.unidade_id);
-  }, [isReferenceLocked, formData.conselheiro_referencia_id, documents, currentUser.unidade_id, users, nameMap, initialData, isManualReference]);
+    return users.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === nextName && u.unidade_id === currentUser.unidade_id);
+  }, [isReferenceLocked, formData.conselheiro_referencia_id, documents, currentUser.unidade_id, users, initialData, isManualReference]);
 
   const assignedImediata = useMemo(() => {
     // 1. PRIORIDADE ABSOLUTA: Notificação desbloqueia e define a imediata

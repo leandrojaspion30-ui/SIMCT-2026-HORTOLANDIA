@@ -215,6 +215,9 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUs
                      <div className="flex flex-wrap items-center gap-4 pt-2">
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-lg text-[10px] font-black text-[#2563EB] uppercase"><UserCheck className="w-3 h-3" /> Titular: {refCouncilor?.nome || 'N/A'}</div>
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[10px] font-black text-amber-700 uppercase"><ShieldCheck className="w-3 h-3" /> Imediata: {provCouncilor?.nome || 'N/A'}</div>
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black text-slate-500 uppercase">
+                          <Timer className="w-3 h-3" /> Registro: {doc.data_aporte ? new Date(doc.data_aporte).toLocaleDateString('pt-BR') : 'N/A'} às {doc.hora_aporte || '--:--'}
+                        </div>
                      </div>
                   </div>
                   <div className="shrink-0 flex items-center gap-3">
