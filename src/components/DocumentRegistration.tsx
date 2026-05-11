@@ -151,13 +151,30 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
       newChildren[index] = { ...newChildren[index], [field]: value };
     }
     
-    // DIRETRIZ 49: Bloqueio 18+
-    if (field === 'data_nascimento' && value) {
-      const birthDate = new Date(value);
-      const age = systemNow.getFullYear() - birthDate.getFullYear();
-      if (age >= 18) {
-        alert("⚠️ Bloqueio de Cadastro: Indivíduo com 18 anos ou mais identificado. O Conselho Tutelar não possui competência para novos procedimentos após a maioridade (Art. 2º do ECA).");
-        newChildren[index].data_nascimento = '';
+    // DIRETRIZ 49: Bloqueio 18+ (Aguardar preenchimento completo e plausível)
+    if (field === 'data_nascimento' && value && value.length === 10) {
+      const parts = value.split('-');
+      const birthYear = parseInt(parts[0]);
+      
+      // Só processa se o ano for plausível (> 1900)
+      if (birthYear > 1900) {
+        const birthDate = new Date(value + 'T12:00:00');
+        if (!isNaN(birthDate.getTime())) {
+          const today = new Date();
+          let age = today.getFullYear() - birthYear;
+          if (today.getMonth() < birthDate.getMonth() || (today.getMonth() === birthDate.getMonth() && today.getDate() < birthDate.getDate())) {
+            age--;
+          }
+          
+          if (age >= 18) {
+            // Em vez de alert, marcamos um aviso visual
+            newChildren[index].error = "⚠️ MAIORIDADE IDENTIFICADA: O Conselho Tutelar não possui competência após a maioridade (Art. 2º do ECA).";
+          } else {
+            newChildren[index].error = undefined;
+          }
+        }
+      } else {
+        newChildren[index].error = undefined;
       }
     }
     
@@ -180,13 +197,21 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
   };
 
   const getAgeInfo = (birthDate: string) => {
-    if (!birthDate) return null;
+    if (!birthDate || birthDate.length < 10) return null;
+    const parts = birthDate.split('-');
+    const year = parseInt(parts[0]);
+    if (isNaN(year) || year < 1900) return null;
+
     const today = new Date();
-    const birth = new Date(birthDate);
+    const birth = new Date(birthDate + 'T12:00:00');
+    if (isNaN(birth.getTime())) return null;
+    
     let age = today.getFullYear() - birth.getFullYear();
     const m = today.getMonth() - birth.getMonth();
     if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
     
+    if (age < 0) return null;
+
     return {
       age,
       isPrimeiraInfancia: age >= 0 && age <= 6,
@@ -198,6 +223,12 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     e.preventDefault();
     if (!formData.relato_inicial.trim()) {
       setShowRelatoError(true);
+      return;
+    }
+
+    const hasAgeError = formData.criancas.some(c => !!c.error);
+    if (hasAgeError) {
+      alert("⚠️ Existem erros de idade no cadastro (indivíduos com 18 anos ou mais). Corrija para prosseguir.");
       return;
     }
 
@@ -534,10 +565,14 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                       <input 
                         type="date" 
                         required={!crianca.nao_informado} 
-                        className="w-full p-3 bg-white border border-slate-200 rounded-lg font-bold outline-none focus:border-blue-500" 
+                        max={todayDate}
+                        className={`w-full p-3 bg-white border rounded-lg font-bold outline-none focus:border-blue-500 ${crianca.error ? 'border-red-500 bg-red-50' : 'border-slate-200'}`} 
                         value={crianca.data_nascimento} 
                         onChange={e => handleChildChange(idx, 'data_nascimento', e.target.value)} 
                       />
+                      {crianca.error && (
+                        <p className="text-[8px] font-black text-red-600 uppercase leading-tight animate-in fade-in slide-in-from-top-1">{crianca.error}</p>
+                      )}
                     </div>
                     <div className="space-y-1">
                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">CPF</label>
@@ -563,7 +598,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                     </div>
                   </div>
 
-                  {ageInfo && (
+                  {ageInfo && !crianca.error && (
                     <div className="flex flex-wrap gap-2 items-center mt-2">
                       <span className="px-3 py-1 bg-white border border-slate-200 text-slate-700 rounded-full text-[10px] font-black uppercase shadow-sm">
                         Idade: {ageInfo.age} Anos

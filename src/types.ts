@@ -197,6 +197,7 @@ export interface ChildData {
   genero_identidade: string;
   idade_calculada?: number;
   categoria_idade?: string;
+  error?: string;
 }
 
 export interface SipiaViolation {
