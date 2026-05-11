@@ -32,6 +32,9 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
   const [editingUser, setEditingUser] = useState<UserWithPassword | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [tempDates, setTempDates] = useState({ start: '', end: '' });
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [pendingResetAction, setPendingResetAction] = useState<'ONLY_RESET' | 'BACKUP_AND_RESET'>('ONLY_RESET');
   const [userToDelete, setUserToDelete] = useState<UserWithPassword | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [replaceSuccess, setReplaceSuccess] = useState<{from: string, to: string} | null>(null);
@@ -395,20 +398,10 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                   <Download className="w-4 h-4" /> Salvar Backup (JSON)
                 </button>
                 <button 
-                   onClick={async () => {
-                     const step1 = window.confirm("SICT SEGURANÇA: Deseja realizar o BACKUP e depois o RESET TOTAL de todos os procedimentos?");
-                     if (step1) {
-                       const backupOk = handleExportData();
-                       if (backupOk) {
-                         const step2 = window.confirm("BACKUP REALIZADO! Agora, deseja realmente APAGAR TODOS os procedimentos do banco de dados? Esta ação não tem volta.");
-                         if (step2) {
-                           setIsProcessing(true);
-                           await onResetDocuments();
-                           setIsProcessing(false);
-                           alert("SISTEMA RESETADO: Backup salvo e banco de dados limpo.");
-                         }
-                       }
-                     }
+                   onClick={() => {
+                     setPendingResetAction('BACKUP_AND_RESET');
+                     setResetConfirmText('');
+                     setIsResetModalOpen(true);
                    }}
                    disabled={isProcessing}
                    className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest flex items-center gap-2 hover:bg-black transition-all shadow-lg disabled:opacity-50"
@@ -418,17 +411,10 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
               </div>
             </div>
             <button 
-              onClick={async () => {
-                const step1 = window.confirm("SICT SEGURANÇA: Esta ação é IRREVERSÍVEL. Deseja realmente APAGAR TODOS os procedimentos?");
-                if (step1) {
-                  const step2 = window.confirm("ÚLTIMO AVISO: Todos os registros de documentos, crianças e históricos serão excluídos. Você já salvou o backup? Confirmar RESET TOTAL?");
-                  if (step2) {
-                    setIsProcessing(true);
-                    await onResetDocuments();
-                    setIsProcessing(false);
-                    alert("SISTEMA RESETADO: Todos os procedimentos foram excluídos com sucesso.");
-                  }
-                }
+              onClick={() => {
+                setPendingResetAction('ONLY_RESET');
+                setResetConfirmText('');
+                setIsResetModalOpen(true);
               }}
               disabled={isProcessing}
               className="px-10 py-5 bg-red-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-3 hover:bg-black transition-all shadow-xl shadow-red-100 active:scale-95 disabled:opacity-50"
@@ -437,6 +423,75 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
             </button>
           </div>
         </section>
+      )}
+
+      {/* Modal: Confirmação de Reset Total (SEGURANÇA) */}
+      {isResetModalOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 backdrop-blur-xl bg-slate-900/80 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[3rem] shadow-2xl max-w-md w-full overflow-hidden border-4 border-red-600 animate-in zoom-in-95">
+            <div className="p-10 flex flex-col items-center text-center space-y-6">
+              <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center animate-pulse">
+                <RefreshCw className="w-12 h-12 text-red-600" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-[24px] font-black uppercase text-slate-900 tracking-tight">Confirmação Crítica</h3>
+                <p className="text-[14px] font-bold text-red-600 uppercase tracking-widest">Ação Irreversível de Segurança</p>
+              </div>
+              
+              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 w-full">
+                <p className="text-[12px] font-bold text-slate-500 uppercase leading-relaxed text-left">
+                  {pendingResetAction === 'BACKUP_AND_RESET' 
+                    ? "O sistema realizará o BACKUP e depois apagará TODOS os procedimentos e monitoramentos registrados." 
+                    : "O sistema apagará TODOS os procedimentos e monitoramentos registrados sem backup automático."}
+                </p>
+                <p className="mt-4 text-[11px] font-black text-slate-800 uppercase text-left">
+                  Para confirmar, digite a palavra <span className="text-red-600">RESET</span> abaixo:
+                </p>
+                <input 
+                  autoFocus
+                  type="text" 
+                  className="w-full mt-3 p-4 bg-white border-2 border-red-100 rounded-2xl font-black text-center text-lg uppercase outline-none focus:border-red-600 transition-all"
+                  value={resetConfirmText}
+                  placeholder="DIGITE AQUI..."
+                  onChange={e => setResetConfirmText(e.target.value.toUpperCase())}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 w-full pt-4">
+                <button 
+                  disabled={resetConfirmText !== 'RESET' || isProcessing}
+                  onClick={async () => {
+                    setIsProcessing(true);
+                    try {
+                      if (pendingResetAction === 'BACKUP_AND_RESET') {
+                        const backupOk = handleExportData();
+                        if (!backupOk) throw new Error("Erro no backup");
+                      }
+                      
+                      if (onResetDocuments) await onResetDocuments();
+                      alert("SISTEMA REINICIALIZADO: Banco de dados limpo com sucesso.");
+                      setIsResetModalOpen(false);
+                    } catch (error) {
+                      alert("Falha crítica no processo de reset.");
+                    } finally {
+                      setIsProcessing(false);
+                      setResetConfirmText('');
+                    }
+                  }}
+                  className="w-full py-5 bg-red-600 text-white rounded-2xl font-black text-[13px] uppercase tracking-widest shadow-xl shadow-red-100 hover:bg-slate-900 transition-all disabled:opacity-30 disabled:grayscale"
+                >
+                  Confirmar Reset Total
+                </button>
+                <button 
+                  onClick={() => setIsResetModalOpen(false)}
+                  className="w-full py-5 text-slate-400 font-black text-[11px] uppercase tracking-widest hover:text-slate-900 transition-all"
+                >
+                  Cancelar Operação
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal: Confirmação de Exclusão */}

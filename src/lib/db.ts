@@ -55,11 +55,16 @@ export const deleteDocument = async (id: string) => {
 
 export const deleteAllDocuments = async () => {
   await ensureAuthenticated();
-  const snapshot = await getDocs(collection(db, 'documents'));
   const batch = writeBatch(db);
-  snapshot.docs.forEach((docRef) => {
-    batch.delete(docRef.ref);
-  });
+  
+  // Deletar Documentos
+  const docsSnapshot = await getDocs(collection(db, 'documents'));
+  docsSnapshot.docs.forEach((d) => batch.delete(d.ref));
+  
+  // Deletar Monitoramentos
+  const monitoringSnapshot = await getDocs(collection(db, 'monitoring'));
+  monitoringSnapshot.docs.forEach((d) => batch.delete(d.ref));
+
   await batch.commit();
 };
 
