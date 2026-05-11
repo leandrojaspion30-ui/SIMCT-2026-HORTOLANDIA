@@ -16,14 +16,16 @@ interface DocumentRegistrationProps {
   isReadOnly?: boolean;
   title?: string;
   nameMap?: Record<string, string>;
+  allUsers?: User[];
 }
 
-const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, users, agenda, currentUser, onSubmit, onCancel, initialData, isReadOnly, title, nameMap }) => {
+const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, users, agenda, currentUser, onSubmit, onCancel, initialData, isReadOnly, title, nameMap, allUsers = users }) => {
   const systemNow = new Date();
   const todayDate = systemNow.toISOString().split('T')[0];
   const todayTime = systemNow.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
   const [formData, setFormData] = useState({
+    unidade_id: initialData?.unidade_id || currentUser.unidade_id || 1,
     origem_categoria: initialData?.origem?.split(' - ')[0] || '',
     origem: initialData?.origem?.split(' - ')[1] || '',
     canal_comunicado: initialData?.canal_comunicado || '',
@@ -74,68 +76,70 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
         genitora_nome: existingDoc.genitora_nome,
         bairro: existingDoc.bairro,
         conselheiro_referencia_id: existingDoc.conselheiro_referencia_id,
+        unidade_id: existingDoc.unidade_id || prev.unidade_id,
         criancas: existingDoc.criancas || prev.criancas
       }));
       setIsReferenceLocked(true);
-      setIsManualReference(false);
+      setIsManualReference(isADM);
       setFamilyHistory(history);
     } else {
       setIsReferenceLocked(false);
       setFamilyHistory([]);
     }
-  }, [formData.cpf_genitora, formData.criancas, documents]);
+  }, [formData.cpf_genitora, formData.criancas, documents, isADM]);
 
-  // DIRETRIZ 48: Escala baseada na data de HOJE
-  const trioNames = useMemo(() => getEffectiveEscala(todayDate, todayTime, currentUser.unidade_id, nameMap), [todayDate, todayTime, currentUser.unidade_id, nameMap]);
+  // DIRETRIZ 48: Escala baseada na data do Aporte
+  const trioNames = useMemo(() => getEffectiveEscala(formData.data_aporte, formData.hora_aporte, formData.unidade_id, nameMap), [formData.data_aporte, formData.hora_aporte, formData.unidade_id, nameMap]);
 
     // DIRETRIZ 51/52: Rodízio Alfabético Estável para Referência
   const assignedReference = useMemo(() => {
     // Usamos a lista viva de usuários ativos para definir a ordem de rodízio
-    const activeConselheiros = users
-      .filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === currentUser.unidade_id && u.status === 'ATIVO')
+    const activeConselheiros = allUsers
+      .filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === formData.unidade_id && u.status === 'ATIVO')
       .map(u => u.nome.toUpperCase())
       .sort();
     
-    if (initialData) return users.find(u => u.id === initialData.conselheiro_referencia_id);
-    if (isReferenceLocked) return users.find(u => u.id === formData.conselheiro_referencia_id);
-    if (isManualReference && formData.conselheiro_referencia_id) return users.find(u => u.id === formData.conselheiro_referencia_id);
+    if (initialData) return allUsers.find(u => u.id === initialData.conselheiro_referencia_id);
+    if (isReferenceLocked) return allUsers.find(u => u.id === formData.conselheiro_referencia_id);
+    if (isManualReference && formData.conselheiro_referencia_id) return allUsers.find(u => u.id === formData.conselheiro_referencia_id);
     
     // Filtra casos novos (sem histórico)
-    const newCases = documents.filter(d => !d.is_manual_override);
+    const newCases = documents.filter(d => !d.is_manual_override && d.unidade_id === formData.unidade_id);
     const lastAssignedRefId = newCases[0]?.conselheiro_referencia_id;
-    const lastRefUser = users.find(u => u.id === lastAssignedRefId);
-    const lastRefName = lastRefUser?.nome.toUpperCase();
-    
+    const lastRefUser = allUsers.find(u => u.id === lastAssignedRefId);
+    const lastRefNameRaw = lastRefUser?.nome.toUpperCase();
+    const lastRefName = (lastRefNameRaw && nameMap && nameMap[lastRefNameRaw]) ? nameMap[lastRefNameRaw] : lastRefNameRaw;
+
     const currentIndex = activeConselheiros.indexOf(lastRefName || '');
     const nextIndex = activeConselheiros.length > 0 ? (currentIndex + 1) % activeConselheiros.length : 0;
     const nextName = activeConselheiros[nextIndex];
     
-    return users.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === nextName && u.unidade_id === currentUser.unidade_id);
-  }, [isReferenceLocked, formData.conselheiro_referencia_id, documents, currentUser.unidade_id, users, initialData, isManualReference]);
+    return allUsers.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === nextName && u.unidade_id === formData.unidade_id);
+  }, [allUsers, documents, isReferenceLocked, formData.conselheiro_referencia_id, initialData, formData.unidade_id, isManualReference, nameMap]);
 
   const assignedImediata = useMemo(() => {
     // 1. PRIORIDADE ABSOLUTA: Notificação desbloqueia e define a imediata
     if (formData.notificacao) {
-      return users.find(u => u.nome.toUpperCase() === formData.notificacao.toUpperCase() && u.unidade_id === currentUser.unidade_id);
+      return allUsers.find(u => u.nome.toUpperCase() === formData.notificacao.toUpperCase() && u.unidade_id === formData.unidade_id);
     }
 
-    if (initialData) return users.find(u => u.id === initialData.conselheiro_providencia_id);
+    if (initialData) return allUsers.find(u => u.id === initialData.conselheiro_providencia_id);
     
     // 2. Lógica de Distribuição Justa (Rodízio)
-    const todayDocs = documents.filter(d => d.data_aporte === todayDate);
+    const todayDocs = documents.filter(d => d.data_aporte === formData.data_aporte && d.unidade_id === formData.unidade_id);
     const lastAutoDoc = todayDocs.find(d => !d.notificacao);
     
     const lastImediataId = lastAutoDoc?.conselheiro_providencia_id;
-    const lastImediataUser = users.find(u => u.id === lastImediataId);
+    const lastImediataUser = allUsers.find(u => u.id === lastImediataId);
     const lastImediataNameRaw = lastImediataUser?.nome.toUpperCase();
     const lastImediataName = (lastImediataNameRaw && nameMap && nameMap[lastImediataNameRaw]) ? nameMap[lastImediataNameRaw] : lastImediataNameRaw;
     
     const currentIndex = trioNames.indexOf(lastImediataName || '');
-    const nextIndex = (currentIndex + 1) % trioNames.length;
+    const nextIndex = trioNames.length > 0 ? (currentIndex + 1) % trioNames.length : 0;
     const nextName = trioNames[nextIndex];
     
-    return users.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === nextName && u.unidade_id === currentUser.unidade_id);
-  }, [trioNames, documents, todayDate, formData.notificacao, initialData, currentUser.unidade_id, users, nameMap]);
+    return allUsers.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === nextName && u.unidade_id === formData.unidade_id);
+  }, [trioNames, documents, formData.data_aporte, formData.notificacao, initialData, formData.unidade_id, allUsers, nameMap]);
 
   const handleChildChange = (index: number, field: keyof ChildData, value: any) => {
     const newChildren = [...formData.criancas];
@@ -151,13 +155,17 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
       newChildren[index] = { ...newChildren[index], [field]: value };
     }
     
-    // DIRETRIZ 49: Bloqueio 18+ (Aguardar preenchimento completo e plausível)
+    // DIRETRIZ 49: Bloqueio 18+ (Só processa se a data estiver completa e plausível)
     if (field === 'data_nascimento' && value && value.length === 10) {
       const parts = value.split('-');
       const birthYear = parseInt(parts[0]);
+      const birthMonth = parseInt(parts[1]);
+      const birthDay = parseInt(parts[2]);
       
-      // Só processa se o ano for plausível (> 1900)
-      if (birthYear > 1900) {
+      const currentYear = new Date().getFullYear();
+
+      // Só processa se o ano for plausível e a data for válida
+      if (birthYear > 1900 && birthYear <= currentYear && birthMonth > 0 && birthMonth <= 12 && birthDay > 0 && birthDay <= 31) {
         const birthDate = new Date(value + 'T12:00:00');
         if (!isNaN(birthDate.getTime())) {
           const today = new Date();
@@ -167,7 +175,6 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
           }
           
           if (age >= 18) {
-            // Em vez de alert, marcamos um aviso visual
             newChildren[index].error = "⚠️ MAIORIDADE IDENTIFICADA: O Conselho Tutelar não possui competência após a maioridade (Art. 2º do ECA).";
           } else {
             newChildren[index].error = undefined;
@@ -268,6 +275,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     const finalData = {
       ...initialData,
       ...formData,
+      unidade_id: formData.unidade_id,
       informacoes_documento: formData.tipo_documento,
       numero_comunicado_violacao: formData.numero_comunicado_violacao,
       numero_sipia: formData.numero_sipia,
@@ -279,8 +287,8 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
       hora_rece_bimento: formData.hora_aporte,
       periodo_rece_bimento: classifyTurno(formData.data_aporte, formData.hora_aporte),
       conselheiro_referencia_id: initialData ? initialData.conselheiro_referencia_id : ((isManualReference || isReferenceLocked) ? formData.conselheiro_referencia_id : (assignedReference?.id || formData.conselheiro_referencia_id)),
-      is_manual_override: initialData ? initialData.is_manual_override : isManualReference,
-      conselheiro_providencia_id: assignedImediata?.id,
+      is_manual_override: initialData ? initialData.is_manual_override : (isManualReference || isReferenceLocked),
+      conselheiro_providencia_id: assignedImediata?.id || '',
       conselheiros_providencia_nomes: finalValidators,
       status: initialData ? initialData.status : (formData.notificacao ? [`NOTIFICACAO_${formData.notificacao.toUpperCase()}` as DocumentStatus] : ['AGUARDANDO_ANALISE']),
       justificativa_distribuicao: initialData 
@@ -291,6 +299,16 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 ? `📌 Referência mantida por vínculo histórico.` 
                 : `✅ Atribuído por Rodízio Alfabético.`))
     };
+
+    if (!finalData.conselheiro_referencia_id) {
+      alert("⚠️ Falha na designação: Não foi possível determinar o Conselheiro de Referência. Verifique se o CT possui conselheiros ativos.");
+      return;
+    }
+
+    if (!finalData.conselheiro_providencia_id) {
+      alert("⚠️ Falha na designação: Imediata não localizada. Verifique se há escala definida para este horário ou se o conselheiro notificado está ativo.");
+      return;
+    }
 
     onSubmit(finalData, []);
   };
@@ -357,7 +375,25 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
               <h3 className="text-[11px] sm:text-[13px] font-black uppercase text-slate-800 tracking-widest">2. Origem e Canal do Comunicado</h3>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 sm:gap-4">
+              {/* NOVO: SELECT UNIDADE PARA ADMINS */}
+              <div className="space-y-2">
+                <label className="md:hidden text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Unidade CT</label>
+                <select 
+                  required
+                  disabled={!!initialData}
+                  className="w-full p-4 sm:p-5 bg-white border border-slate-200 rounded-xl sm:rounded-[1.5rem] font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm cursor-pointer disabled:opacity-50"
+                  value={formData.unidade_id}
+                  onChange={e => {
+                    const newId = parseInt(e.target.value);
+                    setFormData({...formData, unidade_id: newId, bairro: '', conselheiro_referencia_id: '', notificacao: ''});
+                  }}
+                >
+                  <option value={1}>CONSELHO TUTELAR 1</option>
+                  <option value={2}>CONSELHO TUTELAR 2</option>
+                </select>
+              </div>
+
               {/* COLUNA 1: CATEGORIA */}
               <div className="space-y-2">
                 <label className="md:hidden text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoria</label>
@@ -450,8 +486,8 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   onChange={e => setFormData({...formData, notificacao: e.target.value})}
                 >
                   <option value="">NENHUMA...</option>
-                  {users
-                    .filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === currentUser.unidade_id && u.status === 'ATIVO')
+                  {allUsers
+                    .filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === formData.unidade_id && u.status === 'ATIVO')
                     .sort((a, b) => a.nome.localeCompare(b.nome))
                     .map(u => (
                       <option key={u.id} value={u.nome.toUpperCase()}>{u.nome.toUpperCase()}</option>
@@ -509,7 +545,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   onChange={e => setFormData({...formData, bairro: e.target.value})}
                 >
                   <option value="">Selecione o Bairro...</option>
-                  {getBairrosByUnidade(currentUser.unidade_id).map(b => <option key={b} value={b}>{b}</option>)}
+                  {getBairrosByUnidade(formData.unidade_id).map(b => <option key={b} value={b}>{b}</option>)}
                 </select>
               </div>
             </div>
@@ -672,8 +708,8 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   onChange={e => setFormData({...formData, conselheiro_referencia_id: e.target.value})}
                 >
                   <option value="">Selecione o Conselheiro...</option>
-                  {users
-                    .filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.status === 'ATIVO' && u.unidade_id === currentUser.unidade_id)
+                  {allUsers
+                    .filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.status === 'ATIVO' && u.unidade_id === formData.unidade_id)
                     .sort((a, b) => a.nome.localeCompare(b.nome))
                     .map(u => (
                       <option key={u.id} value={u.id}>{u.nome.toUpperCase()}</option>
