@@ -55,17 +55,29 @@ export const deleteDocument = async (id: string) => {
 
 export const deleteAllDocuments = async () => {
   await ensureAuthenticated();
-  const batch = writeBatch(db);
   
-  // Deletar Documentos
-  const docsSnapshot = await getDocs(collection(db, 'documents'));
-  docsSnapshot.docs.forEach((d) => batch.delete(d.ref));
+  const collectionsToClear = ['documents', 'monitoring'];
   
-  // Deletar Monitoramentos
-  const monitoringSnapshot = await getDocs(collection(db, 'monitoring'));
-  monitoringSnapshot.docs.forEach((d) => batch.delete(d.ref));
+  for (const collName of collectionsToClear) {
+    const snapshot = await getDocs(collection(db, collName));
+    let batch = writeBatch(db);
+    let count = 0;
 
-  await batch.commit();
+    for (const docRef of snapshot.docs) {
+      batch.delete(docRef.ref);
+      count++;
+      
+      if (count === 450) { // Firebase limit is 500
+        await batch.commit();
+        batch = writeBatch(db);
+        count = 0;
+      }
+    }
+
+    if (count > 0) {
+      await batch.commit();
+    }
+  }
 };
 
 export const saveLog = async (logData: Partial<Log>) => {

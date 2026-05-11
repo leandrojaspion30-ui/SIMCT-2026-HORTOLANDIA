@@ -471,8 +471,9 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                       if (onResetDocuments) await onResetDocuments();
                       alert("SISTEMA REINICIALIZADO: Banco de dados limpo com sucesso.");
                       setIsResetModalOpen(false);
-                    } catch (error) {
-                      alert("Falha crítica no processo de reset.");
+                    } catch (error: any) {
+                      const msg = error?.message || String(error);
+                      alert(`FALHA NO RESET: ${msg}`);
                     } finally {
                       setIsProcessing(false);
                       setResetConfirmText('');
