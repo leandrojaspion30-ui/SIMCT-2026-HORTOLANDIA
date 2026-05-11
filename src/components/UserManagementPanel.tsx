@@ -1,18 +1,29 @@
 
 import React, { useState } from 'react';
 import { UserWithPassword } from '../constants';
-import { UserCog, Shield, User as UserIcon, Lock, Power, Calendar, UserCheck, Plus, Trash2, Edit3, X, Save, AlertCircle, RefreshCw, ArrowRight } from 'lucide-react';
+import { UserCog, Shield, User as UserIcon, Lock, Power, Calendar, UserCheck, Plus, Trash2, Edit3, X, Save, AlertCircle, RefreshCw, ArrowRight, Download } from 'lucide-react';
 
 interface UserManagementPanelProps {
   users: UserWithPassword[];
+  documents: any[];
   onUpdateUser: (id: string, update: Partial<UserWithPassword>) => Promise<void> | void;
   onDeleteUser?: (id: string) => Promise<void> | void;
   onAddUser?: (user: UserWithPassword) => Promise<void> | void;
+  onResetDocuments?: () => Promise<void> | void;
   onAddLog: (action: string) => void;
   setActiveTab?: (tab: string) => void;
 }
 
-const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ users, onUpdateUser, onDeleteUser, onAddUser, onAddLog, setActiveTab }) => {
+const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ 
+  users, 
+  documents,
+  onUpdateUser, 
+  onDeleteUser, 
+  onAddUser, 
+  onResetDocuments,
+  onAddLog, 
+  setActiveTab 
+}) => {
   const [substitutingId, setSubstitutingId] = useState<string | null>(null);
   const [permanentReplaceId, setPermanentReplaceId] = useState<string | null>(null);
   const [targetReplaceId, setTargetReplaceId] = useState<string>('');
@@ -130,6 +141,34 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ users, onUpda
       alert("Houve um erro ao processar a substituição.");
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleExportData = () => {
+    try {
+      const dataStr = JSON.stringify({
+        exportDate: new Date().toISOString(),
+        documents: documents,
+        userCount: users.length,
+        version: "SICT-BACKUP-1.0"
+      }, null, 2);
+      
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `SIMCT_BACKUP_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      onAddLog('SISTEMA: Backup de dados exportado com sucesso.');
+      return true;
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao exportar backup.");
+      return false;
     }
   };
 
@@ -335,6 +374,70 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ users, onUpda
           </div>
         ))}
       </div>
+
+      {onResetDocuments && (
+        <section className="mt-16 p-10 bg-slate-50 rounded-[3rem] border-2 border-dashed border-slate-200">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-8">
+            <div className="space-y-4 text-center md:text-left">
+              <div className="flex items-center justify-center md:justify-start gap-3">
+                <div className="p-2 bg-red-100 text-red-600 rounded-xl"><RefreshCw className="w-5 h-5" /></div>
+                <h2 className="text-[20px] font-black text-slate-800 uppercase tracking-tight">Manutenção do Sistema</h2>
+              </div>
+              <p className="text-[12px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
+                Esta ação apagará <span className="text-red-500 font-black">TODOS OS PROCEDIMENTOS</span> registrados no banco de dados.
+                <br />Recomendamos <span className="text-blue-500 font-black">SALVAR UM BACKUP</span> antes de resetar.
+              </p>
+              <div className="flex flex-wrap justify-center md:justify-start gap-3">
+                <button 
+                   onClick={handleExportData}
+                   className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest flex items-center gap-2 hover:bg-slate-900 transition-all shadow-lg"
+                >
+                  <Download className="w-4 h-4" /> Salvar Backup (JSON)
+                </button>
+                <button 
+                   onClick={async () => {
+                     const step1 = window.confirm("SICT SEGURANÇA: Deseja realizar o BACKUP e depois o RESET TOTAL de todos os procedimentos?");
+                     if (step1) {
+                       const backupOk = handleExportData();
+                       if (backupOk) {
+                         const step2 = window.confirm("BACKUP REALIZADO! Agora, deseja realmente APAGAR TODOS os procedimentos do banco de dados? Esta ação não tem volta.");
+                         if (step2) {
+                           setIsProcessing(true);
+                           await onResetDocuments();
+                           setIsProcessing(false);
+                           alert("SISTEMA RESETADO: Backup salvo e banco de dados limpo.");
+                         }
+                       }
+                     }
+                   }}
+                   disabled={isProcessing}
+                   className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest flex items-center gap-2 hover:bg-black transition-all shadow-lg disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isProcessing ? 'animate-spin' : ''}`} /> Salvar e Resetar Agora
+                </button>
+              </div>
+            </div>
+            <button 
+              onClick={async () => {
+                const step1 = window.confirm("SICT SEGURANÇA: Esta ação é IRREVERSÍVEL. Deseja realmente APAGAR TODOS os procedimentos?");
+                if (step1) {
+                  const step2 = window.confirm("ÚLTIMO AVISO: Todos os registros de documentos, crianças e históricos serão excluídos. Você já salvou o backup? Confirmar RESET TOTAL?");
+                  if (step2) {
+                    setIsProcessing(true);
+                    await onResetDocuments();
+                    setIsProcessing(false);
+                    alert("SISTEMA RESETADO: Todos os procedimentos foram excluídos com sucesso.");
+                  }
+                }
+              }}
+              disabled={isProcessing}
+              className="px-10 py-5 bg-red-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-3 hover:bg-black transition-all shadow-xl shadow-red-100 active:scale-95 disabled:opacity-50"
+            >
+              <Trash2 className="w-5 h-5" /> Resetar Todos os Procedimentos
+            </button>
+          </div>
+        </section>
+      )}
 
       {/* Modal: Confirmação de Exclusão */}
       {userToDelete && (

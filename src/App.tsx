@@ -8,7 +8,7 @@ import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, B
 import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada } from './types';
 import { INITIAL_USERS, UserWithPassword, INITIAL_AGENDA } from './constants';
 import { db, ensureAuthenticated } from './lib/firebase';
-import { syncCollection, saveDocument, saveLog, saveAgenda, deleteDocument, deleteAgenda, saveUser, deleteUser } from './lib/db';
+import { syncCollection, saveDocument, saveLog, saveAgenda, deleteDocument, deleteAgenda, saveUser, deleteUser, deleteAllDocuments } from './lib/db';
 import ConfidentialityTermModal from './components/ConfidentialityTermModal';
 import DocumentList from './components/DocumentList';
 import DocumentRegistration from './components/DocumentRegistration';
@@ -336,6 +336,7 @@ const App: React.FC = () => {
     if (activeTab === 'user-management' && isLud) return (
       <UserManagementPanel 
         users={filteredUsers} 
+        documents={documents}
         onUpdateUser={async (id, upd) => {
           const target = users.find(u => u.id === id);
           if (!target) return;
@@ -528,6 +529,10 @@ const App: React.FC = () => {
           await saveUser(newUser);
           // Adiciona localmente para reconhecimento instantâneo
           setUsers(prev => [...prev.filter(u => u.id !== newUser.id), newUser]);
+        }}
+        onResetDocuments={async () => {
+          await deleteAllDocuments();
+          addLog('SISTEMA', `RH: RESET TOTAL DO SISTEMA - Todos os procedimentos foram apagados.`, 'SEGURANÇA');
         }}
         onAddLog={(action) => addLog('SISTEMA', action, 'SEGURANÇA')} 
         setActiveTab={(tab: any) => setActiveTab(tab)}

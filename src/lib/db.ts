@@ -8,6 +8,8 @@ import {
   addDoc, 
   updateDoc, 
   deleteDoc,
+  getDocs,
+  writeBatch,
   serverTimestamp 
 } from 'firebase/firestore';
 import { db, ensureAuthenticated } from './firebase';
@@ -49,6 +51,16 @@ export const saveDocument = async (docData: Partial<Documento>) => {
 export const deleteDocument = async (id: string) => {
   await ensureAuthenticated();
   await deleteDoc(doc(db, 'documents', id));
+};
+
+export const deleteAllDocuments = async () => {
+  await ensureAuthenticated();
+  const snapshot = await getDocs(collection(db, 'documents'));
+  const batch = writeBatch(db);
+  snapshot.docs.forEach((docRef) => {
+    batch.delete(docRef.ref);
+  });
+  await batch.commit();
 };
 
 export const saveLog = async (logData: Partial<Log>) => {
