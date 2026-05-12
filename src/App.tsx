@@ -89,17 +89,35 @@ const App: React.FC = () => {
   const [allFiles, setAllFiles] = useState<DocumentFile[]>([]);
   const [allAgenda, setAllAgenda] = useState<AgendaEntry[]>([]);
 
-  const documents = useMemo(() => allDocuments.filter(d => (d.unidade_id || 1) === currentUser?.unidade_id), [allDocuments, currentUser]);
-  const logs = useMemo(() => allLogs.filter(l => (l.unidade_id || 1) === currentUser?.unidade_id), [allLogs, currentUser]);
-  const files = useMemo(() => allFiles.filter(f => (f.unidade_id || 1) === currentUser?.unidade_id), [allFiles, currentUser]);
-  const agenda = useMemo(() => allAgenda, [allAgenda]);
-  const isLud = useMemo(() => currentUser?.nome === 'LUDIMILA' || currentUser?.nome === 'LEANDRO', [currentUser]);
+  const isLud = useMemo(() => currentUser?.nome === 'LUDIMILA', [currentUser]);
+  const isSuperAdmin = useMemo(() => currentUser?.nome === 'LUDIMILA' || currentUser?.nome === 'LEANDRO', [currentUser]);
+  const isAdministrative = useMemo(() => currentUser?.perfil === 'ADMIN' || currentUser?.perfil === 'ADMINISTRATIVO', [currentUser]);
+
+  const documents = useMemo(() => {
+    if (isLud) return allDocuments;
+    return allDocuments.filter(d => (d.unidade_id || 1) === currentUser?.unidade_id);
+  }, [allDocuments, currentUser, isLud]);
+
+  const logs = useMemo(() => {
+    if (isSuperAdmin) return allLogs;
+    return allLogs.filter(l => (l.unidade_id || 1) === currentUser?.unidade_id);
+  }, [allLogs, currentUser, isSuperAdmin]);
+
+  const files = useMemo(() => {
+    if (isSuperAdmin) return allFiles;
+    return allFiles.filter(f => (f.unidade_id || 1) === currentUser?.unidade_id);
+  }, [allFiles, currentUser, isSuperAdmin]);
+
+  const agenda = useMemo(() => {
+    if (isSuperAdmin) return allAgenda;
+    return allAgenda.filter(e => (e.unidade_id || 1) === currentUser?.unidade_id);
+  }, [allAgenda, currentUser, isSuperAdmin]);
 
   const filteredUsers = useMemo(() => {
     const activeUsers = users.filter(u => u.status !== 'EXCLUIDO');
-    if (isLud) return activeUsers;
+    if (isSuperAdmin) return activeUsers;
     return activeUsers.filter(u => (u.unidade_id || 1) === currentUser?.unidade_id);
-  }, [users, currentUser, isLud]);
+  }, [users, currentUser, isSuperAdmin]);
 
   const imminentEvent = useMemo(() => {
     if (!currentUser) return null;
@@ -331,9 +349,8 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     if (!currentUser) return null;
-    const isAdministrative = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
     
-    if (activeTab === 'user-management' && isLud) return (
+    if (activeTab === 'user-management' && (isSuperAdmin || isAdministrative)) return (
       <UserManagementPanel 
         users={filteredUsers} 
         documents={documents}
@@ -544,8 +561,8 @@ const App: React.FC = () => {
       return null;
     }
 
-    if (activeTab === 'register' || activeTab === 'plantao') return <DocumentRegistration documents={documents} users={users} agenda={agenda} currentUser={currentUser} onSubmit={handleDocumentSubmit} onCancel={() => handleNavigate('dashboard')} isReadOnly={activeTab === 'register' ? !isAdministrative : false} title={activeTab === 'plantao' ? 'SIMCT - Novo Proced/Plantão' : undefined} nameMap={userNameMap} allUsers={users} />;
-    if (activeTab === 'edit' && editingDocId) return <DocumentRegistration documents={documents} users={users} agenda={agenda} currentUser={currentUser} initialData={documents.find(d => d.id === editingDocId)} onSubmit={handleDocumentSubmit} onCancel={() => handleNavigate('dashboard')} isReadOnly={!isAdministrative} nameMap={userNameMap} />;
+    if (activeTab === 'register' || activeTab === 'plantao') return <DocumentRegistration documents={documents} users={filteredUsers} agenda={agenda} currentUser={currentUser} onSubmit={handleDocumentSubmit} onCancel={() => handleNavigate('dashboard')} isReadOnly={activeTab === 'register' ? !isAdministrative : false} title={activeTab === 'plantao' ? 'SIMCT - Novo Proced/Plantão' : undefined} nameMap={userNameMap} allUsers={filteredUsers} />;
+    if (activeTab === 'edit' && editingDocId) return <DocumentRegistration documents={documents} users={filteredUsers} agenda={agenda} currentUser={currentUser} initialData={documents.find(d => d.id === editingDocId)} onSubmit={handleDocumentSubmit} onCancel={() => handleNavigate('dashboard')} isReadOnly={!isAdministrative} nameMap={userNameMap} allUsers={filteredUsers} />;
     
     if (selectedDocId) {
       const doc = documents.find(d => d.id === selectedDocId);
@@ -558,6 +575,11 @@ const App: React.FC = () => {
           addLog(id, `STATUS: Documento alterado para a situação [${s[s.length-1]}].`, 'SISTEMA');
           await saveDocument({ id, status: s });
       }} onUpdateDocument={async (id, fields) => await saveDocument({ ...fields, id })} onAddLog={addLog} onScience={() => {}} nameMap={userNameMap} />;
+    }
+
+    if (activeTab === 'logs' && !(isSuperAdmin || isAdministrative)) {
+      setActiveTab('dashboard');
+      return null;
     }
 
     switch (activeTab) {
@@ -627,7 +649,7 @@ const App: React.FC = () => {
           addLog(id, `MONITORAMENTO: Acompanhamento de caso encerrado com sucesso.`, 'MONITORAMENTO');
           await deleteDocument(id);
       }} isReadOnly={isAdministrative} />;
-      case 'agenda': return <AgendaView agenda={agenda} users={users} setAgenda={async (items) => {
+      case 'agenda': return <AgendaView agenda={agenda} users={filteredUsers} setAgenda={async (items) => {
           // Find the new entry if it's an array set call
           if (Array.isArray(items)) {
             // This is a bit complex due to local state vs db sync
@@ -636,8 +658,8 @@ const App: React.FC = () => {
             const lastItem = items[items.length - 1];
             if (lastItem) await saveAgenda(lastItem);
           }
-      }} allDocuments={allDocuments} currentUser={currentUser} effectiveUserId={currentUser.id} isReadOnly={currentUser.nome === 'LUDIMILA'} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} />;
-      case 'search': return <AdvancedSearch documents={documents} users={users} currentUser={currentUser} onSelectDoc={handleOpenDocument} />;
+      }} allDocuments={documents} currentUser={currentUser} effectiveUserId={currentUser.id} isReadOnly={currentUser.nome === 'LUDIMILA'} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} />;
+      case 'search': return <AdvancedSearch documents={documents} users={filteredUsers} currentUser={currentUser} onSelectDoc={handleOpenDocument} />;
       case 'logs': return <AuditLogViewer logs={logs} />;
       case 'settings': return <SettingsView currentUser={currentUser} onUpdatePassword={async (p) => { 
           await saveUser({ id: currentUser.id, senha: p }); 
@@ -782,9 +804,9 @@ const App: React.FC = () => {
           <NavItem icon={<Database className="w-5 h-5" />} label="Busca Ativa" active={activeTab === 'search'} onClick={() => handleNavigate('search')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
           <NavItem icon={<BarChart3 className="w-5 h-5" />} label="Relatórios" active={activeTab === 'statistics'} onClick={() => handleNavigate('statistics')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
           <NavItem icon={<ShieldCheck className="w-5 h-5" />} label="Minha Senha" active={activeTab === 'settings'} onClick={() => handleNavigate('settings')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
-          {isLud && <NavItem icon={<UserCog className="w-5 h-5" />} label="Gestão de RH" active={activeTab === 'user-management'} onClick={() => handleNavigate('user-management')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />}
-          {isLud && <NavItem icon={<History className="w-5 h-5" />} label="Audit Log" active={activeTab === 'logs'} onClick={() => handleNavigate('logs')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />}
-          {isLud && <NavItem icon={<PieChart className="w-5 h-5" />} label="Relatórios das Unidades" active={activeTab === 'global-statistics'} onClick={() => handleNavigate('global-statistics')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />}
+          {(isSuperAdmin || isAdministrative) && <NavItem icon={<UserCog className="w-5 h-5" />} label="Gestão de RH" active={activeTab === 'user-management'} onClick={() => handleNavigate('user-management')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />}
+          {(isSuperAdmin || isAdministrative) && <NavItem icon={<History className="w-5 h-5" />} label="Audit Log" active={activeTab === 'logs'} onClick={() => handleNavigate('logs')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />}
+          {isSuperAdmin && <NavItem icon={<PieChart className="w-5 h-5" />} label="Relatórios das Unidades" active={activeTab === 'global-statistics'} onClick={() => handleNavigate('global-statistics')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />}
         </nav>
         <div className="p-4 border-t border-white/5">
           <NavItem icon={<LogOut className="w-5 h-5" />} label="Sair" active={false} onClick={handleLogout} collapsed={!isSidebarOpen && window.innerWidth >= 1024} danger />

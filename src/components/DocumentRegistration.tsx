@@ -375,25 +375,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
               <h3 className="text-[11px] sm:text-[13px] font-black uppercase text-slate-800 tracking-widest">2. Origem e Canal do Comunicado</h3>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 sm:gap-4">
-              {/* NOVO: SELECT UNIDADE PARA ADMINS */}
-              <div className="space-y-2">
-                <label className="md:hidden text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Unidade CT</label>
-                <select 
-                  required
-                  disabled={!!initialData}
-                  className="w-full p-4 sm:p-5 bg-white border border-slate-200 rounded-xl sm:rounded-[1.5rem] font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm cursor-pointer disabled:opacity-50"
-                  value={formData.unidade_id}
-                  onChange={e => {
-                    const newId = parseInt(e.target.value);
-                    setFormData({...formData, unidade_id: newId, bairro: '', conselheiro_referencia_id: '', notificacao: ''});
-                  }}
-                >
-                  <option value={1}>CONSELHO TUTELAR 1</option>
-                  <option value={2}>CONSELHO TUTELAR 2</option>
-                </select>
-              </div>
-
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
               {/* COLUNA 1: CATEGORIA */}
               <div className="space-y-2">
                 <label className="md:hidden text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoria</label>

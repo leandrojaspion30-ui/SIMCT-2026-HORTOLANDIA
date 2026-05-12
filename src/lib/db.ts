@@ -29,14 +29,27 @@ export const syncCollection = <T extends { id: string }>(
   });
 };
 
-const cleanData = (obj: any) => {
-  const newObj = { ...obj };
-  Object.keys(newObj).forEach(key => {
-    if (newObj[key] === undefined) {
-      delete newObj[key];
+const cleanData = (obj: any): any => {
+  if (Array.isArray(obj)) {
+    return obj
+      .map(item => cleanData(item))
+      .filter(item => item !== undefined);
+  } else if (obj !== null && typeof obj === 'object' && !(obj instanceof Date)) {
+    // Preservar objetos especiais do Firestore (FieldValue, Timestamp, etc)
+    const proto = Object.getPrototypeOf(obj);
+    if (proto !== Object.prototype && proto !== null) {
+      return obj;
     }
-  });
-  return newObj;
+
+    const newObj: any = {};
+    Object.keys(obj).forEach(key => {
+      if (obj[key] !== undefined) {
+        newObj[key] = cleanData(obj[key]);
+      }
+    });
+    return newObj;
+  }
+  return obj;
 };
 
 export const saveDocument = async (docData: Partial<Documento>) => {
