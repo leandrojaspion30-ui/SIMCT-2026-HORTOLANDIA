@@ -203,7 +203,7 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
       </div>
 
       <section className="bg-white rounded-2xl border border-[#E5E7EB] shadow-sm overflow-hidden">
-        <div className="p-6 border-b bg-[#F9FAFB] flex items-center justify-between">
+        <div className="p-6 border-b bg-[#F9FAFB] flex flex-col sm:flex-row items-center justify-between gap-4">
            <div className="flex items-center gap-3">
               <Layers className="w-5 h-5 text-[#2563EB]" />
               <h2 className="text-[15px] font-bold text-[#111827] uppercase tracking-widest">Controle de Prazos</h2>
@@ -211,7 +211,8 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
            <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase">{filteredMonitoringDocs.length} Atendimentos</span>
         </div>
         
-        <div className="overflow-x-auto">
+        {/* Desktop View Table */}
+        <div className="hidden lg:block overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
@@ -227,7 +228,6 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
                 const activeRequisicoes = (monitoring.requisicoes || []).filter(r => !r.excluidoDoMonitoramento);
                 const isHidden = collapsedDocs.has(doc.id);
                 
-                // Encontrar o prazo mais próximo entre as requisições ativas para definir o status global
                 const closestDeadline = activeRequisicoes.length > 0 
                   ? activeRequisicoes.reduce((min, r) => r.dataFinal < min ? r.dataFinal : min, activeRequisicoes[0].dataFinal)
                   : monitoring.prazoEsperado;
@@ -295,6 +295,85 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile View Cards */}
+        <div className="lg:hidden p-4 space-y-4 bg-slate-50/30">
+          {filteredMonitoringDocs.map(doc => {
+            const monitoring = doc.monitoramento!;
+            const activeRequisicoes = (monitoring.requisicoes || []).filter(r => !r.excluidoDoMonitoramento);
+            const isHidden = collapsedDocs.has(doc.id);
+            
+            const closestDeadline = activeRequisicoes.length > 0 
+              ? activeRequisicoes.reduce((min, r) => r.dataFinal < min ? r.dataFinal : min, activeRequisicoes[0].dataFinal)
+              : monitoring.prazoEsperado;
+
+            const style = getStatusStyle(closestDeadline, activeRequisicoes.length > 0);
+
+            return (
+              <div key={doc.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="text-[14px] font-bold text-[#111827] uppercase leading-tight">{doc.crianca_nome}</div>
+                    <div className="text-[10px] text-[#4B5563] font-medium uppercase mt-1">Ref: {doc.id}</div>
+                  </div>
+                  <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase border ${style.bg}`}>
+                    {style.text}
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <button onClick={() => toggleVisibility(doc.id)} className="flex items-center gap-2 text-[10px] font-black text-[#2563EB] uppercase w-fit">
+                    {isHidden ? <><Eye className="w-3.5 h-3.5" /> Ver Requisições ({activeRequisicoes.length})</> : <><EyeOff className="w-3.5 h-3.5" /> Ocultar Requisições</>}
+                  </button>
+                  
+                  {!isHidden && activeRequisicoes.length > 0 && (
+                    <div className="space-y-2 pt-2 border-t border-slate-100">
+                      {activeRequisicoes.map((req) => {
+                        const reqStyle = getStatusStyle(req.dataFinal);
+                        return (
+                          <div key={req.id} className={`p-3 rounded-xl border flex flex-col gap-1 ${reqStyle.bg}`}>
+                            <div className="flex justify-between items-start">
+                              <div className="max-w-[70%]">
+                                <div className="text-[8px] font-black uppercase opacity-60 truncate">{req.area}</div>
+                                <div className="text-[10px] font-bold uppercase truncate">{req.servico}</div>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button onClick={() => { setExtendingReq({ docId: doc.id, req }); setExtForm({ nova_data: req.dataFinal }); }} className="p-2 text-blue-600 bg-white/50 rounded-lg"><Timer className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => handleRemoveRequisicao(doc.id, req.id)} className="p-2 text-red-600 bg-white/50 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                              </div>
+                            </div>
+                            <span className="text-[8px] font-black uppercase flex items-center gap-1 mt-1 border-t border-black/5 pt-1">
+                                <Calendar className="w-2.5 h-2.5" /> Vence em: {new Date(req.dataFinal).toLocaleDateString('pt-BR')}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-100">
+                  {!isReadOnly && (
+                    <button 
+                      onClick={() => setShowAddService(doc.id)}
+                      className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm flex items-center justify-center gap-2 text-[9px] font-black uppercase"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Serviço
+                    </button>
+                  )}
+                  <button onClick={() => onSelectDoc(doc.id)} className="p-3 bg-slate-900 text-white rounded-xl flex items-center justify-center gap-2 text-[9px] font-black uppercase">
+                    <FileText className="w-3.5 h-3.5" /> Prontuário
+                  </button>
+                  {!isReadOnly && (
+                    <button onClick={() => setDocToConfirmDelete(doc)} className="p-3 bg-red-50 text-red-600 rounded-xl flex items-center justify-center gap-2 text-[9px] font-black uppercase col-span-2 sm:col-span-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Concluir
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 

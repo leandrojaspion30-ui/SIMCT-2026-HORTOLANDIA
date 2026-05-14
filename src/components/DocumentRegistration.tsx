@@ -333,7 +333,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
           </button>
         </header>
 
-        <form onSubmit={handleSubmit} className="p-5 sm:p-8 space-y-6 sm:space-y-8">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-8 space-y-6 sm:space-y-8 overflow-x-hidden">
           <fieldset disabled={isReadOnly} className="contents">
             {/* BLOCO 1: NOVO DOCUMENTO (DATA E HORA) */}
           <section className="space-y-4 sm:space-y-6">
@@ -341,7 +341,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
               <Calendar className="w-5 h-5 text-blue-600" />
               <h3 className="text-[11px] sm:text-[12px] font-black uppercase text-slate-800 tracking-widest">1. Novo Documento</h3>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Data do Documento *</label>
                 <input 
@@ -349,7 +349,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   required 
                   max={todayDate}
                   disabled={!!initialData && !isADM}
-                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-blue-500 disabled:opacity-50 text-sm sm:text-[15px]"
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-blue-500 disabled:opacity-50 text-[13px] sm:text-[15px]"
                   value={formData.data_aporte}
                   onChange={e => setFormData({...formData, data_aporte: e.target.value})}
                 />
@@ -360,7 +360,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   type="time" 
                   required 
                   disabled={!!initialData && !isADM}
-                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-blue-500 disabled:opacity-50 text-sm sm:text-[15px]"
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-blue-500 disabled:opacity-50 text-[13px] sm:text-[15px]"
                   value={formData.hora_aporte}
                   onChange={e => setFormData({...formData, hora_aporte: e.target.value})}
                 />
@@ -375,10 +375,10 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
               <h3 className="text-[11px] sm:text-[13px] font-black uppercase text-slate-800 tracking-widest">2. Origem e Canal do Comunicado</h3>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
               {/* COLUNA 1: CATEGORIA */}
               <div className="space-y-2">
-                <label className="md:hidden text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoria</label>
+                <label className="lg:hidden text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoria</label>
                 <select 
                   required
                   className="w-full p-4 sm:p-5 bg-white border border-slate-200 rounded-xl sm:rounded-[1.5rem] font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm cursor-pointer"
@@ -392,7 +392,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
 
               {/* COLUNA 2: INSTITUIÇÃO */}
               <div className="space-y-2">
-                <label className="md:hidden text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Instituição</label>
+                <label className="lg:hidden text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Instituição</label>
                 <select 
                   required
                   disabled={!formData.origem_categoria}
@@ -409,7 +409,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
 
               {/* COLUNA 3: CANAL */}
               <div className="space-y-2">
-                <label className="md:hidden text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Canal</label>
+                <label className="lg:hidden text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Canal</label>
                 <select 
                   required
                   className="w-full p-4 sm:p-5 bg-white border border-slate-200 rounded-xl sm:rounded-[1.5rem] font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm cursor-pointer"
@@ -555,7 +555,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                       <Trash2 className="w-4 h-4" />
                     </button>
                   )}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                     <div className="space-y-1 lg:col-span-2">
                       <div className="flex items-center justify-between">
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Nome Completo {!crianca.nao_informado && '*'}</label>
@@ -573,7 +573,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                         type="text" 
                         required={!crianca.nao_informado}
                         disabled={crianca.nao_informado}
-                        className="w-full p-3 bg-white border border-slate-200 rounded-lg font-bold uppercase outline-none focus:border-blue-500 disabled:opacity-60" 
+                        className="w-full p-3 bg-white border border-slate-200 rounded-lg font-bold uppercase outline-none focus:border-blue-500 disabled:opacity-60 text-xs sm:text-sm" 
                         value={crianca.nome} 
                         onChange={e => handleChildChange(idx, 'nome', e.target.value.toUpperCase())} 
                       />
@@ -584,7 +584,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                         type="date" 
                         required={!crianca.nao_informado} 
                         max={todayDate}
-                        className={`w-full p-3 bg-white border rounded-lg font-bold outline-none focus:border-blue-500 ${crianca.error ? 'border-red-500 bg-red-50' : 'border-slate-200'}`} 
+                        className={`w-full p-3 bg-white border rounded-lg font-bold outline-none focus:border-blue-500 text-xs sm:text-sm ${crianca.error ? 'border-red-500 bg-red-50' : 'border-slate-200'}`} 
                         value={crianca.data_nascimento} 
                         onChange={e => handleChildChange(idx, 'data_nascimento', e.target.value)} 
                       />
@@ -597,7 +597,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                       <input 
                         type="text" 
                         placeholder="000.000.000-00"
-                        className="w-full p-3 bg-white border border-slate-200 rounded-lg font-bold outline-none focus:border-blue-500" 
+                        className="w-full p-3 bg-white border border-slate-200 rounded-lg font-bold outline-none focus:border-blue-500 text-xs sm:text-sm" 
                         value={crianca.cpf || ''} 
                         onChange={e => handleChildChange(idx, 'cpf', e.target.value)} 
                       />

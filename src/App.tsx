@@ -75,7 +75,21 @@ const App: React.FC = () => {
   const [users, setUsers] = useState<UserWithPassword[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 1024);
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+      if (window.innerWidth < 1024) {
+        setIsSidebarOpen(false);
+      } else {
+        setIsSidebarOpen(true);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [acknowledgedEventIds, setAcknowledgedEventIds] = useState<string[]>([]);
   const [acknowledgedReminderIds, setAcknowledgedReminderIds] = useState<string[]>([]);
@@ -794,35 +808,63 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex bg-[#F9FAFB] font-['Inter'] overflow-x-hidden">
-      <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} ${isSidebarOpen ? 'lg:w-80' : 'lg:w-24 w-80'} bg-[#111827] transition-all duration-300 flex flex-col fixed inset-y-0 z-50 overflow-hidden print:hidden`}>
-        <div className="p-6 flex items-center gap-4 border-b border-white/5"><img src={CT_LOGO_URL} alt="SIMCT" className="w-10 h-10" />{(isSidebarOpen || window.innerWidth < 1024) && <span className="text-white font-bold text-[18px] uppercase">SIM<span className="text-[#2563EB]">CT</span></span>}</div>
+      <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} ${isSidebarOpen ? 'lg:w-80 w-72' : 'lg:w-24 w-0'} bg-[#111827] transition-all duration-300 flex flex-col fixed inset-y-0 z-50 overflow-hidden print:hidden`}>
+        <div className="p-6 flex items-center justify-between border-b border-white/5">
+          <div className="flex items-center gap-4">
+            <img src={CT_LOGO_URL} alt="SIMCT" className="w-10 h-10" />
+            {(isSidebarOpen || windowWidth < 1024) && <span className="text-white font-bold text-[18px] uppercase">SIM<span className="text-[#2563EB]">CT</span></span>}
+          </div>
+          {windowWidth < 1024 && (
+            <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden text-slate-400 hover:text-white p-2">
+              <X className="w-6 h-6" />
+            </button>
+          )}
+        </div>
         <nav className="flex-1 px-4 mt-8 space-y-2 overflow-y-auto min-h-0">
-          <NavItem icon={<LayoutDashboard className="w-5 h-5" />} label="Painel Geral" active={activeTab === 'dashboard'} onClick={() => handleNavigate('dashboard')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
-          {(currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO') && <NavItem icon={<FilePlus className="w-5 h-5" />} label="NOVO PROCEDIMENTO" active={activeTab === 'register'} onClick={() => handleNavigate('register')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />}
-          {(currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE') && (<><NavItem icon={<Zap className="w-5 h-5" />} label="NOVO PROCED/PLANTÃO" active={activeTab === 'plantao'} onClick={() => handleNavigate('plantao')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} /><NavItem icon={<Briefcase className="w-5 h-5" />} label="Minha Referência" active={activeTab === 'my-docs'} onClick={() => handleNavigate('my-docs')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} /><NavItem icon={<Activity className="w-5 h-5" />} label="Monitoramento" active={activeTab === 'monitoring'} onClick={() => handleNavigate('monitoring')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} /></>)}
-          <NavItem icon={<CalendarDays className="w-5 h-5" />} label="Agenda" active={activeTab === 'agenda'} onClick={() => handleNavigate('agenda')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
-          <NavItem icon={<Database className="w-5 h-5" />} label="Busca Ativa" active={activeTab === 'search'} onClick={() => handleNavigate('search')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
-          <NavItem icon={<BarChart3 className="w-5 h-5" />} label="Relatórios" active={activeTab === 'statistics'} onClick={() => handleNavigate('statistics')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
-          <NavItem icon={<ShieldCheck className="w-5 h-5" />} label="Minha Senha" active={activeTab === 'settings'} onClick={() => handleNavigate('settings')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
-          {(isSuperAdmin || isAdministrative) && <NavItem icon={<UserCog className="w-5 h-5" />} label="Gestão de RH" active={activeTab === 'user-management'} onClick={() => handleNavigate('user-management')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />}
-          {(isSuperAdmin || isAdministrative) && <NavItem icon={<History className="w-5 h-5" />} label="Audit Log" active={activeTab === 'logs'} onClick={() => handleNavigate('logs')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />}
-          {isSuperAdmin && <NavItem icon={<PieChart className="w-5 h-5" />} label="Relatórios das Unidades" active={activeTab === 'global-statistics'} onClick={() => handleNavigate('global-statistics')} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />}
+          <NavItem icon={<LayoutDashboard className="w-5 h-5" />} label="Painel Geral" active={activeTab === 'dashboard'} onClick={() => { handleNavigate('dashboard'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
+          {(currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO') && <NavItem icon={<FilePlus className="w-5 h-5" />} label="NOVO PROCEDIMENTO" active={activeTab === 'register'} onClick={() => { handleNavigate('register'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />}
+          {(currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE') && (
+            <>
+              <NavItem icon={<Zap className="w-5 h-5" />} label="NOVO PROCED/PLANTÃO" active={activeTab === 'plantao'} onClick={() => { handleNavigate('plantao'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
+              <NavItem icon={<Briefcase className="w-5 h-5" />} label="Minha Referência" active={activeTab === 'my-docs'} onClick={() => { handleNavigate('my-docs'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
+              <NavItem icon={<Activity className="w-5 h-5" />} label="Monitoramento" active={activeTab === 'monitoring'} onClick={() => { handleNavigate('monitoring'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
+            </>
+          )}
+          <NavItem icon={<CalendarDays className="w-5 h-5" />} label="Agenda" active={activeTab === 'agenda'} onClick={() => { handleNavigate('agenda'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
+          <NavItem icon={<Database className="w-5 h-5" />} label="Busca Ativa" active={activeTab === 'search'} onClick={() => { handleNavigate('search'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
+          <NavItem icon={<BarChart3 className="w-5 h-5" />} label="Relatórios" active={activeTab === 'statistics'} onClick={() => { handleNavigate('statistics'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
+          <NavItem icon={<ShieldCheck className="w-5 h-5" />} label="Minha Senha" active={activeTab === 'settings'} onClick={() => { handleNavigate('settings'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
+          {(isSuperAdmin || isAdministrative) && <NavItem icon={<UserCog className="w-5 h-5" />} label="Gestão de RH" active={activeTab === 'user-management'} onClick={() => { handleNavigate('user-management'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />}
+          {(isSuperAdmin || isAdministrative) && <NavItem icon={<History className="w-5 h-5" />} label="Audit Log" active={activeTab === 'logs'} onClick={() => { handleNavigate('logs'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />}
+          {isSuperAdmin && <NavItem icon={<PieChart className="w-5 h-5" />} label="Relatórios das Unidades" active={activeTab === 'global-statistics'} onClick={() => { handleNavigate('global-statistics'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />}
         </nav>
         <div className="p-4 border-t border-white/5">
-          <NavItem icon={<LogOut className="w-5 h-5" />} label="Sair" active={false} onClick={handleLogout} collapsed={!isSidebarOpen && window.innerWidth >= 1024} danger />
+          <NavItem icon={<LogOut className="w-5 h-5" />} label="Sair" active={false} onClick={handleLogout} collapsed={!isSidebarOpen && windowWidth >= 1024} danger />
         </div>
       </aside>
-      <main className={`flex-1 ${isSidebarOpen ? 'lg:ml-80' : 'lg:ml-24 ml-0'} transition-all min-h-screen print:ml-0`}>
+      <main className={`flex-1 ${isSidebarOpen ? 'lg:ml-80' : 'lg:ml-24'} ml-0 transition-all min-h-screen print:ml-0`}>
         <div className="p-4 lg:p-8 print:p-0">
-          <header className="flex items-center justify-between mb-8 lg:mb-12 print:hidden">
-            <div><h2 className="text-[10px] lg:text-[13px] font-medium text-[#4B5563] uppercase tracking-widest text-wrap max-w-[200px] lg:max-w-none">ZELAR PELO CUMPRIMENTO DO DIREITO</h2><div className="flex flex-col lg:flex-row lg:items-center gap-1 lg:gap-2 mt-1"><span className="text-[14px] lg:text-[16px] font-semibold text-[#111827] uppercase">{currentUser.nome}</span><span className="text-[12px] lg:text-[14px] font-medium text-[#2563EB] uppercase">({currentUser.cargo})</span></div></div>
-            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-3 bg-white border border-[#E5E7EB] rounded-xl shadow-sm hover:bg-slate-50">{isSidebarOpen ? <X className="w-5 h-5" /> : <LayoutDashboard className="w-5 h-5" />}</button>
+          <header className="flex items-center justify-between mb-8 lg:mb-12 print:hidden gap-4">
+            <div className="flex-1 min-w-0">
+              <h2 className="text-[10px] lg:text-[13px] font-medium text-[#4B5563] uppercase tracking-widest truncate">ZELAR PELO CUMPRIMENTO DO DIREITO</h2>
+              <div className="flex flex-col lg:flex-row lg:items-center gap-0 lg:gap-2 mt-1">
+                <span className="text-[14px] lg:text-[16px] font-bold text-[#111827] uppercase truncate">{currentUser.nome}</span>
+                <span className="text-[12px] lg:text-[14px] font-medium text-[#2563EB] uppercase whitespace-nowrap">({currentUser.cargo})</span>
+              </div>
+            </div>
+            <button 
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
+              className="p-3 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm hover:bg-slate-50 transition-all shrink-0"
+              title={isSidebarOpen ? "Fechar Menu" : "Abrir Menu"}
+            >
+              {isSidebarOpen ? <X className="w-5 h-5 text-slate-600" /> : <LayoutDashboard className="w-5 h-5 text-blue-600" />}
+            </button>
           </header>
           {renderContent()}
         </div>
       </main>
-      {isSidebarOpen && window.innerWidth < 1024 && (
-        <div className="fixed inset-0 bg-black/50 z-40 transition-opacity" onClick={() => setIsSidebarOpen(false)}></div>
+      {isSidebarOpen && windowWidth < 1024 && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 transition-all duration-300" onClick={() => setIsSidebarOpen(false)}></div>
       )}
       {isLogoutModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">

@@ -106,11 +106,11 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUs
           </select>
         </div>
 
-        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-2xl w-full max-w-2xl mt-4 border border-slate-200">
-           <button onClick={() => setMyViewMode('ALL')} className={`flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'ALL' ? 'bg-[#111827] text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Visão Geral (Todos)</button>
-           <button onClick={() => setMyViewMode('REF')} className={`flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'REF' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Minha Titularidade</button>
-           <button onClick={() => setMyViewMode('IMED')} className={`flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'IMED' ? 'bg-amber-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Minha Imediata</button>
-           <button onClick={() => setMyViewMode('VALID')} className={`flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'VALID' ? 'bg-red-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Aguardando Validação</button>
+        <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-100 rounded-2xl w-full max-w-4xl mt-4 border border-slate-200">
+           <button onClick={() => setMyViewMode('ALL')} className={`flex-1 min-w-[120px] py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'ALL' ? 'bg-[#111827] text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Visão Geral</button>
+           <button onClick={() => setMyViewMode('REF')} className={`flex-1 min-w-[120px] py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'REF' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Minha Titularidade</button>
+           <button onClick={() => setMyViewMode('IMED')} className={`flex-1 min-w-[120px] py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'IMED' ? 'bg-amber-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Minha Imediata</button>
+           <button onClick={() => setMyViewMode('VALID')} className={`flex-1 min-w-[120px] py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'VALID' ? 'bg-red-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Validação Colegiado</button>
         </div>
       </div>
 
