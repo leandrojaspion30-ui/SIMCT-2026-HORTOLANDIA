@@ -7,7 +7,7 @@ interface ConfidentialityTermModalProps {
   onAccept: (version: string) => void;
 }
 
-const CURRENT_TERM_VERSION = "2026.1-ECA-LGPD";
+const CURRENT_TERM_VERSION = "2026.2-ECA-LGPD";
 
 const ConfidentialityTermModal: React.FC<ConfidentialityTermModalProps> = ({ userName, onAccept }) => {
   const [hasReadToBottom, setHasReadToBottom] = useState(false);

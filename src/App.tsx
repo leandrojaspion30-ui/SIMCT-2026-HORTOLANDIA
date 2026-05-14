@@ -797,7 +797,7 @@ const App: React.FC = () => {
   );
 
   // NOVO: Fluxo de Aceite do Termo Obrigatório (Especialista em Dados Sensíveis)
-  if (currentUser && !currentUser.termo_aceito_em) {
+  if (currentUser && (!currentUser.termo_aceito_em || currentUser.termo_versao !== "2026.2-ECA-LGPD")) {
     return (
       <ConfidentialityTermModal 
         userName={currentUser.nome} 
