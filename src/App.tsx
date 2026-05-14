@@ -842,9 +842,9 @@ const App: React.FC = () => {
           <NavItem icon={<LogOut className="w-5 h-5" />} label="Sair" active={false} onClick={handleLogout} collapsed={!isSidebarOpen && windowWidth >= 1024} danger />
         </div>
       </aside>
-      <main className={`flex-1 ${isSidebarOpen ? 'lg:ml-80' : 'lg:ml-24'} ml-0 transition-all min-h-screen print:ml-0`}>
-        <div className="p-4 lg:p-8 print:p-0">
-          <header className="flex items-center justify-between mb-8 lg:mb-12 print:hidden gap-4">
+      <main className={`flex-1 ${isSidebarOpen ? 'lg:ml-80' : 'lg:ml-24'} ml-0 transition-all min-h-screen print:ml-0 overflow-x-hidden w-full`}>
+        <div className="p-3 sm:p-6 lg:p-8 print:p-0">
+          <header className="flex items-center justify-between mb-6 lg:mb-12 print:hidden gap-2">
             <div className="flex-1 min-w-0">
               <h2 className="text-[10px] lg:text-[13px] font-medium text-[#4B5563] uppercase tracking-widest truncate">ZELAR PELO CUMPRIMENTO DO DIREITO</h2>
               <div className="flex flex-col lg:flex-row lg:items-center gap-0 lg:gap-2 mt-1">

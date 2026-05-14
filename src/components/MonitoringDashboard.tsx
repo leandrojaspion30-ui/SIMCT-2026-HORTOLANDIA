@@ -312,12 +312,12 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
 
             return (
               <div key={doc.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <div className="text-[14px] font-bold text-[#111827] uppercase leading-tight">{doc.crianca_nome}</div>
-                    <div className="text-[10px] text-[#4B5563] font-medium uppercase mt-1">Ref: {doc.id}</div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-[13px] sm:text-[14px] font-bold text-[#111827] uppercase leading-tight truncate">{doc.crianca_nome}</div>
+                    <div className="text-[9px] text-[#4B5563] font-medium uppercase mt-0.5">Ref: {doc.id}</div>
                   </div>
-                  <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase border ${style.bg}`}>
+                  <span className={`self-start sm:self-center px-2 py-1 rounded-lg text-[8px] font-black uppercase border whitespace-nowrap ${style.bg}`}>
                     {style.text}
                   </span>
                 </div>
@@ -332,13 +332,13 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
                       {activeRequisicoes.map((req) => {
                         const reqStyle = getStatusStyle(req.dataFinal);
                         return (
-                          <div key={req.id} className={`p-3 rounded-xl border flex flex-col gap-1 ${reqStyle.bg}`}>
-                            <div className="flex justify-between items-start">
-                              <div className="max-w-[70%]">
+                          <div key={req.id} className={`p-3 rounded-xl border flex flex-col gap-2 ${reqStyle.bg}`}>
+                            <div className="flex justify-between items-start gap-2">
+                              <div className="min-w-0 flex-1">
                                 <div className="text-[8px] font-black uppercase opacity-60 truncate">{req.area}</div>
-                                <div className="text-[10px] font-bold uppercase truncate">{req.servico}</div>
+                                <div className="text-[10px] font-bold uppercase truncate leading-tight">{req.servico}</div>
                               </div>
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-1 shrink-0">
                                 <button onClick={() => { setExtendingReq({ docId: doc.id, req }); setExtForm({ nova_data: req.dataFinal }); }} className="p-2 text-blue-600 bg-white/50 rounded-lg"><Timer className="w-3.5 h-3.5" /></button>
                                 <button onClick={() => handleRemoveRequisicao(doc.id, req.id)} className="p-2 text-red-600 bg-white/50 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
                               </div>
@@ -353,20 +353,22 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-100">
-                  {!isReadOnly && (
-                    <button 
-                      onClick={() => setShowAddService(doc.id)}
-                      className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm flex items-center justify-center gap-2 text-[9px] font-black uppercase"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Serviço
+                <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-slate-100">
+                  <div className="grid grid-cols-2 gap-2 flex-1">
+                    {!isReadOnly && (
+                      <button 
+                        onClick={() => setShowAddService(doc.id)}
+                        className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm flex items-center justify-center gap-2 text-[9px] font-black uppercase"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Serviço
+                      </button>
+                    )}
+                    <button onClick={() => onSelectDoc(doc.id)} className="p-3 bg-slate-900 text-white rounded-xl flex items-center justify-center gap-2 text-[9px] font-black uppercase">
+                      <FileText className="w-3.5 h-3.5" /> Prontuário
                     </button>
-                  )}
-                  <button onClick={() => onSelectDoc(doc.id)} className="p-3 bg-slate-900 text-white rounded-xl flex items-center justify-center gap-2 text-[9px] font-black uppercase">
-                    <FileText className="w-3.5 h-3.5" /> Prontuário
-                  </button>
+                  </div>
                   {!isReadOnly && (
-                    <button onClick={() => setDocToConfirmDelete(doc)} className="p-3 bg-red-50 text-red-600 rounded-xl flex items-center justify-center gap-2 text-[9px] font-black uppercase col-span-2 sm:col-span-1">
+                    <button onClick={() => setDocToConfirmDelete(doc)} className="w-full p-3 bg-red-50 text-red-600 rounded-xl flex items-center justify-center gap-2 text-[9px] font-black uppercase">
                       <CheckCircle2 className="w-3.5 h-3.5" /> Concluir
                     </button>
                   )}

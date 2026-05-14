@@ -549,12 +549,15 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
             {formData.criancas.map((crianca, idx) => {
               const ageInfo = getAgeInfo(crianca.data_nascimento);
               return (
-                <div key={idx} className="p-6 bg-slate-50 rounded-2xl border border-slate-100 space-y-4 relative group">
-                  {formData.criancas.length > 1 && !isReadOnly && (
-                    <button type="button" onClick={() => removeChild(idx)} className="absolute top-4 right-4 p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+                <div key={idx} className="p-4 sm:p-6 bg-slate-50 rounded-2xl border border-slate-100 space-y-4 relative group transition-all hover:border-blue-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded uppercase tracking-widest">Criança {idx + 1}</span>
+                    {formData.criancas.length > 1 && !isReadOnly && (
+                      <button type="button" onClick={() => removeChild(idx)} className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition-all focus:text-red-600">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                     <div className="space-y-1 lg:col-span-2">
                       <div className="flex items-center justify-between">
