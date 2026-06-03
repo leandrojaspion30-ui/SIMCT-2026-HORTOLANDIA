@@ -167,6 +167,7 @@ export interface Documento {
   notificacoes_trio?: string[];
   numero_comunicado_violacao?: string;
   numero_sipia?: string;
+  is_family_persistence?: boolean;
 }
 
 export interface Atribuicao136Entry {

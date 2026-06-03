@@ -125,8 +125,18 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
 
     if (initialData) return allUsers.find(u => u.id === initialData.conselheiro_providencia_id);
     
-    // 2. Lógica de Distribuição Justa (Rodízio)
-    const todayDocs = documents.filter(d => d.data_aporte === formData.data_aporte && d.unidade_id === formData.unidade_id);
+    // 2. Persistência Familiar no mesmo dia (DIRETRIZ: Mesmo conselheiro se já atendido hoje)
+    const sameFamilyToday = familyHistory.find(d => d.data_aporte === formData.data_aporte && d.conselheiro_providencia_id);
+    if (sameFamilyToday) {
+      return allUsers.find(u => u.id === sameFamilyToday.conselheiro_providencia_id);
+    }
+    
+    // 3. Lógica de Distribuição Justa (Rodízio)
+    // Filtramos para ignorar documentos que foram atribuídos por persistência familiar para não quebrar a sequência
+    const todayDocs = documents
+      .filter(d => d.data_aporte === formData.data_aporte && d.unidade_id === formData.unidade_id && !d.is_family_persistence)
+      .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
+
     const lastAutoDoc = todayDocs.find(d => !d.notificacao);
     
     const lastImediataId = lastAutoDoc?.conselheiro_providencia_id;
@@ -139,7 +149,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     const nextName = trioNames[nextIndex];
     
     return allUsers.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === nextName && u.unidade_id === formData.unidade_id);
-  }, [trioNames, documents, formData.data_aporte, formData.notificacao, initialData, formData.unidade_id, allUsers, nameMap]);
+  }, [trioNames, documents, formData.data_aporte, formData.notificacao, initialData, formData.unidade_id, allUsers, nameMap, familyHistory]);
 
   const handleChildChange = (index: number, field: keyof ChildData, value: any) => {
     const newChildren = [...formData.criancas];
@@ -242,6 +252,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     // Lógica de seleção justa de 2 validadores do trio para casos de notificação
     const notifiedName = formData.notificacao?.toUpperCase();
     const isNewNotif = !initialData || initialData.notificacao?.toUpperCase() !== notifiedName;
+    const isFamilyPersistence = familyHistory.some(d => d.data_aporte === formData.data_aporte && d.id !== initialData?.id);
     
     let finalValidators = initialData?.conselheiros_providencia_nomes || trioNames;
 
@@ -290,14 +301,17 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
       is_manual_override: initialData ? initialData.is_manual_override : (isManualReference || isReferenceLocked),
       conselheiro_providencia_id: assignedImediata?.id || '',
       conselheiros_providencia_nomes: finalValidators,
+      is_family_persistence: isFamilyPersistence,
       status: initialData ? initialData.status : (formData.notificacao ? [`NOTIFICACAO_${formData.notificacao.toUpperCase()}` as DocumentStatus] : ['AGUARDANDO_ANALISE']),
       justificativa_distribuicao: initialData 
         ? initialData.justificativa_distribuicao 
         : (formData.notificacao 
             ? `🔔 Imediata vinculada à Notificação: ${formData.notificacao}.` 
-            : (isReferenceLocked 
-                ? `📌 Referência mantida por vínculo histórico.` 
-                : `✅ Atribuído por Rodízio Alfabético.`))
+            : (isFamilyPersistence
+                ? `👨‍👩‍👧‍👦 Imediata mantida por vínculo familiar no mesmo dia.`
+                : (isReferenceLocked 
+                    ? `📌 Referência mantida por vínculo histórico.` 
+                    : `✅ Atribuído por Rodízio Alfabético.`)))
     };
 
     if (!finalData.conselheiro_referencia_id) {

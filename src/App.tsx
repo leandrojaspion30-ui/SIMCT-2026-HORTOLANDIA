@@ -348,9 +348,10 @@ const App: React.FC = () => {
     // USAR LISTA VIVA DE USUÁRIOS PARA O LOG
     const refName = users.find(u => u.id === newDoc.conselheiro_referencia_id)?.nome || 'N/A';
     const provName = users.find(u => u.id === newDoc.conselheiro_providencia_id)?.nome || 'N/A';
+    const persistenceNote = newDoc.is_family_persistence ? ' [PERSISTÊNCIA FAMILIAR]' : '';
 
     await saveDocument(newDoc);
-    addLog(id, `CRIAÇÃO: Novo procedimento registrado. REF: [${refName}] | IMEDIATA: [${provName}].`, 'DOCUMENTO');
+    addLog(id, `CRIAÇÃO: Novo procedimento registrado.${persistenceNote} REF: [${refName}] | IMEDIATA: [${provName}].`, 'DOCUMENTO');
     handleNavigate('dashboard');
   };
 
