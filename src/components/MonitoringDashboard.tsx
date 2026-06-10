@@ -17,6 +17,7 @@ import {
 import React, { useMemo, useState } from 'react';
 import { Documento, MonitoringInfo, User as UserType, RequisicaoServico, LogType } from '../types';
 import { REDE_HORTOLANDIA } from '../constants';
+import { formatLocalDateString, parseLocalDate } from '../lib/dateUtils';
 
 interface MonitoringDashboardProps {
   documents: Documento[];
@@ -74,7 +75,7 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
     if (!prazo) return { bg: 'bg-slate-50 text-slate-500 border-slate-200', text: 'SEM PRAZO' };
     
     const today = new Date(); today.setHours(0,0,0,0);
-    const deadline = new Date(prazo); deadline.setHours(0,0,0,0);
+    const deadline = parseLocalDate(prazo); deadline.setHours(0,0,0,0);
     const diffMs = deadline.getTime() - today.getTime();
     const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
@@ -167,7 +168,7 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
     for (const doc of filteredMonitoringDocs) {
       const expired = doc.monitoramento?.requisicoes?.find(r => {
         if (r.excluidoDoMonitoramento || r.concluido) return false;
-        const deadline = new Date(r.dataFinal);
+        const deadline = parseLocalDate(r.dataFinal);
         deadline.setHours(0,0,0,0);
         return deadline.getTime() < today.getTime();
       });
@@ -267,7 +268,7 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
                                     </div>
                                   </div>
                                   <span className="text-[9px] font-black uppercase flex items-center gap-1 mt-1 border-t border-black/5 pt-1">
-                                      <Calendar className="w-2.5 h-2.5" /> Prazo: {new Date(req.dataFinal).toLocaleDateString('pt-BR')}
+                                      <Calendar className="w-2.5 h-2.5" /> Prazo: {formatLocalDateString(req.dataFinal)}
                                   </span>
                                 </div>
                               );
@@ -344,7 +345,7 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
                               </div>
                             </div>
                             <span className="text-[8px] font-black uppercase flex items-center gap-1 mt-1 border-t border-black/5 pt-1">
-                                <Calendar className="w-2.5 h-2.5" /> Vence em: {new Date(req.dataFinal).toLocaleDateString('pt-BR')}
+                                <Calendar className="w-2.5 h-2.5" /> Vence em: {formatLocalDateString(req.dataFinal)}
                             </span>
                           </div>
                         );
@@ -502,7 +503,7 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
             <div className="space-y-4">
               <h3 className="text-[24px] font-black text-red-600 uppercase tracking-tighter">Prazo de Monitoramento Vencido!</h3>
               <p className="text-[14px] text-slate-600 font-bold uppercase leading-relaxed">
-                O serviço <span className="text-red-600">[{expiredItem.req.servico}]</span> para a criança <span className="text-red-600">[{expiredItem.doc.crianca_nome}]</span> expirou em {new Date(expiredItem.req.dataFinal).toLocaleDateString('pt-BR')}.
+                O serviço <span className="text-red-600">[{expiredItem.req.servico}]</span> para a criança <span className="text-red-600">[{expiredItem.doc.crianca_nome}]</span> expirou em {formatLocalDateString(expiredItem.req.dataFinal)}.
               </p>
               <p className="text-[12px] text-slate-400 font-bold uppercase">
                 Você deve prorrogar o prazo ou encerrar o monitoramento desta família para prosseguir.

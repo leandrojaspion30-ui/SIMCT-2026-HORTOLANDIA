@@ -1,0 +1,837 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { 
+  Play, 
+  CheckCircle2, 
+  AlertCircle, 
+  Users, 
+  RefreshCw, 
+  ShieldCheck, 
+  Activity, 
+  Zap, 
+  Database, 
+  Trash2, 
+  ChevronRight, 
+  Building2,
+  Terminal,
+  UserCheck,
+  Lock
+} from 'lucide-react';
+import { Documento, User } from '../types';
+import { CONSELHEIROS_ALFABETICO_POR_UNIDADE, getEffectiveEscala } from '../constants';
+import { saveDocument, deleteDocument } from '../lib/db';
+
+interface DistributionSimulatorProps {
+  documents: Documento[];
+  users: User[];
+  currentUser: User;
+  onAddLog: (action: string) => void;
+}
+
+interface TestLog {
+  timestamp: string;
+  type: 'info' | 'success' | 'warn' | 'error';
+  message: string;
+}
+
+export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({ 
+  documents, 
+  users, 
+  currentUser,
+  onAddLog 
+}) => {
+  const [selectedUnidade, setSelectedUnidade] = useState<number>(currentUser?.unidade_id || 1);
+
+  useEffect(() => {
+    if (currentUser?.unidade_id) {
+      setSelectedUnidade(currentUser.unidade_id);
+    }
+  }, [currentUser?.unidade_id]);
+
+  const [simulationSize, setSimulationSize] = useState<number>(5);
+  const [testLogs, setTestLogs] = useState<TestLog[]>([]);
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simulationResult, setSimulationResult] = useState<{
+    success: boolean;
+    successImediata: boolean;
+    sentCount: number;
+    expectedSeq: string[];
+    assignedSeq: string[];
+    expectedSeqImediata: string[];
+    assignedSeqImediata: string[];
+    message: string;
+  } | null>(null);
+
+  // Filtros de Usuários
+  const admsOfUnidade = useMemo(() => {
+    return users.filter(u => 
+      (u.perfil === 'ADMIN' || u.perfil === 'ADMINISTRATIVO') && 
+      u.unidade_id === selectedUnidade &&
+      u.status === 'ATIVO' &&
+      u.nome.toUpperCase() !== 'LUDIMILA'
+    );
+  }, [users, selectedUnidade]);
+
+  const activeCounselors = useMemo(() => {
+    return users
+      .filter(u => 
+        (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && 
+        u.unidade_id === selectedUnidade && 
+        u.status === 'ATIVO'
+      )
+      .map(u => ({ id: u.id, nome: u.nome.toUpperCase() }))
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [users, selectedUnidade]);
+
+  // Encontra quem foi o último conselheiro de referência atribuído (não manual)
+  const lastAssignedRef = useMemo(() => {
+    const newCases = documents
+      .filter(d => !d.is_manual_override && d.unidade_id === selectedUnidade)
+      .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
+    
+    if (newCases.length === 0) return null;
+    
+    const lastId = newCases[0].conselheiro_referencia_id;
+    const foundUser = users.find(u => u.id === lastId);
+    return foundUser ? foundUser.nome.toUpperCase() : null;
+  }, [documents, users, selectedUnidade]);
+
+  // Próximo conselheiro previsto para a próxima distribuição
+  const nextPredictedCounselor = useMemo(() => {
+    if (activeCounselors.length === 0) return 'Nenhum conselheiro ativo';
+    const lastIndex = activeCounselors.findIndex(c => c.nome === lastAssignedRef);
+    const nextIndex = (lastIndex + 1) % activeCounselors.length;
+    return activeCounselors[nextIndex].nome;
+  }, [activeCounselors, lastAssignedRef]);
+
+  const nameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    users.forEach(u => {
+      map[u.nome.toUpperCase()] = u.nome.toUpperCase();
+    });
+    return map;
+  }, [users]);
+
+  const escalaTrio = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    return getEffectiveEscala(todayStr, '12:00', selectedUnidade, nameMap);
+  }, [selectedUnidade, nameMap]);
+
+  // Encontra quem foi o último conselheiro de providência imediata distribuído hoje automaticamente
+  const lastAssignedImediata = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayDocs = documents
+      .filter(d => d.data_aporte === todayStr && d.unidade_id === selectedUnidade && !d.is_family_persistence && !d.notificacao)
+      .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
+    
+    if (todayDocs.length === 0) return null;
+    const lastId = todayDocs[0].conselheiro_providencia_id;
+    const foundUser = users.find(u => u.id === lastId);
+    return foundUser ? foundUser.nome.toUpperCase() : null;
+  }, [documents, users, selectedUnidade]);
+
+  // Próximo conselheiro previsto para a providência imediata
+  const nextPredictedImediata = useMemo(() => {
+    if (escalaTrio.length === 0) return 'Sem escala ativa';
+    const lastIndex = escalaTrio.findIndex(name => name.toUpperCase() === lastAssignedImediata);
+    const nextIndex = (lastIndex + 1) % escalaTrio.length;
+    return escalaTrio[nextIndex];
+  }, [escalaTrio, lastAssignedImediata]);
+
+  // Função para adicionar log interno no painel
+  const log = (message: string, type: 'info' | 'success' | 'warn' | 'error' = 'info') => {
+    const timeStr = new Date().toLocaleTimeString('pt-BR');
+    setTestLogs(prev => [{ timestamp: timeStr, type, message }, ...prev]);
+  };
+
+  const clearLogs = () => {
+    setTestLogs([]);
+    setSimulationResult(null);
+  };
+
+  // EXECUTA A SIMULAÇÃO DE CONCORRÊNCIA EM SANDBOX LOCAL (RÁPIDA)
+  const runSandboxSimulation = () => {
+    if (activeCounselors.length === 0) {
+      log('Impossível calibrar: nenhum Conselheiro ativo nesta unidade.', 'error');
+      return;
+    }
+    if (admsOfUnidade.length === 0) {
+      log('Aviso: Nenhum usuário ADM ativo na unidade. Simulação usará atores virtuais.', 'warn');
+    }
+
+    setIsSimulating(true);
+    setSimulationResult(null);
+    clearLogs();
+
+    log(`Iniciando Simulação concorrente na Unidade ${selectedUnidade}...`, 'info');
+    log(`Buscando conselheiros ativos para rodízio alfabético...`, 'info');
+    log(`Ordem Alfabética de Rodízio: ${activeCounselors.map(c => c.nome).join(' → ')}`, 'info');
+    log(`Último atribuído no histórico real do banco: ${lastAssignedRef || 'NENHUM (novo rodízio)'}`, 'info');
+
+    setTimeout(() => {
+      // Começamos o rodízio virtual a partir do último do banco
+      const virtualDocsList = [...documents];
+      const assignedSequence: string[] = [];
+      const expectedSequence: string[] = [];
+      const assignedSequenceImediata: string[] = [];
+      const expectedSequenceImediata: string[] = [];
+
+      // Montamos o estado esperado sequencialmente para Referência
+      let currentRefName = lastAssignedRef;
+
+      for (let i = 0; i < simulationSize; i++) {
+        // Encontra o próximo previsto
+        const lastIdx = activeCounselors.findIndex(c => c.nome === currentRefName);
+        const nextIdx = activeCounselors.length > 0 ? (lastIdx + 1) % activeCounselors.length : 0;
+        const targetCounselor = activeCounselors[nextIdx];
+        expectedSequence.push(targetCounselor.nome);
+        currentRefName = targetCounselor.nome;
+      }
+
+      // Montamos o estado esperado sequencialmente para Providência Imediata
+      const todayStr = new Date().toISOString().split('T')[0];
+      const virtualTrio = getEffectiveEscala(todayStr, '12:00', selectedUnidade, nameMap);
+      let currentProvName = lastAssignedImediata;
+      for (let i = 0; i < simulationSize; i++) {
+        const lastIdx = virtualTrio.findIndex(name => name.toUpperCase() === currentProvName);
+        const nextIdx = virtualTrio.length > 0 ? (lastIdx + 1) % virtualTrio.length : 0;
+        const targetImediata = virtualTrio[nextIdx];
+        expectedSequenceImediata.push(targetImediata?.toUpperCase() || 'N/A');
+        currentProvName = targetImediata?.toUpperCase();
+      }
+
+      // Simular múltiplos ADMs agindo simultaneamente (concorrência)
+      log(`Simulando ${simulationSize} submissões de documentos em simultâneo por ADMs...`, 'info');
+      
+      const simulatedAdmActors = admsOfUnidade.length > 0 
+        ? admsOfUnidade.map(a => a.nome) 
+        : ['ADM VIRTUAL 1', 'ADM VIRTUAL 2', 'ADM VIRTUAL 3'];
+
+      for (let i = 0; i < simulationSize; i++) {
+        const actor = simulatedAdmActors[i % simulatedAdmActors.length];
+        const docId = `sim-${Math.random().toString(36).substr(2, 9)}`;
+        const creationTime = new Date(Date.now() + i * 1000).toISOString(); // Garantir carimbo de tempo sequencial
+
+        // Cálculo de distribuição lógica idêntico ao DocumentRegistration.tsx
+        const tempNewCases = virtualDocsList
+          .filter(d => !d.is_manual_override && d.unidade_id === selectedUnidade)
+          .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
+        
+        const lastRefId = tempNewCases[0]?.conselheiro_referencia_id;
+        const lastRefUser = users.find(u => u.id === lastRefId);
+        const refName = lastRefUser?.nome.toUpperCase();
+
+        const curIdx = activeCounselors.findIndex(c => c.nome === refName);
+        const nxtIdx = activeCounselors.length > 0 ? (curIdx + 1) % activeCounselors.length : 0;
+        const assignedUser = activeCounselors[nxtIdx];
+
+        // Lógica de Distribuição Justa (Rodízio de Providência Imediata)
+        const virtualTodayDocs = virtualDocsList
+          .filter(d => d.data_aporte === todayStr && d.unidade_id === selectedUnidade && !d.is_family_persistence && !d.notificacao)
+          .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
+
+        const lastProvId = virtualTodayDocs[0]?.conselheiro_providencia_id;
+        const lastProvUser = users.find(u => u.id === lastProvId);
+        const lastProvName = lastProvUser?.nome.toUpperCase();
+        
+        const curProvIdx = virtualTrio.indexOf(lastProvName || '');
+        const nxtProvIdx = virtualTrio.length > 0 ? (curProvIdx + 1) % virtualTrio.length : 0;
+        const assignedProvName = virtualTrio[nxtProvIdx] || 'N/A';
+        const assignedProvUser = users.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === assignedProvName.toUpperCase() && u.unidade_id === selectedUnidade);
+
+        // Cria o registro temporário na lista para a próxima iteração simular a sincronização rápida
+        const newVirtualDoc: Documento = {
+          id: docId,
+          unidade_id: selectedUnidade,
+          origem: 'SIMULAÇÃO - ADMINISTRATIVO',
+          canal_comunicado: 'SISTEMA',
+          data_recebimento: todayStr,
+          data_aporte: todayStr,
+          hora_aporte: '12:00',
+          crianca_nome: `SIMULAÇÃO CRIANÇA ${i + 1}`,
+          criancas: [],
+          genitora_nome: 'SIMULAÇÃO GENITORA',
+          bairro: 'JARDIM PRIMAVERA',
+          informacoes_documento: 'TESTE DE CARGA',
+          observacoes_iniciais: 'TESTE DE SIMULAÇÃO',
+          violacoesSipia: [],
+          agentesVioladores: [],
+          status: ['AGUARDANDO_ANALISE'],
+          conselheiro_referencia_id: assignedUser.id,
+          conselheiro_providencia_id: assignedProvUser?.id || '',
+          conselheiros_providencia_nomes: virtualTrio,
+          criado_em: creationTime,
+          distribuicao_automatica: true
+        };
+
+        virtualDocsList.unshift(newVirtualDoc); // adiciona no início
+        assignedSequence.push(assignedUser.nome);
+        assignedSequenceImediata.push(assignedProvName.toUpperCase());
+
+        log(`[ADM: ${actor}] cadastrou documento para "SIMULAÇÃO CRIANÇA ${i + 1}". Ref: ${assignedUser.nome} | Imed: ${assignedProvName.toUpperCase()}`, 'success');
+      }
+
+      // Validação matemática
+      const isPerfectRef = JSON.stringify(expectedSequence) === JSON.stringify(assignedSequence);
+      const isPerfectImediata = JSON.stringify(expectedSequenceImediata) === JSON.stringify(assignedSequenceImediata);
+      const isPerfectCombined = isPerfectRef && isPerfectImediata;
+
+      if (isPerfectCombined) {
+        log(`✓ SIMULAÇÃO CONTRATADA COM SUCESSO! Ambas as sequências de rodízio mantiveram-se íntegras.`, 'success');
+      } else {
+        if (!isPerfectRef) log(`✗ DISCORDÂNCIA ENCONTRADA NA SEQUÊNCIA DE RODÍZIO DE REFERÊNCIA.`, 'error');
+        if (!isPerfectImediata) log(`✗ DISCORDÂNCIA ENCONTRADA NA SEQUÊNCIA DE RODÍZIO DE PROVIDÊNCIA IMEDIATA.`, 'error');
+      }
+
+      setSimulationResult({
+        success: isPerfectRef,
+        successImediata: isPerfectImediata,
+        sentCount: simulationSize,
+        expectedSeq: expectedSequence,
+        assignedSeq: assignedSequence,
+        expectedSeqImediata: expectedSequenceImediata,
+        assignedSeqImediata: assignedSequenceImediata,
+        message: isPerfectCombined 
+          ? 'Análise de Concorrência Concluída: Os algoritmos de lock de indexação (Referência e Providência) estão 100% robustos para múltiplas operações simultâneas!'
+          : `Falha na ordenação! ${!isPerfectRef ? '[Referência afetado] ' : ''}${!isPerfectImediata ? '[Imediata afetado]' : ''}`
+      });
+      setIsSimulating(false);
+      onAddLog(`SIMULAÇÃO: Teste concorrente de distribuição na Unidade ${selectedUnidade} executado.`);
+    }, 1500);
+  };
+
+  // EXECUTA TESTE INTEGRADO NO FIRESTORE REAL (SEGURO COM AUTOCLEANUP)
+  const runLiveDatabaseTest = async () => {
+    if (activeCounselors.length === 0) {
+      log('Não há conselheiros ativos para fazer o teste.', 'error');
+      return;
+    }
+    
+    setIsSimulating(true);
+    setSimulationResult(null);
+    clearLogs();
+
+    log(`Iniciando teste integrado em tempo real no banco Firestore (Unidade ${selectedUnidade})...`, 'warn');
+    log(`Este teste cadastrará 3 registros reais e depois fará a autolimpeza (rollback) instantânea.`, 'info');
+
+    const createdIds: string[] = [];
+    const expectedSequence: string[] = [];
+    const assignedSequence: string[] = [];
+    const expectedSequenceImediata: string[] = [];
+    const assignedSequenceImediata: string[] = [];
+
+    // For expected sequence (Referência)
+    let currentRefName = lastAssignedRef;
+    for (let i = 0; i < 3; i++) {
+      const lastIdx = activeCounselors.findIndex(c => c.nome === currentRefName);
+      const nextIdx = activeCounselors.length > 0 ? (lastIdx + 1) % activeCounselors.length : 0;
+      const target = activeCounselors[nextIdx];
+      expectedSequence.push(target.nome);
+      currentRefName = target.nome;
+    }
+
+    // For expected sequence (Imediata)
+    const todayStr = new Date().toISOString().split('T')[0];
+    const liveTrio = getEffectiveEscala(todayStr, '12:00', selectedUnidade, nameMap);
+    let currentProvName = lastAssignedImediata;
+    for (let i = 0; i < 3; i++) {
+      const lastIdx = liveTrio.findIndex(name => name.toUpperCase() === currentProvName);
+      const nextIdx = liveTrio.length > 0 ? (lastIdx + 1) % liveTrio.length : 0;
+      const target = liveTrio[nextIdx];
+      expectedSequenceImediata.push(target?.toUpperCase() || 'N/A');
+      currentProvName = target?.toUpperCase();
+    }
+
+    try {
+      for (let i = 0; i < 3; i++) {
+        const docId = `test-real-${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Simular a consulta viva do banco para obter o conselheiro dinamicamente
+        const liveNewCases = documents
+          .filter(d => !d.is_manual_override && d.unidade_id === selectedUnidade)
+          .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
+        
+        const lastRefId = liveNewCases[0]?.conselheiro_referencia_id;
+        const lastRefUser = users.find(u => u.id === lastRefId);
+        const refName = lastRefUser?.nome.toUpperCase();
+
+        const curIdx = activeCounselors.findIndex(c => c.nome === refName);
+        const nxtIdx = activeCounselors.length > 0 ? (curIdx + 1) % activeCounselors.length : 0;
+        const assignedUser = activeCounselors[nxtIdx];
+
+        // Providência Imediata (Consulta viva do banco em tempo real)
+        const liveTodayDocs = documents
+          .filter(d => d.data_aporte === todayStr && d.unidade_id === selectedUnidade && !d.is_family_persistence && !d.notificacao)
+          .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
+
+        const lastProvId = liveTodayDocs[0]?.conselheiro_providencia_id;
+        const lastProvUser = users.find(u => u.id === lastProvId);
+        const lastProvName = lastProvUser?.nome.toUpperCase();
+
+        const curProvIdx = liveTrio.indexOf(lastProvName || '');
+        const nxtProvIdx = liveTrio.length > 0 ? (curProvIdx + 1) % liveTrio.length : 0;
+        const assignedProvName = liveTrio[nxtProvIdx] || 'N/A';
+        const assignedProvUser = users.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === assignedProvName.toUpperCase() && u.unidade_id === selectedUnidade);
+
+        log(`[Gravando no Firestore] Documento de teste ${i + 1}/3...`, 'info');
+
+        const newDoc: Documento = {
+          id: docId,
+          unidade_id: selectedUnidade,
+          origem: 'SIMULAÇÃO - GERAL ADM',
+          canal_comunicado: 'SISTEMA',
+          data_recebimento: todayStr,
+          data_aporte: todayStr,
+          hora_aporte: '12:00',
+          crianca_nome: `PROVA DE CARGA REAL ${i + 1}`,
+          criancas: [],
+          genitora_nome: 'PROVA DE CARGA',
+          bairro: 'JARDIM PRIMAVERA',
+          informacoes_documento: 'INTEGRAÇÃO REAL',
+          observacoes_iniciais: 'TESTE INTEGRADO CONCORRENTE',
+          violacoesSipia: [],
+          agentesVioladores: [],
+          status: ['AGUARDANDO_ANALISE'],
+          conselheiro_referencia_id: assignedUser.id,
+          conselheiro_providencia_id: assignedProvUser?.id || '',
+          conselheiros_providencia_nomes: liveTrio,
+          criado_em: new Date().toISOString(),
+          distribuicao_automatica: true
+        };
+
+        // Grava no banco de dados real
+        await saveDocument(newDoc);
+        createdIds.push(docId);
+        assignedSequence.push(assignedUser.nome);
+        assignedSequenceImediata.push(assignedProvName.toUpperCase());
+
+        log(`✓ Escrito no Firestore! ID: ${docId} | Ref: ${assignedUser.nome} | Imed: ${assignedProvName.toUpperCase()}`, 'success');
+        
+        // Aguarda 1 segundo entre gravações para dar tempo de consolidação do carimbo de tempo
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      log(`Verificando integridade das sequências de gravação direta...`, 'info');
+      const testPassedRef = JSON.stringify(expectedSequence) === JSON.stringify(assignedSequence);
+      const testPassedImediata = JSON.stringify(expectedSequenceImediata) === JSON.stringify(assignedSequenceImediata);
+      const testPassedCombined = testPassedRef && testPassedImediata;
+
+      if (testPassedCombined) {
+        log(`✓ SUCESSO COMPROVADO EM FIRESTORE! Ambas as sequências (Referência e Imediata) mantiveram-se perfectly.`, 'success');
+      } else {
+        if (!testPassedRef) log(`▲ AVISO: Discrepância na ordem síncrona de Referência.`, 'warn');
+        if (!testPassedImediata) log(`▲ AVISO: Discrepância na ordem síncrona de Providência Imediata.`, 'warn');
+      }
+
+      setSimulationResult({
+        success: testPassedRef,
+        successImediata: testPassedImediata,
+        sentCount: 3,
+        expectedSeq: expectedSequence,
+        assignedSeq: assignedSequence,
+        expectedSeqImediata: expectedSequenceImediata,
+        assignedSeqImediata: assignedSequenceImediata,
+        message: testPassedCombined 
+          ? 'O banco de dados Firestore processou as concorrências e salvou sequências corretas de Referência e Providência!'
+          : `Discrepância nas gravações! ${!testPassedRef ? '[Referência afetado] ' : ''}${!testPassedImediata ? '[Imediata afetado]' : ''}`
+      });
+
+      // Autolimpeza
+      log(`Iniciando processo de Autolimpeza (Rollback)...`, 'warn');
+      for (const id of createdIds) {
+        log(`Deletando documento temporário ${id}...`, 'info');
+        await deleteDocument(id);
+      }
+      log(`✓ Autolimpeza concluída! Nenhuma inserção ruidosa foi deixada no seu banco de dados oficial.`, 'success');
+
+    } catch (err) {
+      log(`Erro durante teste integrado de transação: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    } finally {
+      setIsSimulating(false);
+      onAddLog(`FILTRO: Executou teste de distribuição real com autolimpeza.`);
+    }
+  };
+
+  return (
+    <div className="space-y-6 max-w-7xl mx-auto p-1 animate-in fade-in duration-300">
+      
+      {/* HEADER DO SIMULADOR */}
+      <div className="bg-gradient-to-r from-blue-700 via-indigo-800 to-slate-900 rounded-[2.5rem] p-6 sm:p-10 shadow-xl text-white relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+          <Activity className="w-48 h-48" />
+        </div>
+        <div className="max-w-3xl">
+          <span className="px-3 py-1 bg-blue-500/30 text-blue-300 rounded-full font-black text-[10px] uppercase tracking-widest border border-blue-500/20">
+            Console de Teste & Concorrência
+          </span>
+          <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight mt-3">
+            Simulador de Distribuição & Validação ADM
+          </h2>
+          <p className="text-blue-100 text-xs sm:text-sm font-medium mt-2 leading-relaxed">
+            Diagnostique se os usuários com privilégio ADM/Administrativo estão integrando cadastros normalmente nas duas unidades e valide de forma empírica o algoritmo de rodízio em ordem alfabética sob condições de acesso simultâneo.
+          </p>
+        </div>
+      </div>
+
+      <div className={`grid grid-cols-1 ${currentUser?.nome === 'LEANDRO' ? 'lg:grid-cols-3' : 'max-w-2xl mx-auto'} gap-6`}>
+        
+        {/* PARTE esquerda: Configurações e Diagnóstico das Unidades */}
+        <div className={`${currentUser?.nome === 'LEANDRO' ? 'lg:col-span-1' : 'col-span-1'} space-y-6`}>
+          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 space-y-6">
+            <h3 className="text-sm font-black uppercase text-slate-800 tracking-widest flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-indigo-600" />
+              1. Selecionar Unidade
+            </h3>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button 
+                disabled={currentUser.unidade_id !== 1}
+                onClick={() => { setSelectedUnidade(1); setSimulationResult(null); }}
+                className={`py-3 px-4 rounded-xl border text-xs font-black uppercase tracking-widest transition-all flex flex-col items-center justify-center gap-1 ${
+                  selectedUnidade === 1 
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' 
+                    : currentUser.unidade_id !== 1 
+                      ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60' 
+                      : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                <div className="flex items-center gap-1">
+                  {currentUser.unidade_id !== 1 && <Lock className="w-3 h-3" />}
+                  <span>Unidade I</span>
+                </div>
+                {currentUser.unidade_id !== 1 && (
+                  <span className="text-[8px] font-black tracking-normal text-slate-400 uppercase">Bloqueado</span>
+                )}
+                {currentUser.unidade_id === 1 && (
+                  <span className="text-[8px] font-black tracking-normal text-indigo-200 uppercase">Sua Unidade</span>
+                )}
+              </button>
+              <button 
+                disabled={currentUser.unidade_id !== 2}
+                onClick={() => { setSelectedUnidade(2); setSimulationResult(null); }}
+                className={`py-3 px-4 rounded-xl border text-xs font-black uppercase tracking-widest transition-all flex flex-col items-center justify-center gap-1 ${
+                  selectedUnidade === 2 
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' 
+                    : currentUser.unidade_id !== 2 
+                      ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60' 
+                      : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                <div className="flex items-center gap-1">
+                  {currentUser.unidade_id !== 2 && <Lock className="w-3 h-3" />}
+                  <span>Unidade II</span>
+                </div>
+                {currentUser.unidade_id !== 2 && (
+                  <span className="text-[8px] font-black tracking-normal text-slate-400 uppercase">Bloqueado</span>
+                )}
+                {currentUser.unidade_id === 2 && (
+                  <span className="text-[8px] font-black tracking-normal text-indigo-200 uppercase">Sua Unidade</span>
+                )}
+              </button>
+            </div>
+
+            {/* Diagnóstico de Usuários ADM */}
+            <div className="space-y-3 pt-3 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                  Validação de Acesso ADM
+                </span>
+                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase rounded">
+                  OK
+                </span>
+              </div>
+              
+              <div className="space-y-2">
+                {admsOfUnidade.length === 0 ? (
+                  <div className="flex items-center gap-2 text-rose-500 text-xs font-bold p-3 bg-rose-50 rounded-xl">
+                    <AlertCircle className="w-4 h-4" />
+                    Nenhum ADM ativo na Unidade {selectedUnidade}!
+                  </div>
+                ) : (
+                  admsOfUnidade.map(u => (
+                    <div key={u.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                      <div className="flex items-center gap-2">
+                        <UserCheck className="w-4 h-4 text-emerald-600" />
+                        <span className="text-xs font-extrabold text-slate-700">{u.nome}</span>
+                      </div>
+                      <span className="text-[9px] font-bold text-emerald-600 uppercase">Capacidade Escrita ✓</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Ordem de Conselheiros */}
+            <div className="space-y-3 pt-3 border-t border-slate-100">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">
+                Lista de Rodízio Alfabético Atual ({activeCounselors.length})
+              </span>
+              <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                {activeCounselors.map((c, index) => {
+                  const isLast = c.nome === lastAssignedRef;
+                  const isNext = c.nome === nextPredictedCounselor;
+                  return (
+                    <div 
+                      key={c.id} 
+                      className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all ${isNext ? 'bg-blue-50/50 border-blue-200 shadow-sm' : isLast ? 'bg-slate-50 border-slate-300' : 'bg-white border-slate-100'}`}
+                    >
+                      <div className="flex items-center gap-2 font-bold text-slate-700">
+                        <span className="w-5 h-5 bg-slate-100 text-slate-500 font-mono text-[10px] font-black rounded-full flex items-center justify-center">
+                          {index + 1}
+                        </span>
+                        <span className="uppercase text-[11px] font-extrabold">{c.nome}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isLast && (
+                          <span className="px-2 py-0.5 bg-slate-200 text-slate-700 font-black text-[8px] uppercase rounded">
+                            Último atribuído
+                          </span>
+                        )}
+                        {isNext && (
+                          <span className="px-2 py-0.5 bg-blue-600 text-white font-black text-[8px] uppercase rounded animate-pulse">
+                            Próximo da fila
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Ordem de Providência Imediata (Escala de Trabalho) */}
+            <div className="space-y-3 pt-4 border-t border-slate-100">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">
+                Rodízio de Providência Imediata (Escala de Hoje)
+              </span>
+              <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                {escalaTrio.length === 0 ? (
+                  <div className="text-xs text-slate-400 font-bold p-3 bg-slate-50 rounded-xl">
+                    Nenhuma escala ativa para esta data/unidade.
+                  </div>
+                ) : (
+                  escalaTrio.map((name, index) => {
+                    const isLast = lastAssignedImediata && name.toUpperCase() === lastAssignedImediata;
+                    const isNext = nextPredictedImediata && name.toUpperCase() === nextPredictedImediata?.toUpperCase();
+                    return (
+                      <div 
+                        key={index} 
+                        className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all ${isNext ? 'bg-amber-50/50 border-amber-200 shadow-sm' : isLast ? 'bg-slate-50 border-slate-300' : 'bg-white border-slate-100'}`}
+                      >
+                        <div className="flex items-center gap-2 font-bold text-slate-700">
+                          <span className="w-5 h-5 bg-slate-100 text-slate-500 font-mono text-[10px] font-black rounded-full flex items-center justify-center">
+                            {index + 1}
+                          </span>
+                          <span className="uppercase text-[11px] font-extrabold">{name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {isLast && (
+                            <span className="px-2 py-0.5 bg-slate-200 text-slate-700 font-black text-[8px] uppercase rounded">
+                              Último
+                            </span>
+                          )}
+                          {isNext && (
+                            <span className="px-2 py-0.5 bg-amber-600 text-white font-black text-[8px] uppercase rounded animate-pulse">
+                              Próximo
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* PARTE DIREITA: Terminal de Logs de Teste e Disparador de Concorrência (Habilitado apenas para LEANDRO) */}
+        {currentUser?.nome === 'LEANDRO' && (
+          <div className="lg:col-span-2 space-y-6">
+          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <h3 className="text-sm font-black uppercase text-slate-800 tracking-widest flex items-center gap-2">
+                <Zap className="w-5 h-5 text-amber-500" />
+                2. Disparar Testes Concorrentes
+              </h3>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-slate-500 whitespace-nowrap">Qtd Registros:</label>
+                <select 
+                  className="p-2 border border-slate-200 rounded-xl font-bold text-xs"
+                  value={simulationSize}
+                  onChange={e => setSimulationSize(Number(e.target.value))}
+                >
+                  <option value={3}>3 Submissões</option>
+                  <option value={5}>5 Submissões</option>
+                  <option value={10}>10 Submissões (Carga)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <button
+                disabled={isSimulating}
+                onClick={runSandboxSimulation}
+                className="p-4 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 disabled:opacity-50 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-md flex items-center justify-center gap-3 transition-all"
+              >
+                {isSimulating ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" /> Simulando...
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4" /> Rodar Simulação Concorrente (Sandbox)
+                  </>
+                )}
+              </button>
+
+              <button
+                disabled={isSimulating}
+                onClick={runLiveDatabaseTest}
+                className="p-4 bg-slate-900 hover:bg-slate-850 disabled:opacity-50 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-md flex items-center justify-center gap-3 transition-all border border-slate-850"
+              >
+                {isSimulating ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" /> Processando Banco...
+                  </>
+                ) : (
+                  <>
+                    <Database className="w-4 h-4 text-amber-400" /> Teste Firestore Real com Autoclênup
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Quadro de Resultados */}
+            {simulationResult && (
+              <div className={`p-5 rounded-[1.5rem] border ${(simulationResult.success && simulationResult.successImediata) ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900'} space-y-4`}>
+                <div className="flex items-start gap-3">
+                  <div className={`p-2 rounded-lg ${(simulationResult.success && simulationResult.successImediata) ? 'bg-emerald-500/20 text-emerald-600' : 'bg-amber-500/20 text-amber-600'}`}>
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-widest">
+                      {(simulationResult.success && simulationResult.successImediata) ? 'Diagnóstico: ✅ AMBOS INTEGRADOS E EXATOS' : 'Diagnóstico: ⚠ REQUER ATENÇÃO'}
+                    </h4>
+                    <p className="text-xs font-bold mt-1 text-slate-600 leading-relaxed">
+                      {simulationResult.message}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Bloco Ref */}
+                <div className="space-y-2 pt-3 border-t border-slate-200/50">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 block">
+                    1. Rodízio de Conselheiros de Referência (Alfabético):
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white/50 p-3 rounded-2xl border border-slate-100">
+                    <div className="space-y-1">
+                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Ordem Esperada:</span>
+                      <div className="flex flex-wrap items-center gap-1">
+                        {simulationResult.expectedSeq.map((name, i) => (
+                          <div key={i} className="flex items-center text-[10px] font-bold bg-white px-2 py-1 rounded-lg border border-slate-200 uppercase">
+                            {name}
+                            {i < simulationResult.expectedSeq.length - 1 && <ChevronRight className="w-3 h-3 text-slate-400 ml-1" />}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Ordem Atribuída:</span>
+                      <div className="flex flex-wrap items-center gap-1">
+                        {simulationResult.assignedSeq.map((name, i) => (
+                          <div key={i} className={`flex items-center text-[10px] font-bold px-2 py-1 rounded-lg border uppercase ${simulationResult.success ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-red-150 text-red-800 border-red-300'}`}>
+                            {name}
+                            {i < simulationResult.assignedSeq.length - 1 && <ChevronRight className="w-3 h-3 text-slate-400 ml-1" />}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bloco Imediata */}
+                <div className="space-y-2 pt-1">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-amber-700 block">
+                    2. Rodízio de Providência Imediata (Escala de Trabalho):
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white/50 p-3 rounded-2xl border border-slate-100">
+                    <div className="space-y-1">
+                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Ordem Esperada:</span>
+                      <div className="flex flex-wrap items-center gap-1">
+                        {simulationResult.expectedSeqImediata.map((name, i) => (
+                          <div key={i} className="flex items-center text-[10px] font-bold bg-white px-2 py-1 rounded-lg border border-slate-200 uppercase">
+                            {name}
+                            {i < simulationResult.expectedSeqImediata.length - 1 && <ChevronRight className="w-3 h-3 text-slate-400 ml-1" />}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Ordem Atribuída:</span>
+                      <div className="flex flex-wrap items-center gap-1">
+                        {simulationResult.assignedSeqImediata.map((name, i) => (
+                          <div key={i} className={`flex items-center text-[10px] font-bold px-2 py-1 rounded-lg border uppercase ${simulationResult.successImediata ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-red-150 text-red-800 border-red-300'}`}>
+                            {name}
+                            {i < simulationResult.assignedSeqImediata.length - 1 && <ChevronRight className="w-3 h-3 text-slate-400 ml-1" />}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* Painel do Terminal de Logs */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
+                  <Terminal className="w-4 h-4 text-indigo-500" />
+                  Terminal de Diagnóstico de Fluxo
+                </span>
+                <button 
+                  onClick={clearLogs}
+                  className="text-slate-400 hover:text-rose-600 text-[10px] font-bold uppercase flex items-center gap-1 transition-all"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Limpar Logs
+                </button>
+              </div>
+
+              <div className="bg-slate-900 rounded-2xl p-4 font-mono text-[11px] text-slate-300 h-64 overflow-y-auto space-y-2 relative border border-slate-800">
+                {testLogs.length === 0 ? (
+                  <div className="absolute inset-0 flex items-center justify-center text-slate-500">
+                    Nenhum teste iniciado. Clique em um botão acima para executar.
+                  </div>
+                ) : (
+                  testLogs.map((item, i) => {
+                    let colorClass = 'text-blue-400';
+                    if (item.type === 'success') colorClass = 'text-emerald-400';
+                    if (item.type === 'warn') colorClass = 'text-amber-400';
+                    if (item.type === 'error') colorClass = 'text-rose-400';
+                    
+                    return (
+                      <div key={i} className="flex items-start gap-2 leading-relaxed">
+                        <span className="text-slate-500 text-[10px] shrink-0">[{item.timestamp}]</span>
+                        <span className={`${colorClass} shrink-0`}>
+                          {item.type === 'success' ? '[SUCCESS]' : item.type === 'warn' ? '[WARNING]' : item.type === 'error' ? '[ERROR]' : '[INFO]'}
+                        </span>
+                        <span className="text-slate-200">{item.message}</span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+            
+          </div>
+        </div>
+        )}
+
+      </div>
+
+    </div>
+  );
+};

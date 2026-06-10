@@ -19,6 +19,7 @@ import {
   ATRIBUICOES_136_ECA, REDE_HORTOLANDIA, getEffectiveEscala
 } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
+import { formatLocalDateString } from '../lib/dateUtils';
 
 interface DocumentViewProps {
   document: Documento;
@@ -522,7 +523,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
               </div>
               <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-1 hover:border-slate-300 transition-all">
                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Data de Aporte</span>
-                <span className="text-[12px] font-black text-slate-800 uppercase">{doc.data_aporte ? new Date(doc.data_aporte).toLocaleDateString('pt-BR') : 'N/A'}</span>
+                <span className="text-[12px] font-black text-slate-800 uppercase">{doc.data_aporte ? formatLocalDateString(doc.data_aporte) : 'N/A'}</span>
               </div>
               <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-1 hover:border-slate-300 transition-all">
                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Hora de Aporte</span>
@@ -1042,7 +1043,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                                     <div className="p-3 bg-slate-50 rounded-xl"><FileText className="w-4 h-4 text-slate-400" /></div>
                                     <div>
                                        <div className="text-[12px] font-black text-slate-800 uppercase">{h.origem}</div>
-                                       <div className="text-[10px] font-bold text-slate-400 uppercase">{new Date(h.data_recebimento).toLocaleDateString('pt-BR')} • {h.canal_comunicado}</div>
+                                       <div className="text-[10px] font-bold text-slate-400 uppercase">{formatLocalDateString(h.data_recebimento)} • {h.canal_comunicado}</div>
                                     </div>
                                  </div>
                                  <span className="px-3 py-1 bg-slate-100 text-slate-500 rounded-lg text-[10px] font-black uppercase">#{h.id}</span>
@@ -1127,7 +1128,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
           <div className="space-y-4">
             <h3 className="text-[24px] font-black text-red-600 uppercase tracking-tighter">Prazo de Monitoramento Vencido!</h3>
             <p className="text-[14px] text-slate-600 font-bold uppercase leading-relaxed">
-              O serviço <span className="text-red-600">[{expiredItem.servico}]</span> para este prontuário expirou em {new Date(expiredItem.dataFinal).toLocaleDateString('pt-BR')}.
+              O serviço <span className="text-red-600">[{expiredItem.servico}]</span> para este prontuário expirou em {formatLocalDateString(expiredItem.dataFinal)}.
             </p>
             <p className="text-[12px] text-slate-400 font-bold uppercase">
               Você deve prorrogar o prazo ou encerrar o monitoramento desta família para prosseguir.

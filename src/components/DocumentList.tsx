@@ -1,8 +1,9 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database, Trash2, Timer } from 'lucide-react';
+import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database, Trash2, Timer, Calendar } from 'lucide-react';
 import { Documento, User as UserType, DocumentStatus } from '../types';
 import { STATUS_LABELS, INITIAL_USERS, BAIRROS, getBairrosByUnidade } from '../constants';
+import { formatLocalDateString, parseLocalDate, formatCadastroDateTime } from '../lib/dateUtils';
 
 const getStatusStyle = (status: DocumentStatus, isImprocedente?: boolean, validationState?: 'PENDING_SELF' | 'PENDING_OTHERS' | 'COMPLETED' | 'ADMIN_CONCLUDED') => {
   if (isImprocedente) return { color: 'bg-slate-400', border: 'border-l-slate-400', icon: <Ban className="w-4 h-4" /> };
@@ -43,32 +44,45 @@ interface DocumentListProps {
 
 const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUser, onSelectDoc, onEditDoc, onDeleteDoc, isReadOnly, isMyReferenceView }) => {
   const [myViewMode, setMyViewMode] = useState<'ALL' | 'REF' | 'IMED' | 'VALID'>(isMyReferenceView ? 'REF' : 'ALL');
-  const initialFilters = { term: '', bairro: '', status: '', conselheiro_ref_id: '' };
+  const initialFilters = { term: '', bairro: '', status: '', conselheiro_ref_id: '', data_registro: '' };
   const [filters, setFilters] = useState(initialFilters);
 
   const filteredDocs = useMemo(() => {
-    return documents.filter(doc => {
-      // Regra: Se for modo "Minha Referência", filtra. Se for "Painel Geral", vê tudo.
-      if (myViewMode === 'REF' && doc.conselheiro_referencia_id !== currentUser.id) return false;
-      if (myViewMode === 'IMED' && doc.conselheiro_providencia_id !== currentUser.id) return false;
-      if (myViewMode === 'VALID') {
-        const isRef = doc.conselheiro_referencia_id === currentUser.id;
-        const isInTrio = doc.conselheiros_providencia_nomes?.some(name => name.toUpperCase() === currentUser.nome.toUpperCase());
-        const isPending = doc.status.includes('AGUARDANDO_VALIDACAO');
-        if (!isPending || (!isRef && !isInTrio)) return false;
-      }
+    return documents
+      .filter(doc => {
+        // Regra: Se for modo "Minha Referência", filtra. Se for "Painel Geral", vê tudo.
+        if (myViewMode === 'REF' && doc.conselheiro_referencia_id !== currentUser.id) return false;
+        if (myViewMode === 'IMED' && doc.conselheiro_providencia_id !== currentUser.id) return false;
+        if (myViewMode === 'VALID') {
+          const isRef = doc.conselheiro_referencia_id === currentUser.id;
+          const isInTrio = doc.conselheiros_providencia_nomes?.some(name => name.toUpperCase() === currentUser.nome.toUpperCase());
+          const isPending = doc.status.includes('AGUARDANDO_VALIDACAO');
+          if (!isPending || (!isRef && !isInTrio)) return false;
+        }
 
-      const matchTerm = !filters.term || 
-        doc.crianca_nome.toUpperCase().includes(filters.term.toUpperCase()) || 
-        doc.id.includes(filters.term) ||
-        (doc.despacho_situacao && doc.despacho_situacao.toUpperCase().includes(filters.term.toUpperCase()));
-      
-      const matchBairro = !filters.bairro || doc.bairro === filters.bairro;
-      const matchStatus = !filters.status || doc.status.includes(filters.status as DocumentStatus);
-      const matchRef = !filters.conselheiro_ref_id || doc.conselheiro_referencia_id === filters.conselheiro_ref_id;
-      
-      return matchTerm && matchBairro && matchStatus && matchRef;
-    });
+        const matchTerm = !filters.term || 
+          doc.crianca_nome.toUpperCase().includes(filters.term.toUpperCase()) || 
+          doc.id.includes(filters.term) ||
+          (doc.despacho_situacao && doc.despacho_situacao.toUpperCase().includes(filters.term.toUpperCase()));
+        
+        const matchBairro = !filters.bairro || doc.bairro === filters.bairro;
+        const matchStatus = !filters.status || doc.status.includes(filters.status as DocumentStatus);
+        const matchRef = !filters.conselheiro_ref_id || doc.conselheiro_referencia_id === filters.conselheiro_ref_id;
+        const matchDate = !filters.data_registro || doc.data_aporte === filters.data_registro;
+        
+        return matchTerm && matchBairro && matchStatus && matchRef && matchDate;
+      })
+      .sort((a, b) => {
+        const aTime = a.criado_em ? new Date(a.criado_em).getTime() : 0;
+        const bTime = b.criado_em ? new Date(b.criado_em).getTime() : 0;
+        if (aTime !== bTime) {
+          return aTime - bTime; // Oldest first
+        }
+        if (a.data_aporte !== b.data_aporte) {
+          return a.data_aporte.localeCompare(b.data_aporte);
+        }
+        return a.hora_aporte.localeCompare(b.hora_aporte);
+      });
   }, [documents, filters, myViewMode, currentUser]);
 
   const clearFilters = () => setFilters(initialFilters);
@@ -87,7 +101,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUs
            </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
             <input type="text" placeholder="NOME, PROTOCOLO OU CÓDIGO DO COMUNICADO..." className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-[11px] uppercase focus:border-blue-500" value={filters.term} onChange={(e) => setFilters({...filters, term: e.target.value})} />
@@ -104,6 +118,15 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUs
             <option value="">Qualquer Conselheiro</option>
             {users.filter(u => u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE').map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
           </select>
+          <div className="relative">
+            <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+            <input 
+              type="date" 
+              className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-[11px] uppercase focus:border-blue-500 text-slate-700" 
+              value={filters.data_registro} 
+              onChange={(e) => setFilters({...filters, data_registro: e.target.value})} 
+            />
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-100 rounded-2xl w-full max-w-4xl mt-4 border border-slate-200">
@@ -199,7 +222,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUs
                         <h3 className="text-[17px] font-black text-[#111827] uppercase group-hover:text-[#2563EB] transition-colors">{doc.crianca_nome || 'PRONTUÁRIO INCOMPLETO'}</h3>
                         {doc.monitoramento && !doc.monitoramento.concluido && doc.monitoramento.requisicoes?.some(r => {
                            if (r.concluido || (r as any).excluidoDoMonitoramento) return false;
-                           const deadline = new Date(r.dataFinal);
+                           const deadline = parseLocalDate(r.dataFinal);
                            deadline.setHours(0,0,0,0);
                            return deadline.getTime() < new Date().setHours(0,0,0,0);
                         }) && (
@@ -216,7 +239,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUs
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-lg text-[10px] font-black text-[#2563EB] uppercase"><UserCheck className="w-3 h-3" /> Titular: {refCouncilor?.nome || 'N/A'}</div>
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[10px] font-black text-amber-700 uppercase"><ShieldCheck className="w-3 h-3" /> Imediata: {provCouncilor?.nome || 'N/A'}</div>
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black text-slate-500 uppercase">
-                          <Timer className="w-3 h-3" /> Registro: {doc.data_aporte ? new Date(doc.data_aporte).toLocaleDateString('pt-BR') : 'N/A'} às {doc.hora_aporte || '--:--'}
+                          <Timer className="w-3 h-3" /> Registro: {(() => { const r = formatCadastroDateTime(doc.criado_em, doc.data_aporte, doc.hora_aporte); return `${r.date} às ${r.time}`; })()}
                         </div>
                      </div>
                   </div>

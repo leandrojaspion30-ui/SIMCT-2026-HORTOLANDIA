@@ -22,7 +22,8 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ documents, users, curre
     dataFim: '',
     status: '',
     conselheiro_ref_id: '',
-    servico_rede: ''
+    servico_rede: '',
+    data_registro: ''
   };
 
   const [filters, setFilters] = useState(initialFilters);
@@ -30,18 +31,34 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ documents, users, curre
   const clearFilters = () => setFilters(initialFilters);
 
   const filteredDocs = useMemo(() => {
-    return documents.filter(doc => {
-      const matchCat = !filters.categoria || doc.origem?.includes(filters.categoria);
-      const matchGenitora = !filters.genitora_nome || doc.genitora_nome.toUpperCase().includes(filters.genitora_nome.toUpperCase());
-      const matchCrianca = !filters.crianca_nome || doc.crianca_nome.toUpperCase().includes(filters.crianca_nome.toUpperCase());
-      const matchCpf = !filters.cpf || (doc.cpf_crianca?.includes(filters.cpf) || doc.cpf_genitora?.includes(filters.cpf));
-      const matchBairro = !filters.bairro || doc.bairro === filters.bairro;
-      const matchStatus = !filters.status || doc.status.includes(filters.status as DocumentStatus);
-      const matchRef = !filters.conselheiro_ref_id || doc.conselheiro_referencia_id === filters.conselheiro_ref_id;
-      const matchServico = !filters.servico_rede || doc.atribuicoes_136_detalhadas?.some(ad => ad.servicos?.some(s => s.area === filters.servico_rede));
-      
-      return matchCat && matchGenitora && matchCrianca && matchCpf && matchBairro && matchStatus && matchRef && matchServico;
-    });
+    return documents
+      .filter(doc => {
+        const matchCat = !filters.categoria || doc.origem?.includes(filters.categoria);
+        const matchGenitora = !filters.genitora_nome || doc.genitora_nome.toUpperCase().includes(filters.genitora_nome.toUpperCase());
+        const matchCrianca = !filters.crianca_nome || doc.crianca_nome.toUpperCase().includes(filters.crianca_nome.toUpperCase());
+        const matchCpf = !filters.cpf || (doc.cpf_crianca?.includes(filters.cpf) || doc.cpf_genitora?.includes(filters.cpf));
+        const matchBairro = !filters.bairro || doc.bairro === filters.bairro;
+        const matchStatus = !filters.status || doc.status.includes(filters.status as DocumentStatus);
+        const matchRef = !filters.conselheiro_ref_id || doc.conselheiro_referencia_id === filters.conselheiro_ref_id;
+        const matchServico = !filters.servico_rede || doc.atribuicoes_136_detalhadas?.some(ad => ad.servicos?.some(s => s.area === filters.servico_rede));
+        
+        const matchDate = !filters.data_registro || doc.data_aporte === filters.data_registro;
+        const matchDataInicio = !filters.dataInicio || doc.data_aporte >= filters.dataInicio;
+        const matchDataFim = !filters.dataFim || doc.data_aporte <= filters.dataFim;
+        
+        return matchCat && matchGenitora && matchCrianca && matchCpf && matchBairro && matchStatus && matchRef && matchServico && matchDate && matchDataInicio && matchDataFim;
+      })
+      .sort((a, b) => {
+        const aTime = a.criado_em ? new Date(a.criado_em).getTime() : 0;
+        const bTime = b.criado_em ? new Date(b.criado_em).getTime() : 0;
+        if (aTime !== bTime) {
+          return aTime - bTime; // Oldest first
+        }
+        if (a.data_aporte !== b.data_aporte) {
+          return a.data_aporte.localeCompare(b.data_aporte);
+        }
+        return a.hora_aporte.localeCompare(b.hora_aporte);
+      });
   }, [documents, filters]);
 
   return (
@@ -95,6 +112,10 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ documents, users, curre
                 <option value="">TODAS AS REDES</option>
                 {Object.keys(REDE_HORTOLANDIA).map(area => <option key={area} value={area}>{area}</option>)}
               </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase">Data de Registro</label>
+              <input type="date" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] font-bold uppercase text-slate-700" value={filters.data_registro} onChange={e => setFilters({...filters, data_registro: e.target.value})} />
             </div>
         </div>
       </div>

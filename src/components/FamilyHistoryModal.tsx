@@ -3,6 +3,7 @@ import React from 'react';
 import { X, History, Baby, Users, Calendar, FileText, Scale, ShieldCheck, Zap, Info, ShieldAlert, Clock, MapPin } from 'lucide-react';
 import { Documento, User, AgendaEntry } from '../types';
 import { INITIAL_USERS } from '../constants';
+import { formatLocalDateString } from '../lib/dateUtils';
 
 interface FamilyHistoryModalProps {
   history: Documento[];
@@ -106,7 +107,7 @@ const FamilyHistoryModal: React.FC<FamilyHistoryModalProps> = ({ history, agenda
                         <div className="space-y-2 flex-1">
                           <div className="flex items-center gap-3">
                             <span className="px-3 py-1 bg-slate-100 text-[#111827] text-[10px] font-black rounded-lg uppercase tracking-widest">
-                              {new Date(doc.data_recebimento).toLocaleDateString('pt-BR')}
+                              {formatLocalDateString(doc.data_recebimento)}
                             </span>
                             <span className="text-[11px] font-mono font-bold text-slate-300">#{doc.id}</span>
                             <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[9px] font-black rounded uppercase border border-blue-100">PRONTUÁRIO</span>
@@ -160,7 +161,7 @@ const FamilyHistoryModal: React.FC<FamilyHistoryModalProps> = ({ history, agenda
                         <div className="space-y-2 flex-1">
                           <div className="flex items-center gap-3">
                             <span className="px-3 py-1 bg-blue-600 text-white text-[10px] font-black rounded-lg uppercase tracking-widest">
-                              {new Date(entry.data + 'T12:00:00').toLocaleDateString('pt-BR')}
+                              {formatLocalDateString(entry.data)}
                             </span>
                             <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[9px] font-black rounded uppercase border border-blue-200">AGENDA / NOTIFICAÇÃO</span>
                             {entry.status && (

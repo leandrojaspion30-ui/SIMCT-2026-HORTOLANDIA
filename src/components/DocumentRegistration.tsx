@@ -21,7 +21,10 @@ interface DocumentRegistrationProps {
 
 const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, users, agenda, currentUser, onSubmit, onCancel, initialData, isReadOnly, title, nameMap, allUsers = users }) => {
   const systemNow = new Date();
-  const todayDate = systemNow.toISOString().split('T')[0];
+  const year = systemNow.getFullYear();
+  const month = String(systemNow.getMonth() + 1).padStart(2, '0');
+  const day = String(systemNow.getDate()).padStart(2, '0');
+  const todayDate = `${year}-${month}-${day}`;
   const todayTime = systemNow.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
   const [formData, setFormData] = useState({
@@ -103,8 +106,10 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     if (isReferenceLocked) return allUsers.find(u => u.id === formData.conselheiro_referencia_id);
     if (isManualReference && formData.conselheiro_referencia_id) return allUsers.find(u => u.id === formData.conselheiro_referencia_id);
     
-    // Filtra casos novos (sem histórico)
-    const newCases = documents.filter(d => !d.is_manual_override && d.unidade_id === formData.unidade_id);
+    // Filtra casos novos (sem histórico) ordenando descendente por data de criação para obter o último de forma consistente
+    const newCases = documents
+      .filter(d => !d.is_manual_override && d.unidade_id === formData.unidade_id)
+      .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
     const lastAssignedRefId = newCases[0]?.conselheiro_referencia_id;
     const lastRefUser = allUsers.find(u => u.id === lastAssignedRefId);
     const lastRefNameRaw = lastRefUser?.nome.toUpperCase();
@@ -126,9 +131,32 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     if (initialData) return allUsers.find(u => u.id === initialData.conselheiro_providencia_id);
     
     // 2. Persistência Familiar no mesmo dia (DIRETRIZ: Mesmo conselheiro se já atendido hoje)
-    const sameFamilyToday = familyHistory.find(d => d.data_aporte === formData.data_aporte && d.conselheiro_providencia_id);
-    if (sameFamilyToday) {
-      return allUsers.find(u => u.id === sameFamilyToday.conselheiro_providencia_id);
+    const sameFamilyTodayDirect = documents.find(d => {
+      if (d.data_aporte !== formData.data_aporte || d.unidade_id !== formData.unidade_id || !d.conselheiro_providencia_id || d.id === initialData?.id) {
+        return false;
+      }
+      
+      const cpfGen = formData.cpf_genitora.replace(/\D/g, '');
+      const dCpfGen = d.cpf_genitora?.replace(/\D/g, '') || '';
+      if (cpfGen && dCpfGen && cpfGen === dCpfGen) return true;
+
+      const nameGen = formData.genitora_nome?.trim().toUpperCase();
+      const dNameGen = d.genitora_nome?.trim().toUpperCase();
+      if (nameGen && dNameGen && nameGen !== 'NÃO INFORMADO' && nameGen.length >= 3 && nameGen === dNameGen) return true;
+
+      const cpfsCriancas = formData.criancas.map(c => c.cpf.replace(/\D/g, '')).filter(c => c.length === 11);
+      const dCpfsCriancas = d.criancas?.map(c => c.cpf?.replace(/\D/g, '')).filter(c => c && c.length === 11) || [];
+      if (cpfsCriancas.length > 0 && dCpfsCriancas.length > 0 && cpfsCriancas.some(cpf => dCpfsCriancas.includes(cpf))) return true;
+
+      const namesCriancas = formData.criancas.map(c => c.nome?.trim().toUpperCase()).filter(n => n && n !== 'NÃO INFORMADO');
+      const dNamesCriancas = d.criancas?.map(c => c.nome?.trim().toUpperCase()).filter(n => n && n !== 'NÃO INFORMADO') || [];
+      if (namesCriancas.length > 0 && dNamesCriancas.length > 0 && namesCriancas.some(name => dNamesCriancas.includes(name))) return true;
+
+      return false;
+    });
+
+    if (sameFamilyTodayDirect) {
+      return allUsers.find(u => u.id === sameFamilyTodayDirect.conselheiro_providencia_id);
     }
     
     // 3. Lógica de Distribuição Justa (Rodízio)
@@ -149,7 +177,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     const nextName = trioNames[nextIndex];
     
     return allUsers.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === nextName && u.unidade_id === formData.unidade_id);
-  }, [trioNames, documents, formData.data_aporte, formData.notificacao, initialData, formData.unidade_id, allUsers, nameMap, familyHistory]);
+  }, [trioNames, documents, formData.data_aporte, formData.notificacao, initialData, formData.unidade_id, allUsers, nameMap, familyHistory, formData.cpf_genitora, formData.genitora_nome, formData.criancas]);
 
   const handleChildChange = (index: number, field: keyof ChildData, value: any) => {
     const newChildren = [...formData.criancas];
@@ -252,7 +280,33 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     // Lógica de seleção justa de 2 validadores do trio para casos de notificação
     const notifiedName = formData.notificacao?.toUpperCase();
     const isNewNotif = !initialData || initialData.notificacao?.toUpperCase() !== notifiedName;
-    const isFamilyPersistence = familyHistory.some(d => d.data_aporte === formData.data_aporte && d.id !== initialData?.id);
+    
+    // Verificação robusta de persistência familiar na mesma data de aporte
+    const sameFamilyTodayDirect = documents.find(d => {
+      if (d.data_aporte !== formData.data_aporte || d.unidade_id !== formData.unidade_id || !d.conselheiro_providencia_id || d.id === initialData?.id) {
+        return false;
+      }
+      
+      const cpfGen = formData.cpf_genitora.replace(/\D/g, '');
+      const dCpfGen = d.cpf_genitora?.replace(/\D/g, '') || '';
+      if (cpfGen && dCpfGen && cpfGen === dCpfGen) return true;
+
+      const nameGen = formData.genitora_nome?.trim().toUpperCase();
+      const dNameGen = d.genitora_nome?.trim().toUpperCase();
+      if (nameGen && dNameGen && nameGen !== 'NÃO INFORMADO' && nameGen.length >= 3 && nameGen === dNameGen) return true;
+
+      const cpfsCriancas = formData.criancas.map(c => c.cpf.replace(/\D/g, '')).filter(c => c.length === 11);
+      const dCpfsCriancas = d.criancas?.map(c => c.cpf?.replace(/\D/g, '')).filter(c => c && c.length === 11) || [];
+      if (cpfsCriancas.length > 0 && dCpfsCriancas.length > 0 && cpfsCriancas.some(cpf => dCpfsCriancas.includes(cpf))) return true;
+
+      const namesCriancas = formData.criancas.map(c => c.nome?.trim().toUpperCase()).filter(n => n && n !== 'NÃO INFORMADO');
+      const dNamesCriancas = d.criancas?.map(c => c.nome?.trim().toUpperCase()).filter(n => n && n !== 'NÃO INFORMADO') || [];
+      if (namesCriancas.length > 0 && dNamesCriancas.length > 0 && namesCriancas.some(name => dNamesCriancas.includes(name))) return true;
+
+      return false;
+    });
+
+    const isFamilyPersistence = !!sameFamilyTodayDirect;
     
     let finalValidators = initialData?.conselheiros_providencia_nomes || trioNames;
 

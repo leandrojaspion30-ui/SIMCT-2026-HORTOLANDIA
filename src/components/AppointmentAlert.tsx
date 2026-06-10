@@ -2,6 +2,7 @@
 import React, { useMemo } from 'react';
 import { Bell, Calendar, Clock, MapPin, X, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { AgendaEntry } from '../types';
+import { formatLocalDateString } from '../lib/dateUtils';
 
 interface AppointmentAlertProps {
   event: AgendaEntry;
@@ -49,7 +50,7 @@ const AppointmentAlert: React.FC<AppointmentAlertProps> = ({ event, onView, onDi
             <div className="mt-3 space-y-2">
               <div className="flex items-center gap-2 text-[13px] text-[#4B5563] font-medium uppercase">
                 <Calendar className="w-3.5 h-3.5 text-[#2563EB]" />
-                {new Date(event.data).toLocaleDateString('pt-BR')}
+                {formatLocalDateString(event.data)}
               </div>
               <div className="flex items-center gap-2 text-[13px] text-[#4B5563] font-medium uppercase">
                 <Clock className="w-3.5 h-3.5 text-[#2563EB]" />

@@ -21,6 +21,7 @@ import AgendaView from './components/AgendaView';
 import StatisticsView from './components/StatisticsView';
 import AppointmentAlert from './components/AppointmentAlert';
 import UserManagementPanel from './components/UserManagementPanel';
+import { DistributionSimulator } from './components/DistributionSimulator';
 
 const CT_LOGO_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR6A8u03A307V8A6_vC3B0C77z1u5w8rW6pLg&s";
 
@@ -71,7 +72,7 @@ const NavItem: React.FC<{ icon: React.ReactNode; label: string; active: boolean;
 const App: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'register' | 'my-docs' | 'monitoring' | 'logs' | 'search' | 'settings' | 'agenda' | 'statistics' | 'edit' | 'user-management' | 'plantao' | 'global-statistics'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'register' | 'my-docs' | 'monitoring' | 'logs' | 'search' | 'settings' | 'agenda' | 'statistics' | 'edit' | 'user-management' | 'plantao' | 'global-statistics' | 'distribution-test'>('dashboard');
   const [users, setUsers] = useState<UserWithPassword[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
@@ -365,7 +366,7 @@ const App: React.FC = () => {
   const renderContent = () => {
     if (!currentUser) return null;
     
-    if (activeTab === 'user-management' && (isSuperAdmin || isAdministrative)) return (
+    if (activeTab === 'user-management' && isSuperAdmin) return (
       <UserManagementPanel 
         users={filteredUsers} 
         documents={documents}
@@ -683,6 +684,7 @@ const App: React.FC = () => {
       }} />;
       case 'statistics': return <StatisticsView documents={documents} agenda={agenda} users={users} currentUser={currentUser} />;
       case 'global-statistics': return <StatisticsView documents={allDocuments} agenda={allAgenda} users={users} currentUser={currentUser} isGlobal />;
+      case 'distribution-test': return <DistributionSimulator documents={allDocuments} users={users} currentUser={currentUser} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} />;
       default: return null;
     }
   };
@@ -835,8 +837,9 @@ const App: React.FC = () => {
           <NavItem icon={<Database className="w-5 h-5" />} label="Busca Ativa" active={activeTab === 'search'} onClick={() => { handleNavigate('search'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
           <NavItem icon={<BarChart3 className="w-5 h-5" />} label="Relatórios" active={activeTab === 'statistics'} onClick={() => { handleNavigate('statistics'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
           <NavItem icon={<ShieldCheck className="w-5 h-5" />} label="Minha Senha" active={activeTab === 'settings'} onClick={() => { handleNavigate('settings'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
-          {(isSuperAdmin || isAdministrative) && <NavItem icon={<UserCog className="w-5 h-5" />} label="Gestão de RH" active={activeTab === 'user-management'} onClick={() => { handleNavigate('user-management'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />}
+          {isSuperAdmin && <NavItem icon={<UserCog className="w-5 h-5" />} label="Gestão de RH" active={activeTab === 'user-management'} onClick={() => { handleNavigate('user-management'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />}
           {(isSuperAdmin || isAdministrative) && <NavItem icon={<History className="w-5 h-5" />} label="Audit Log" active={activeTab === 'logs'} onClick={() => { handleNavigate('logs'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />}
+          {(isSuperAdmin || isAdministrative) && <NavItem icon={<Activity className="w-5 h-5" />} label="Diagnóstico de Distribuição" active={activeTab === 'distribution-test'} onClick={() => { handleNavigate('distribution-test'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />}
           {isSuperAdmin && <NavItem icon={<PieChart className="w-5 h-5" />} label="Relatórios das Unidades" active={activeTab === 'global-statistics'} onClick={() => { handleNavigate('global-statistics'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />}
         </nav>
         <div className="p-4 border-t border-white/5">
