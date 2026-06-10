@@ -60,10 +60,20 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUs
           if (!isPending || (!isRef && !isInTrio)) return false;
         }
 
+        const cleanTermOnlyDigits = filters.term.replace(/\D/g, '');
+        const matchCpfInTerm = cleanTermOnlyDigits && (
+          (doc.cpf_genitora?.replace(/\D/g, '') || '').includes(cleanTermOnlyDigits) ||
+          (doc.cpf_crianca?.replace(/\D/g, '') || '').includes(cleanTermOnlyDigits) ||
+          doc.criancas?.some(c => (c.cpf?.replace(/\D/g, '') || '').includes(cleanTermOnlyDigits))
+        );
+
         const matchTerm = !filters.term || 
           doc.crianca_nome.toUpperCase().includes(filters.term.toUpperCase()) || 
-          doc.id.includes(filters.term) ||
-          (doc.despacho_situacao && doc.despacho_situacao.toUpperCase().includes(filters.term.toUpperCase()));
+          doc.id.toUpperCase().includes(filters.term.toUpperCase()) ||
+          (doc.despacho_situacao && doc.despacho_situacao.toUpperCase().includes(filters.term.toUpperCase())) ||
+          (doc.genitora_nome && doc.genitora_nome.toUpperCase().includes(filters.term.toUpperCase())) ||
+          doc.criancas?.some(c => c.nome?.toUpperCase().includes(filters.term.toUpperCase())) ||
+          !!matchCpfInTerm;
         
         const matchBairro = !filters.bairro || doc.bairro === filters.bairro;
         const matchStatus = !filters.status || doc.status.includes(filters.status as DocumentStatus);
