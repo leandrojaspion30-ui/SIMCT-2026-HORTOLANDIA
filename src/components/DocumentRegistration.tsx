@@ -57,15 +57,15 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
 
   // DIRETRIZ 41/50/53: Reconhecimento por CPF e Auto-preenchimento
   useEffect(() => {
-    const cpfGen = formData.cpf_genitora.replace(/\D/g, '');
-    const cpfsCriancas = formData.criancas.map(c => c.cpf.replace(/\D/g, '')).filter(c => c.length === 11);
+    const cpfGen = (formData.cpf_genitora || '').replace(/\D/g, '');
+    const cpfsCriancas = formData.criancas.map(c => (c.cpf || '').replace(/\D/g, '')).filter(c => c.length === 11);
     
     const findExisting = () => {
       if (cpfGen.length === 11) {
-        return documents.filter(d => d.cpf_genitora?.replace(/\D/g, '') === cpfGen);
+        return documents.filter(d => (d.cpf_genitora || '').replace(/\D/g, '') === cpfGen);
       }
       for (const cpf of cpfsCriancas) {
-        const found = documents.filter(d => d.criancas?.some(c => c.cpf?.replace(/\D/g, '') === cpf));
+        const found = documents.filter(d => d.criancas?.some(c => (c.cpf || '').replace(/\D/g, '') === cpf));
         if (found.length > 0) return found;
       }
       return [];
@@ -91,8 +91,12 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     }
   }, [formData.cpf_genitora, formData.criancas, documents, isADM]);
 
-  // DIRETRIZ 48: Escala baseada na data do Aporte
-  const trioNames = useMemo(() => getEffectiveEscala(formData.data_aporte, formData.hora_aporte, formData.unidade_id, nameMap), [formData.data_aporte, formData.hora_aporte, formData.unidade_id, nameMap]);
+  // DIRETRIZ 48: Escala baseada na data de Hoje para novos documentos (para não alterar a sequência ou sofrer interferência de data/hora retrativa)
+  const trioNames = useMemo(() => {
+    const d = initialData ? formData.data_aporte : todayDate;
+    const t = '12:00'; // Sempre usa horário de expediente comercial padrão para alinhar com o Diagnóstico de Distribuição do dia
+    return getEffectiveEscala(d, t, formData.unidade_id, nameMap);
+  }, [initialData, formData.data_aporte, todayDate, formData.unidade_id, nameMap]);
 
     // DIRETRIZ 51/52: Rodízio Alfabético Estável para Referência
   const assignedReference = useMemo(() => {
@@ -130,26 +134,30 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
 
     if (initialData) return allUsers.find(u => u.id === initialData.conselheiro_providencia_id);
     
-    // 2. Persistência Familiar no mesmo dia (DIRETRIZ: Mesmo conselheiro se já atendido hoje)
+    // Para novos documentos, a imediata é sempre baseada no dia real de hoje (todayDate) e usa a escala/trio de hoje
+    const dateToUse = todayDate;
+
+    // 2. Persistência Familiar no mesmo dia de recebimento/aporte real (Hoje)
     const sameFamilyTodayDirect = documents.find(d => {
-      if (d.data_aporte !== formData.data_aporte || d.unidade_id !== formData.unidade_id || !d.conselheiro_providencia_id || d.id === initialData?.id) {
+      const isDocOfToday = d.data_aporte === dateToUse || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === dateToUse);
+      if (!isDocOfToday || d.unidade_id !== formData.unidade_id || !d.conselheiro_providencia_id || d.id === initialData?.id) {
         return false;
       }
       
-      const cpfGen = formData.cpf_genitora.replace(/\D/g, '');
-      const dCpfGen = d.cpf_genitora?.replace(/\D/g, '') || '';
+      const cpfGen = (formData.cpf_genitora || '').replace(/\D/g, '');
+      const dCpfGen = (d.cpf_genitora || '').replace(/\D/g, '') || '';
       if (cpfGen && dCpfGen && cpfGen === dCpfGen) return true;
 
       const nameGen = formData.genitora_nome?.trim().toUpperCase();
       const dNameGen = d.genitora_nome?.trim().toUpperCase();
       if (nameGen && dNameGen && nameGen !== 'NÃO INFORMADO' && nameGen.length >= 3 && nameGen === dNameGen) return true;
 
-      const cpfsCriancas = formData.criancas.map(c => c.cpf.replace(/\D/g, '')).filter(c => c.length === 11);
-      const dCpfsCriancas = d.criancas?.map(c => c.cpf?.replace(/\D/g, '')).filter(c => c && c.length === 11) || [];
+      const cpfsCriancas = formData.criancas.map(c => (c.cpf || '').replace(/\D/g, '')).filter(c => c.length === 11);
+      const dCpfsCriancas = d.criancas?.map(c => (c.cpf || '').replace(/\D/g, '')).filter(c => c && c.length === 11) || [];
       if (cpfsCriancas.length > 0 && dCpfsCriancas.length > 0 && cpfsCriancas.some(cpf => dCpfsCriancas.includes(cpf))) return true;
 
-      const namesCriancas = formData.criancas.map(c => c.nome?.trim().toUpperCase()).filter(n => n && n !== 'NÃO INFORMADO');
-      const dNamesCriancas = d.criancas?.map(c => c.nome?.trim().toUpperCase()).filter(n => n && n !== 'NÃO INFORMADO') || [];
+      const namesCriancas = formData.criancas.map(c => (c.nome || '').trim().toUpperCase()).filter(n => n && n !== 'NÃO INFORMADO');
+      const dNamesCriancas = d.criancas?.map(c => (c.nome || '').trim().toUpperCase()).filter(n => n && n !== 'NÃO INFORMADO') || [];
       if (namesCriancas.length > 0 && dNamesCriancas.length > 0 && namesCriancas.some(name => dNamesCriancas.includes(name))) return true;
 
       return false;
@@ -159,10 +167,16 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
       return allUsers.find(u => u.id === sameFamilyTodayDirect.conselheiro_providencia_id);
     }
     
-    // 3. Lógica de Distribuição Justa (Rodízio)
-    // Filtramos para ignorar documentos que foram atribuídos por persistência familiar para não quebrar a sequência
+    // 3. Lógica de Distribuição Justa (Rodízio de Providência Imediata)
+    // Filtramos para ignorar documentos que foram atribuídos por persistência familiar para não quebrar a sequência de hoje
     const todayDocs = documents
-      .filter(d => d.data_aporte === formData.data_aporte && d.unidade_id === formData.unidade_id && !d.is_family_persistence)
+      .filter(d => {
+        const isDocOfToday = d.data_aporte === dateToUse || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === dateToUse);
+        if (!isDocOfToday || d.unidade_id !== formData.unidade_id) {
+          return false;
+        }
+        return !d.is_family_persistence;
+      })
       .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
 
     const lastAutoDoc = todayDocs.find(d => !d.notificacao);
@@ -177,7 +191,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     const nextName = trioNames[nextIndex];
     
     return allUsers.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === nextName && u.unidade_id === formData.unidade_id);
-  }, [trioNames, documents, formData.data_aporte, formData.notificacao, initialData, formData.unidade_id, allUsers, nameMap, familyHistory, formData.cpf_genitora, formData.genitora_nome, formData.criancas]);
+  }, [trioNames, documents, todayDate, formData.notificacao, initialData, formData.unidade_id, allUsers, nameMap, familyHistory, formData.cpf_genitora, formData.genitora_nome, formData.criancas]);
 
   const handleChildChange = (index: number, field: keyof ChildData, value: any) => {
     const newChildren = [...formData.criancas];
@@ -281,26 +295,28 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     const notifiedName = formData.notificacao?.toUpperCase();
     const isNewNotif = !initialData || initialData.notificacao?.toUpperCase() !== notifiedName;
     
-    // Verificação robusta de persistência familiar na mesma data de aporte
+    // Verificação robusta de persistência familiar na mesma data de aporte do caso (ou hoje para caso novo)
+    const targetDateForPersistence = initialData ? formData.data_aporte : todayDate;
     const sameFamilyTodayDirect = documents.find(d => {
-      if (d.data_aporte !== formData.data_aporte || d.unidade_id !== formData.unidade_id || !d.conselheiro_providencia_id || d.id === initialData?.id) {
+      const isDocOfTargetDate = d.data_aporte === targetDateForPersistence || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === targetDateForPersistence);
+      if (!isDocOfTargetDate || d.unidade_id !== formData.unidade_id || !d.conselheiro_providencia_id || d.id === initialData?.id) {
         return false;
       }
       
-      const cpfGen = formData.cpf_genitora.replace(/\D/g, '');
-      const dCpfGen = d.cpf_genitora?.replace(/\D/g, '') || '';
+      const cpfGen = (formData.cpf_genitora || '').replace(/\D/g, '');
+      const dCpfGen = (d.cpf_genitora || '').replace(/\D/g, '') || '';
       if (cpfGen && dCpfGen && cpfGen === dCpfGen) return true;
 
       const nameGen = formData.genitora_nome?.trim().toUpperCase();
       const dNameGen = d.genitora_nome?.trim().toUpperCase();
       if (nameGen && dNameGen && nameGen !== 'NÃO INFORMADO' && nameGen.length >= 3 && nameGen === dNameGen) return true;
 
-      const cpfsCriancas = formData.criancas.map(c => c.cpf.replace(/\D/g, '')).filter(c => c.length === 11);
-      const dCpfsCriancas = d.criancas?.map(c => c.cpf?.replace(/\D/g, '')).filter(c => c && c.length === 11) || [];
+      const cpfsCriancas = formData.criancas.map(c => (c.cpf || '').replace(/\D/g, '')).filter(c => c.length === 11);
+      const dCpfsCriancas = d.criancas?.map(c => (c.cpf || '').replace(/\D/g, '')).filter(c => c && c.length === 11) || [];
       if (cpfsCriancas.length > 0 && dCpfsCriancas.length > 0 && cpfsCriancas.some(cpf => dCpfsCriancas.includes(cpf))) return true;
 
-      const namesCriancas = formData.criancas.map(c => c.nome?.trim().toUpperCase()).filter(n => n && n !== 'NÃO INFORMADO');
-      const dNamesCriancas = d.criancas?.map(c => c.nome?.trim().toUpperCase()).filter(n => n && n !== 'NÃO INFORMADO') || [];
+      const namesCriancas = formData.criancas.map(c => (c.nome || '').trim().toUpperCase()).filter(n => n && n !== 'NÃO INFORMADO');
+      const dNamesCriancas = d.criancas?.map(c => (c.nome || '').trim().toUpperCase()).filter(n => n && n !== 'NÃO INFORMADO') || [];
       if (namesCriancas.length > 0 && dNamesCriancas.length > 0 && namesCriancas.some(name => dNamesCriancas.includes(name))) return true;
 
       return false;
@@ -317,7 +333,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
           finalValidators = trioNames;
         } else {
           // Busca documentos de hoje que tiveram notificação para equilibrar a carga
-          const todayNotifDocs = documents.filter(d => d.data_aporte === todayDate && d.notificacao);
+          const todayNotifDocs = documents.filter(d => d.data_aporte === targetDateForPersistence && d.notificacao);
           const trioStats = trioNames.map(name => ({
             name,
             count: todayNotifDocs.filter(d => d.conselheiros_providencia_nomes?.includes(name)).length

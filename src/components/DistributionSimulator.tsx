@@ -112,19 +112,40 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
   }, [users]);
 
   const escalaTrio = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    return getEffectiveEscala(todayStr, '12:00', selectedUnidade, nameMap);
+    const todayDateReal = (() => {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    })();
+    return getEffectiveEscala(todayDateReal, '12:00', selectedUnidade, nameMap);
   }, [selectedUnidade, nameMap]);
 
   // Encontra quem foi o último conselheiro de providência imediata distribuído hoje automaticamente
   const lastAssignedImediata = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayDateReal = (() => {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    })();
+
+    // Lógica idêntica ao DocumentRegistration.tsx para agrupar casos cadastrados no dia sob o rodízio de hoje
     const todayDocs = documents
-      .filter(d => d.data_aporte === todayStr && d.unidade_id === selectedUnidade && !d.is_family_persistence && !d.notificacao)
+      .filter(d => {
+        const isDocOfToday = d.data_aporte === todayDateReal || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === todayDateReal);
+        if (!isDocOfToday || d.unidade_id !== selectedUnidade) {
+          return false;
+        }
+        return !d.is_family_persistence;
+      })
       .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
     
-    if (todayDocs.length === 0) return null;
-    const lastId = todayDocs[0].conselheiro_providencia_id;
+    const lastAutoDoc = todayDocs.find(d => !d.notificacao);
+    if (!lastAutoDoc) return null;
+    const lastId = lastAutoDoc.conselheiro_providencia_id;
     const foundUser = users.find(u => u.id === lastId);
     return foundUser ? foundUser.nome.toUpperCase() : null;
   }, [documents, users, selectedUnidade]);
@@ -188,8 +209,14 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
       }
 
       // Montamos o estado esperado sequencialmente para Providência Imediata
-      const todayStr = new Date().toISOString().split('T')[0];
-      const virtualTrio = getEffectiveEscala(todayStr, '12:00', selectedUnidade, nameMap);
+      const todayDateReal = (() => {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      })();
+      const virtualTrio = getEffectiveEscala(todayDateReal, '12:00', selectedUnidade, nameMap);
       let currentProvName = lastAssignedImediata;
       for (let i = 0; i < simulationSize; i++) {
         const lastIdx = virtualTrio.findIndex(name => name.toUpperCase() === currentProvName);
@@ -226,7 +253,10 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
 
         // Lógica de Distribuição Justa (Rodízio de Providência Imediata)
         const virtualTodayDocs = virtualDocsList
-          .filter(d => d.data_aporte === todayStr && d.unidade_id === selectedUnidade && !d.is_family_persistence && !d.notificacao)
+          .filter(d => {
+            const isDocOfToday = d.data_aporte === todayDateReal || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === todayDateReal);
+            return isDocOfToday && d.unidade_id === selectedUnidade && !d.is_family_persistence && !d.notificacao;
+          })
           .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
 
         const lastProvId = virtualTodayDocs[0]?.conselheiro_providencia_id;
@@ -244,8 +274,8 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
           unidade_id: selectedUnidade,
           origem: 'SIMULAÇÃO - ADMINISTRATIVO',
           canal_comunicado: 'SISTEMA',
-          data_recebimento: todayStr,
-          data_aporte: todayStr,
+          data_recebimento: todayDateReal,
+          data_aporte: todayDateReal,
           hora_aporte: '12:00',
           crianca_nome: `SIMULAÇÃO CRIANÇA ${i + 1}`,
           criancas: [],
@@ -310,6 +340,14 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
     setSimulationResult(null);
     clearLogs();
 
+    const todayDateReal = (() => {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    })();
+
     log(`Iniciando teste integrado em tempo real no banco Firestore (Unidade ${selectedUnidade})...`, 'warn');
     log(`Este teste cadastrará 3 registros reais e depois fará a autolimpeza (rollback) instantânea.`, 'info');
 
@@ -318,6 +356,9 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
     const assignedSequence: string[] = [];
     const expectedSequenceImediata: string[] = [];
     const assignedSequenceImediata: string[] = [];
+
+    // Lista dinâmica local para evitar closures do React que mantêm o estado cacheado do prop "documents"
+    const liveDocsList = [...documents];
 
     // For expected sequence (Referência)
     let currentRefName = lastAssignedRef;
@@ -330,8 +371,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
     }
 
     // For expected sequence (Imediata)
-    const todayStr = new Date().toISOString().split('T')[0];
-    const liveTrio = getEffectiveEscala(todayStr, '12:00', selectedUnidade, nameMap);
+    const liveTrio = getEffectiveEscala(todayDateReal, '12:00', selectedUnidade, nameMap);
     let currentProvName = lastAssignedImediata;
     for (let i = 0; i < 3; i++) {
       const lastIdx = liveTrio.findIndex(name => name.toUpperCase() === currentProvName);
@@ -344,9 +384,10 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
     try {
       for (let i = 0; i < 3; i++) {
         const docId = `test-real-${Math.random().toString(36).substr(2, 9)}`;
+        const creationTime = new Date().toISOString();
         
         // Simular a consulta viva do banco para obter o conselheiro dinamicamente
-        const liveNewCases = documents
+        const liveNewCases = liveDocsList
           .filter(d => !d.is_manual_override && d.unidade_id === selectedUnidade)
           .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
         
@@ -359,8 +400,11 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         const assignedUser = activeCounselors[nxtIdx];
 
         // Providência Imediata (Consulta viva do banco em tempo real)
-        const liveTodayDocs = documents
-          .filter(d => d.data_aporte === todayStr && d.unidade_id === selectedUnidade && !d.is_family_persistence && !d.notificacao)
+        const liveTodayDocs = liveDocsList
+          .filter(d => {
+            const isDocOfToday = d.data_aporte === todayDateReal || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === todayDateReal);
+            return isDocOfToday && d.unidade_id === selectedUnidade && !d.is_family_persistence && !d.notificacao;
+          })
           .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
 
         const lastProvId = liveTodayDocs[0]?.conselheiro_providencia_id;
@@ -379,8 +423,8 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
           unidade_id: selectedUnidade,
           origem: 'SIMULAÇÃO - GERAL ADM',
           canal_comunicado: 'SISTEMA',
-          data_recebimento: todayStr,
-          data_aporte: todayStr,
+          data_recebimento: todayDateReal,
+          data_aporte: todayDateReal,
           hora_aporte: '12:00',
           crianca_nome: `PROVA DE CARGA REAL ${i + 1}`,
           criancas: [],
@@ -394,12 +438,16 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
           conselheiro_referencia_id: assignedUser.id,
           conselheiro_providencia_id: assignedProvUser?.id || '',
           conselheiros_providencia_nomes: liveTrio,
-          criado_em: new Date().toISOString(),
+          criado_em: creationTime,
           distribuicao_automatica: true
         };
 
         // Grava no banco de dados real
         await saveDocument(newDoc);
+        
+        // Empurra localmente na cópia viva para o próximo loop usar o valor atualizado corretamento
+        liveDocsList.unshift(newDoc);
+
         createdIds.push(docId);
         assignedSequence.push(assignedUser.nome);
         assignedSequenceImediata.push(assignedProvName.toUpperCase());
