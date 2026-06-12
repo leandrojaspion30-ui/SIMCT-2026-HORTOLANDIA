@@ -65,6 +65,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const [selectedAtribuicoes, setSelectedAtribuicoes] = useState<string[]>(doc.atribuicoes_136 || []);
   const [atribuicoesDetalhadas, setAtribuicoesDetalhadas] = useState<any[]>(doc.atribuicoes_136_detalhadas || []);
   const [relatoProvidencias, setRelatoProvidencias] = useState(doc.relato_providencias || '');
+  const [despachoSituacao, setDespachoSituacao] = useState(doc.despacho_situacao || '');
   const [isImprocedente, setIsImprocedente] = useState(doc.is_improcedente || false);
   const [showIntelligence, setShowIntelligence] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -81,6 +82,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     setSelectedAtribuicoes(doc.atribuicoes_136 || []);
     setAtribuicoesDetalhadas(doc.atribuicoes_136_detalhadas || []);
     setRelatoProvidencias(doc.relato_providencias || '');
+    setDespachoSituacao(doc.despacho_situacao || '');
     setIsImprocedente(doc.is_improcedente || false);
   }, [doc.id]);
 
@@ -88,6 +90,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     doc.conselheiro_referencia_id === currentUser.id;
   const isImediata = doc.conselheiro_providencia_id === currentUser.id;
   const isADM = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
+  const isConselheiro = currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE';
   const canEditTechnicalFields = isImediata && !isADM;
 
   // INTELIGÊNCIA SIMCT: Dossiê Familiar Cruzado
@@ -407,6 +410,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       atribuicoes_136_detalhadas: atribuicoesDetalhadas,
       status: statusFinal,
       relato_providencias: relatoProvidencias,
+      despacho_situacao: despachoSituacao,
       is_improcedente: isImprocedente,
       monitoramento: monitoramentoAtualizado,
       notificacoes_trio: notificacoesTrio
@@ -570,12 +574,13 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                <textarea 
                   className="w-full p-4 bg-white border border-slate-200 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-indigo-500 shadow-sm min-h-[140px]"
                   placeholder="DIGITE A SUA PROVIDÊNCIA DA SITUAÇÃO DE FORMA MANUAL..."
-                  value={doc.despacho_situacao || ''}
-                  onChange={(e) => onUpdateDocument(doc.id, { despacho_situacao: e.target.value })}
-                  disabled={!isImediata && !isADM}
+                  value={despachoSituacao}
+                  onChange={(e) => setDespachoSituacao(e.target.value)}
+                  onBlur={() => onUpdateDocument(doc.id, { despacho_situacao: despachoSituacao })}
+                  disabled={!isConselheiro}
                />
                <span className="text-[9px] text-slate-400 font-bold block ml-1 uppercase">
-                  * Este é um campo de preenchimento manual personalizado de autonomia do Conselheiro de Providência Imediata da Unidade.
+                  * Este é um campo de preenchimento manual personalizado de uso exclusivo dos Conselheiros Tutelares.
                </span>
             </div>
           </section>
