@@ -173,17 +173,28 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   };
 
   const informativeStatusOptions = useMemo(() => {
-    const informativeKeys: DocumentStatus[] = [
+    const baseKeys: DocumentStatus[] = [
       'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'EMAIL_RESPONDIDO',
       'ENCAMINHAR_NOTICIA_FATO', 'NOTIFICAR', 'OFICIO_RESPONDIDO',
       'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'ARQUIVADO', 'CONCLUIDO',
-      'TIPIFICACAO_INCOMPLETA',
-      'NOTIFICACAO_LEANDRO', 'NOTIFICACAO_LUIZA', 'NOTIFICACAO_MILENA', 
-      'NOTIFICACAO_MIRIAN', 'NOTIFICACAO_SANDRA', 'NOTIFICACAO_ROSILDA',
-      'DIREITO_NAO_VIOLADO', 'NENHUMA', 'AGUARDANDO_AVALIACAO'
+      'TIPIFICACAO_INCOMPLETA', 'DIREITO_NAO_VIOLADO', 'NENHUMA', 'AGUARDANDO_AVALIACAO',
+      'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE'
     ];
-    return informativeKeys.sort((a, b) => STATUS_LABELS[a].localeCompare(STATUS_LABELS[b]));
-  }, []);
+
+    const counselorsOfUnit = users.filter(u => 
+      (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && 
+      u.unidade_id === doc.unidade_id && 
+      u.status === 'ATIVO'
+    );
+
+    const notificationKeys = counselorsOfUnit.map(
+      u => `NOTIFICACAO_${u.nome.toUpperCase()}` as DocumentStatus
+    );
+
+    const allKeys = [...baseKeys, ...notificationKeys];
+    const uniqueKeys = Array.from(new Set(allKeys));
+    return uniqueKeys.sort((a, b) => (STATUS_LABELS[a] || a).localeCompare(STATUS_LABELS[b] || b));
+  }, [doc.unidade_id, users]);
 
   const handleQuickStatusChange = (newStatus: DocumentStatus) => {
     // DIRETRIZ: Apenas o Conselheiro de Providência Imediata possui autonomia para despacho sem validação
@@ -549,80 +560,24 @@ const DocumentView: React.FC<DocumentViewProps> = ({
             </div>
           </section>
 
-          {/* DESPACHO RÁPIDO */}
+          {/* PROVIDÊNCIA DA SITUAÇÃO */}
           <section className="p-8 bg-slate-50 rounded-[2.5rem] border-2 border-slate-100 space-y-6">
             <div className="flex items-center gap-3">
                <Tag className="w-5 h-5 text-indigo-600" />
-               <h3 className="text-[12px] font-black uppercase text-slate-800 tracking-widest">Despacho de Situação (Autonomia Imediata)</h3>
+               <h3 className="text-[12px] font-black uppercase text-slate-800 tracking-widest">PROVIDÊNCIA DA SITUAÇÃO</h3>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-               <select 
-                  className="w-full p-4 bg-white border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-indigo-500 shadow-sm cursor-pointer"
-                  value={doc.status[doc.status.length - 1]}
-                  onChange={(e) => handleQuickStatusChange(e.target.value as DocumentStatus)}
+            <div className="space-y-2">
+               <textarea 
+                  className="w-full p-4 bg-white border border-slate-200 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-indigo-500 shadow-sm min-h-[140px]"
+                  placeholder="DIGITE A SUA PROVIDÊNCIA DA SITUAÇÃO DE FORMA MANUAL..."
+                  value={doc.despacho_situacao || ''}
+                  onChange={(e) => onUpdateDocument(doc.id, { despacho_situacao: e.target.value })}
                   disabled={!isImediata && !isADM}
-               >
-                  <option value="">DEFINIR NOVA SITUAÇÃO...</option>
-                  {informativeStatusOptions.map(status => (
-                    <option 
-                      key={status} 
-                      value={status}
-                      disabled={status === 'DIREITO_NAO_VIOLADO' && (tempViolacoes.length > 0 || tempAgentes.length > 0)}
-                    >
-                      {STATUS_LABELS[status]}
-                    </option>
-                  ))}
-               </select>
-               {/* LEGENDA DE CORES PARA STATUS */}
-               <div className="flex flex-wrap gap-4 px-2">
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-blue-600"></div>
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Despacho Administrativo</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-emerald-600"></div>
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Medida Validada</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-red-600"></div>
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Pendente Validação</span>
-                  </div>
-               </div>
-
-                {doc.status[doc.status.length - 1] !== 'NENHUMA' && (
-                  <div className="p-4 bg-white border border-slate-100 rounded-xl flex items-center gap-4">
-                    <Activity className="w-5 h-5 text-indigo-600" />
-                    <div>
-                        <span className="text-[9px] font-black text-slate-400 uppercase block">Situação Vigente</span>
-                        <div className="flex flex-wrap gap-2 items-center">
-                          {doc.status.includes('MEDIDA_APLICADA') && doc.status[doc.status.length - 1] !== 'MEDIDA_APLICADA' && (
-                            <span className="text-[11px] font-black uppercase text-emerald-600 flex items-center gap-1">
-                              {STATUS_LABELS['MEDIDA_APLICADA']} <span className="text-slate-300">+</span>
-                            </span>
-                          )}
-                          <span className={`text-[11px] font-black uppercase ${doc.status[doc.status.length - 1] === 'DIREITO_NAO_VIOLADO' ? 'text-emerald-600' : 'text-indigo-700'}`}>
-                            {STATUS_LABELS[doc.status[doc.status.length - 1]]}
-                          </span>
-                        </div>
-                    </div>
-                  </div>
-                )}
+               />
+               <span className="text-[9px] text-slate-400 font-bold block ml-1 uppercase">
+                  * Este é um campo de preenchimento manual personalizado de autonomia do Conselheiro de Providência Imediata da Unidade.
+               </span>
             </div>
-
-            {!isADM && (
-              <div className="space-y-2">
-                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                   <FileText className="w-4 h-4 text-indigo-600" /> Código do Comunicado (Opcional)
-                 </label>
-                 <textarea 
-                    className="w-full p-4 bg-white border border-slate-200 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-indigo-500 shadow-sm min-h-[80px]"
-                    placeholder="INFORME O CÓDIGO DO COMUNICADO OU OBSERVAÇÃO ADMINISTRATIVA..."
-                    value={doc.despacho_situacao || ''}
-                    onChange={(e) => onUpdateDocument(doc.id, { despacho_situacao: e.target.value })}
-                    disabled={!isImediata}
-                 />
-              </div>
-            )}
           </section>
 
           {/* ACORDEÕES TÉCNICOS */}

@@ -163,13 +163,12 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUs
             'ARQUIVADO', 'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
             'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
             'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
-            'NOTIFICACAO_LEANDRO', 'NOTIFICACAO_LUIZA', 'NOTIFICACAO_MILENA', 
-            'NOTIFICACAO_MIRIAN', 'NOTIFICACAO_SANDRA', 'NOTIFICACAO_ROSILDA'
-          ].includes(mainStatus);
+            'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE'
+          ].includes(mainStatus) || mainStatus.startsWith('NOTIFICACAO_');
           
           if (isAdminDespacho) {
             validationState = 'ADMIN_CONCLUDED';
-            dynamicLabel = `✅ DESPACHO: ${STATUS_LABELS[mainStatus]}`;
+            dynamicLabel = `✅ DESPACHO: ${STATUS_LABELS[mainStatus] || mainStatus}`;
           } else if (doc.status.includes('MEDIDA_APLICADA')) {
             validationState = 'COMPLETED';
             dynamicLabel = "✅ MEDIDA APLICADA";
@@ -189,10 +188,9 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUs
             'ARQUIVADO', 'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
             'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
             'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
-            'NOTIFICACAO_LEANDRO', 'NOTIFICACAO_LUIZA', 'NOTIFICACAO_MILENA', 
-            'NOTIFICACAO_MIRIAN', 'NOTIFICACAO_SANDRA', 'NOTIFICACAO_ROSILDA',
+            'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE',
             'NENHUMA', 'AGUARDANDO_AVALIACAO'
-          ].includes(s));
+          ].includes(s) || s.startsWith('NOTIFICACAO_'));
 
           const style = getStatusStyle(mainStatus, doc.is_improcedente, validationState);
 
