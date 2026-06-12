@@ -275,7 +275,7 @@ const App: React.FC = () => {
         // Se outras propriedades mudaram (por exemplo se mudou senha ou status)
         const hasStatusOrCargoOrNameChanged =
           freshUser.status !== currentUser.status ||
-          freshUser.nome !== currentUser.nome ||
+          (!currentUser.is_suplente_active && freshUser.nome !== currentUser.nome) ||
           (currentUser as any).senha !== freshUser.senha;
           
         if (hasStatusOrCargoOrNameChanged) {
