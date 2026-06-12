@@ -25,6 +25,7 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
   setActiveTab 
 }) => {
   const [substitutingId, setSubstitutingId] = useState<string | null>(null);
+  const [selectedSuplenteId, setSelectedSuplenteId] = useState<string>('');
   const [permanentReplaceId, setPermanentReplaceId] = useState<string | null>(null);
   const [targetReplaceId, setTargetReplaceId] = useState<string>('');
   const [isCreatingNewInReplace, setIsCreatingNewInReplace] = useState(false);
@@ -36,6 +37,7 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
   const [resetConfirmText, setResetConfirmText] = useState('');
   const [pendingResetAction, setPendingResetAction] = useState<'ONLY_RESET' | 'BACKUP_AND_RESET'>('ONLY_RESET');
   const [userToDelete, setUserToDelete] = useState<UserWithPassword | null>(null);
+  const [userToStopSubstituicao, setUserToStopSubstituicao] = useState<UserWithPassword | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [replaceSuccess, setReplaceSuccess] = useState<{from: string, to: string} | null>(null);
   const [newUser, setNewUser] = useState<UserWithPassword>({
@@ -147,6 +149,55 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
     }
   };
 
+  const handleConfirmEndSubstitution = async () => {
+    if (!userToStopSubstituicao) return;
+    const targetUser = userToStopSubstituicao;
+    setIsProcessing(true);
+    try {
+      if (targetUser.perfil === 'SUPLENTE') {
+        const conselheiroId = targetUser.substituindo_id;
+        if (conselheiroId) {
+          await onUpdateUser(conselheiroId, { 
+            substituicao_ativa: false, 
+            data_inicio_substituicao: '', 
+            data_fim_prevista: '' 
+          });
+        }
+        await onUpdateUser(targetUser.id, { 
+          substituicao_ativa: false, 
+          substituindo_id: '', 
+          data_inicio_substituicao: '', 
+          data_fim_prevista: '',
+          status: 'INATIVO' 
+        });
+        onAddLog(`RH: Suplência de ${targetUser.nome} foi encerrada manualmente de forma segura.`);
+      } else {
+        const suplente = users.find(u => u.perfil === 'SUPLENTE' && u.substituindo_id === targetUser.id);
+        await onUpdateUser(targetUser.id, { 
+          substituicao_ativa: false, 
+          data_inicio_substituicao: '', 
+          data_fim_prevista: '' 
+        });
+        if (suplente) {
+          await onUpdateUser(suplente.id, { 
+            substituicao_ativa: false, 
+            substituindo_id: '', 
+            data_inicio_substituicao: '', 
+            data_fim_prevista: '',
+            status: 'INATIVO' 
+          });
+        }
+        onAddLog(`RH: Suplência do conselheiro titular ${targetUser.nome} foi encerrada manualmente de forma segura.`);
+      }
+      setUserToStopSubstituicao(null);
+    } catch (error) {
+      console.error(error);
+      alert("Houve um erro ao encerrar a suplência.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleExportData = () => {
     try {
       const dataStr = JSON.stringify({
@@ -244,7 +295,9 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                   {user.status}
                 </div>
               </div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">CT {user.unidade_id} • {user.cargo}</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">
+                {user.unidade_id ? `CT ${user.unidade_id}` : (user.perfil === 'SUPLENTE' ? 'SUPLENTE GERAL (SEM CT)' : 'SEM CT DEFINIDO')} • {user.cargo}
+              </p>
               
               {user.substituicao_ativa && (
                 <div className="mb-6 p-4 bg-amber-50 border border-amber-100 rounded-2xl animate-in slide-in-from-top-2">
@@ -288,6 +341,21 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                       onChange={e => setTempDates(prev => ({ ...prev, end: e.target.value }))}
                     />
                   </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Selecionar Suplente</label>
+                    <select 
+                      className="w-full p-3 bg-white border border-slate-100 rounded-xl text-[11.5px] font-black uppercase outline-none focus:border-blue-500 shadow-sm"
+                      value={selectedSuplenteId}
+                      onChange={e => setSelectedSuplenteId(e.target.value)}
+                    >
+                      <option value="">Selecione o Suplente...</option>
+                      {users.filter(u => u.perfil === 'SUPLENTE' && u.status !== 'EXCLUIDO').map(supl => (
+                        <option key={supl.id} value={supl.id}>
+                          {supl.nome.toUpperCase()} {supl.substituicao_ativa ? `(EM USO - DA CT ${supl.unidade_id})` : (supl.unidade_id ? `(DISPONÍVEL - DA CT ${supl.unidade_id})` : '(DISPONÍVEL - GERAL)')}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="flex gap-2 pt-1">
                     <button 
                       onClick={async () => {
@@ -295,21 +363,28 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                           alert("Selecione ambas as datas.");
                           return;
                         }
+                        if (!selectedSuplenteId) {
+                          alert("Selecione um suplente na lista.");
+                          return;
+                        }
+                        const suplente = users.find(u => u.id === selectedSuplenteId);
+                        if (!suplente) {
+                          alert("Suplente não encontrado.");
+                          return;
+                        }
                         await onUpdateUser(user.id, { 
                           substituicao_ativa: true, 
                           data_inicio_substituicao: tempDates.start, 
                           data_fim_prevista: tempDates.end 
                         });
-                        const suplente = users.find(u => u.perfil === 'SUPLENTE' && u.unidade_id === user.unidade_id);
-                        if (suplente) {
-                          await onUpdateUser(suplente.id, {
-                            substituicao_ativa: true,
-                            substituindo_id: user.id,
-                            data_inicio_substituicao: tempDates.start,
-                            data_fim_prevista: tempDates.end,
-                            status: 'ATIVO'
-                          });
-                        }
+                        await onUpdateUser(suplente.id, {
+                          substituicao_ativa: true,
+                          substituindo_id: user.id,
+                          data_inicio_substituicao: tempDates.start,
+                          data_fim_prevista: tempDates.end,
+                          unidade_id: user.unidade_id, // Assume a unidade do conselheiro substituído!
+                          status: 'ATIVO'
+                        });
                         setSubstitutingId(null);
                       }}
                       className="flex-1 py-3 bg-emerald-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-md"
@@ -325,6 +400,8 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                     onClick={() => {
                       setSubstitutingId(user.id);
                       setTempDates({ start: user.data_inicio_substituicao || new Date().toISOString().split('T')[0], end: user.data_fim_prevista || '' });
+                      const defaultSuplente = users.find(u => u.perfil === 'SUPLENTE' && u.unidade_id === user.unidade_id && u.status !== 'EXCLUIDO');
+                      setSelectedSuplenteId(defaultSuplente?.id || '');
                     }}
                     className="w-full py-4 bg-slate-900/5 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center gap-2 border border-slate-100"
                   >
@@ -335,18 +412,7 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
 
               {user.substituicao_ativa && !substitutingId && (
                 <button 
-                  onClick={async () => {
-                    if (window.confirm("Deseja encerrar a substituição agora?")) {
-                      await onUpdateUser(user.id, { substituicao_ativa: false, data_inicio_substituicao: undefined, data_fim_prevista: undefined });
-                      if (user.perfil === 'SUPLENTE') {
-                        await onUpdateUser(user.substituindo_id!, { substituicao_ativa: false, data_inicio_substituicao: undefined, data_fim_prevista: undefined });
-                        await onUpdateUser(user.id, { substituicao_ativa: false, substituindo_id: undefined, status: 'INATIVO' });
-                      } else {
-                        const suplente = users.find(u => u.perfil === 'SUPLENTE' && u.unidade_id === user.unidade_id);
-                        if (suplente) await onUpdateUser(suplente.id, { substituicao_ativa: false, substituindo_id: undefined, status: 'INATIVO' });
-                      }
-                    }
-                  }}
+                  onClick={() => setUserToStopSubstituicao(user)}
                   className="w-full py-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex items-center justify-center gap-2 border border-red-100"
                 >
                   <Power className="w-3.5 h-3.5" /> Encerrar Suplência
@@ -802,6 +868,56 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                 </div>
               )}
            </div>
+        </div>
+      )}
+      {/* Modal: Confirmação de Encerramento de Suplência */}
+      {userToStopSubstituicao && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 backdrop-blur-xl bg-slate-900/80 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[3rem] shadow-2xl max-w-md w-full overflow-hidden border-4 border-red-500 animate-in zoom-in-95">
+            <div className="p-10 flex flex-col items-center text-center space-y-6">
+              <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center animate-pulse">
+                <Power className="w-12 h-12 text-red-600" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-[24px] font-black uppercase text-slate-900 tracking-tight">Confirmar Encerramento?</h3>
+                <p className="text-[14px] font-bold text-red-600 uppercase tracking-widest">Encerramento de Suplência Ativa</p>
+              </div>
+              
+              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 w-full text-left">
+                <p className="text-[12px] font-bold text-slate-500 uppercase leading-relaxed mb-4">
+                  Você está solicitando o encerramento manual da suplência ativa. O sistema removerá as restrições e reestabelecerá os acessos originais.
+                </p>
+                <div className="space-y-2 text-[11px] font-black uppercase text-slate-700">
+                  <div>
+                    <span className="text-slate-400 font-bold">Usuário Selecionado:</span>{' '}
+                    <span className="text-slate-900">{userToStopSubstituicao.nome}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-bold">Unidade (CT):</span>{' '}
+                    <span className="text-slate-900">
+                      {userToStopSubstituicao.unidade_id ? `CT ${userToStopSubstituicao.unidade_id}` : 'Suplente Geral / Sem CT'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 w-full pt-4 shrink-0">
+                <button 
+                  disabled={isProcessing}
+                  onClick={handleConfirmEndSubstitution}
+                  className="w-full py-5 bg-red-600 text-white rounded-2xl font-black text-[13px] uppercase tracking-widest shadow-xl shadow-red-100 hover:bg-slate-900 transition-all disabled:opacity-50"
+                >
+                  {isProcessing ? 'Processando...' : 'Confirmar Encerramento'}
+                </button>
+                <button 
+                  onClick={() => setUserToStopSubstituicao(null)}
+                  className="w-full py-5 text-slate-400 font-black text-[11px] uppercase tracking-widest hover:text-slate-900 transition-all"
+                >
+                  Cancelar Operação
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

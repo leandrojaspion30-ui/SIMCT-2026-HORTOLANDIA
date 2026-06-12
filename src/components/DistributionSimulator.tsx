@@ -25,6 +25,7 @@ interface DistributionSimulatorProps {
   users: User[];
   currentUser: User;
   onAddLog: (action: string) => void;
+  nameMap?: Record<string, string>;
 }
 
 interface TestLog {
@@ -37,7 +38,8 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
   documents, 
   users, 
   currentUser,
-  onAddLog 
+  onAddLog,
+  nameMap: propNameMap
 }) => {
   const [selectedUnidade, setSelectedUnidade] = useState<number>(currentUser?.unidade_id || 1);
 
@@ -73,11 +75,17 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
 
   const activeCounselors = useMemo(() => {
     return users
-      .filter(u => 
-        (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && 
-        u.unidade_id === selectedUnidade && 
-        u.status === 'ATIVO'
-      )
+      .filter(u => {
+        if (u.unidade_id !== selectedUnidade) return false;
+        if (u.status !== 'ATIVO') return false;
+        if (u.perfil !== 'CONSELHEIRO' && u.perfil !== 'SUPLENTE') return false;
+        
+        // Se for um conselheiro titular sob substituição ativa, ele não participa do rodízio ativo
+        if (u.perfil === 'CONSELHEIRO' && u.substituicao_ativa) {
+          return false;
+        }
+        return true;
+      })
       .map(u => ({ id: u.id, nome: u.nome.toUpperCase() }))
       .sort((a, b) => a.nome.localeCompare(b.nome));
   }, [users, selectedUnidade]);
@@ -104,12 +112,8 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
   }, [activeCounselors, lastAssignedRef]);
 
   const nameMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    users.forEach(u => {
-      map[u.nome.toUpperCase()] = u.nome.toUpperCase();
-    });
-    return map;
-  }, [users]);
+    return propNameMap || {};
+  }, [propNameMap]);
 
   const escalaTrio = useMemo(() => {
     const todayDateReal = (() => {

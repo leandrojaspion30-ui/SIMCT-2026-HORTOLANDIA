@@ -8,7 +8,7 @@ export interface User {
   nome: string;
   perfil: UserRole;
   cargo: string;
-  unidade_id: number;
+  unidade_id?: number;
   status?: UserStatus;
   tentativas_login?: number;
   substituicao_ativa?: boolean;

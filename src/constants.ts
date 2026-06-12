@@ -15,7 +15,7 @@ export const INITIAL_USERS: UserWithPassword[] = [
   { id: 'cons3', nome: 'MILENA', perfil: 'CONSELHEIRO', cargo: 'Conselheira', senha: '123456', unidade_id: 1 },
   { id: 'cons5', nome: 'MIRIAN', perfil: 'CONSELHEIRO', cargo: 'Conselheira', senha: '123456', unidade_id: 1 },
   { id: 'cons4', nome: 'SANDRA', perfil: 'CONSELHEIRO', cargo: 'Conselheira', senha: '123456', unidade_id: 1 },
-  { id: 'suplente1', nome: 'ROSILDA', perfil: 'SUPLENTE', cargo: 'Conselheira Suplente', senha: '123456', status: 'INATIVO', unidade_id: 1 },
+  { id: 'suplente1', nome: 'ROSILDA', perfil: 'SUPLENTE', cargo: 'Conselheira Suplente', senha: '123456', status: 'INATIVO' },
 
   // UNIDADE 2 - CT 2
   { id: 'ct2_admin1', nome: 'ISRAEL', perfil: 'ADMINISTRATIVO', cargo: 'ADM', senha: '123456', unidade_id: 2 },

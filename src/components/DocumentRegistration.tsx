@@ -102,7 +102,13 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
   const assignedReference = useMemo(() => {
     // Usamos a lista viva de usuários ativos para definir a ordem de rodízio
     const activeConselheiros = allUsers
-      .filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === formData.unidade_id && u.status === 'ATIVO')
+      .filter(u => {
+        if (u.unidade_id !== formData.unidade_id) return false;
+        if (u.status !== 'ATIVO') return false;
+        if (u.perfil !== 'CONSELHEIRO' && u.perfil !== 'SUPLENTE') return false;
+        if (u.perfil === 'CONSELHEIRO' && u.substituicao_ativa) return false;
+        return true;
+      })
       .map(u => u.nome.toUpperCase())
       .sort();
     
@@ -553,7 +559,13 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 >
                   <option value="">NENHUMA...</option>
                   {allUsers
-                    .filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === formData.unidade_id && u.status === 'ATIVO')
+                    .filter(u => {
+                      if (u.unidade_id !== formData.unidade_id) return false;
+                      if (u.status !== 'ATIVO') return false;
+                      if (u.perfil !== 'CONSELHEIRO' && u.perfil !== 'SUPLENTE') return false;
+                      if (u.perfil === 'CONSELHEIRO' && u.substituicao_ativa) return false;
+                      return true;
+                    })
                     .sort((a, b) => a.nome.localeCompare(b.nome))
                     .map(u => (
                       <option key={u.id} value={u.nome.toUpperCase()}>{u.nome.toUpperCase()}</option>
@@ -778,7 +790,13 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 >
                   <option value="">Selecione o Conselheiro...</option>
                   {allUsers
-                    .filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.status === 'ATIVO' && u.unidade_id === formData.unidade_id)
+                    .filter(u => {
+                      if (u.unidade_id !== formData.unidade_id) return false;
+                      if (u.status !== 'ATIVO') return false;
+                      if (u.perfil !== 'CONSELHEIRO' && u.perfil !== 'SUPLENTE') return false;
+                      if (u.perfil === 'CONSELHEIRO' && u.substituicao_ativa) return false;
+                      return true;
+                    })
                     .sort((a, b) => a.nome.localeCompare(b.nome))
                     .map(u => (
                       <option key={u.id} value={u.id}>{u.nome.toUpperCase()}</option>

@@ -187,9 +187,19 @@ const App: React.FC = () => {
       const merged = [
         ...baseUsers.map(bu => {
           const found = storedUsers.find(s => s.id === bu.id);
-          return found ? { ...bu, ...found } : bu;
+          const mergedUser = found ? { ...bu, ...found } : bu;
+          // Se for suplente e não estiver ativamente substituindo, desvincula de qualquer unidade
+          if (mergedUser.perfil === 'SUPLENTE' && !mergedUser.substituicao_ativa) {
+            mergedUser.unidade_id = undefined;
+          }
+          return mergedUser;
         }),
-        ...storedUsers.filter(s => !baseUsers.some(bu => bu.id === s.id))
+        ...storedUsers.filter(s => !baseUsers.some(bu => bu.id === s.id)).map(s => {
+          if (s.perfil === 'SUPLENTE' && !s.substituicao_ativa) {
+            s.unidade_id = undefined;
+          }
+          return s;
+        })
       ];
       
       setUsers(merged);
@@ -214,6 +224,80 @@ const App: React.FC = () => {
     localStorage.setItem('pt_ack_events', JSON.stringify(acknowledgedEventIds));
     localStorage.setItem('pt_ack_reminders', JSON.stringify(acknowledgedReminderIds));
   }, [acknowledgedEventIds, acknowledgedReminderIds]);
+
+  // Efeito para sincronização/reconhecimento automático em tempo real das alterações de suplência e status no Firestore
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    const realId = currentUser.real_user_id || currentUser.id;
+    const freshUser = users.find(u => u.id === realId);
+    
+    if (freshUser) {
+      const now = new Date().toISOString().split('T')[0];
+      
+      const shouldDeactivateSubstitutedAccess = 
+        currentUser.perfil === 'CONSELHEIRO' && 
+        !currentUser.is_suplente_active && 
+        currentUser.substituicao_ativa && 
+        !freshUser.substituicao_ativa; // A substituição acabou! Ele ganha acesso novamente!
+        
+      const shouldDeactivateSuplenteActiveAccess =
+        currentUser.is_suplente_active && 
+        (!freshUser.substituicao_ativa || freshUser.status === 'INATIVO'); // A suplência acabou para o suplente ativo!
+
+      const shouldKickOutForBeingSubstituted =
+        currentUser.perfil === 'CONSELHEIRO' &&
+        !currentUser.is_suplente_active &&
+        !currentUser.substituicao_ativa &&
+        freshUser.substituicao_ativa &&
+        now >= (freshUser.data_inicio_substituicao || '') && 
+        now <= (freshUser.data_fim_prevista || '');
+        
+      if (shouldDeactivateSubstitutedAccess) {
+        // O conselheiro titular volta a ter acesso completo automaticamente!
+        setCurrentUser({
+          ...freshUser,
+          substituicao_ativa: false,
+          data_inicio_substituicao: undefined,
+          data_fim_prevista: undefined
+        });
+        addLog('SISTEMA', `SESSÃO: Conselheiro [${freshUser.nome}] teve o acesso reestabelecido automaticamente após fim da suplência.`, 'SISTEMA', freshUser);
+      } else if (shouldKickOutForBeingSubstituted) {
+        // O conselheiro titular teve substituição iniciada enquanto estava logado: desconecta
+        setCurrentUser(null);
+        alert("ACESSO SUSPENSO: Sua conta entrou em período de suplência ativa e está sendo temporariamente substituída.");
+      } else if (shouldDeactivateSuplenteActiveAccess) {
+        // Encerra a sessão do suplente que estava logado assumindo o lugar do conselheiro
+        setCurrentUser(null);
+        alert("Sua suplência foi encerrada e seu acesso temporário foi concluído.");
+        addLog('SISTEMA', `SESSÃO: Sessão da suplente [${freshUser.nome}] foi concluída automaticamente.`, 'SISTEMA', freshUser);
+      } else {
+        // Se outras propriedades mudaram (por exemplo se mudou senha ou status)
+        const hasStatusOrCargoOrNameChanged =
+          freshUser.status !== currentUser.status ||
+          freshUser.nome !== currentUser.nome ||
+          (currentUser as any).senha !== freshUser.senha;
+          
+        if (hasStatusOrCargoOrNameChanged) {
+          if (freshUser.status === 'BLOQUEADO' || freshUser.status === 'INATIVO' || freshUser.status === 'EXCLUIDO') {
+            setCurrentUser(null);
+            alert("Sua conta foi inativada/bloqueada administrativamente.");
+          } else {
+            // Atualiza dados gerais de perfil mantendo as funções de suplente se ativo
+            if (currentUser.is_suplente_active) {
+              setCurrentUser(prev => prev ? {
+                ...prev,
+                status: freshUser.status,
+                senha: freshUser.senha
+              } as any : null);
+            } else {
+              setCurrentUser(freshUser);
+            }
+          }
+        }
+      }
+    }
+  }, [users, currentUser]);
 
   const addLog = useCallback(async (docId: string, acao: string, tipo: LogType = 'SISTEMA', customUser?: User) => {
     const user = customUser || currentUser;
@@ -251,6 +335,14 @@ const App: React.FC = () => {
       // 3. Mapeamento para Contas Excluídas (Para exclusão visual e lógica do sistema ativo)
       if (u.status === 'EXCLUIDO' && !u.substituicao_permanente_por) {
         map[u.nome.toUpperCase()] = `${u.nome.toUpperCase()} (EXCLUÍDO)`;
+      }
+
+      // 4. Mapeamento por Substituição Temporária Ativa de Suplente
+      if (u.perfil === 'SUPLENTE' && u.substituicao_ativa && u.status === 'ATIVO' && u.substituindo_id) {
+        const substituted = users.find(sub => sub.id === u.substituindo_id);
+        if (substituted) {
+          map[substituted.nome.toUpperCase()] = u.nome.toUpperCase();
+        }
       }
     });
     return map;
@@ -684,7 +776,7 @@ const App: React.FC = () => {
       }} />;
       case 'statistics': return <StatisticsView documents={documents} agenda={agenda} users={users} currentUser={currentUser} />;
       case 'global-statistics': return <StatisticsView documents={allDocuments} agenda={allAgenda} users={users} currentUser={currentUser} isGlobal />;
-      case 'distribution-test': return <DistributionSimulator documents={allDocuments} users={users} currentUser={currentUser} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} />;
+      case 'distribution-test': return <DistributionSimulator documents={allDocuments} users={users} currentUser={currentUser} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} nameMap={userNameMap} />;
       default: return null;
     }
   };
@@ -749,18 +841,24 @@ const App: React.FC = () => {
             let sessionUser = { ...user };
             if (user.perfil === 'SUPLENTE' && user.substituicao_ativa && user.substituindo_id) {
               const substituted = users.find(u => u.id === user.substituindo_id);
-              if (substituted && now >= (user.data_inicio_substituicao || '') && now <= (user.data_fim_prevista || '')) {
-                sessionUser = {
-                  ...substituted,
-                  id: substituted.id, // Assume o ID para ver os documentos dele
-                  nome: `${user.nome} (Subst. ${substituted.nome})`,
-                  perfil: 'CONSELHEIRO',
-                  cargo: `Suplente de ${substituted.nome}`,
-                  unidade_id: substituted.unidade_id,
-                  is_suplente_active: true,
-                  real_user_id: user.id,
-                  substituted_name: substituted.nome
-                };
+              if (substituted) {
+                // Força o acesso APENAS à unidade do conselheiro substituído
+                sessionUser.unidade_id = substituted.unidade_id;
+                if (now >= (user.data_inicio_substituicao || '') && now <= (user.data_fim_prevista || '')) {
+                  sessionUser = {
+                    ...substituted,
+                    id: substituted.id, // Assume o ID para ver os documentos dele
+                    nome: `${user.nome} (Subst. ${substituted.nome})`,
+                    perfil: 'CONSELHEIRO',
+                    cargo: `Suplente de ${substituted.nome}`,
+                    unidade_id: substituted.unidade_id,
+                    is_suplente_active: true,
+                    real_user_id: user.id,
+                    substituted_name: substituted.nome
+                  };
+                } else {
+                  sessionUser.cargo = `Suplente de ${substituted.nome}`;
+                }
               }
             }
             
