@@ -253,11 +253,25 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUs
                   </div>
                   <div className="shrink-0 flex items-center gap-3">
                      {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); onEditDoc(doc.id); }} className="p-3 bg-white border border-[#E5E7EB] text-[#4B5563] rounded-xl hover:bg-[#111827] hover:text-white transition-all"><FileText className="w-4 h-4" /></button>}
-                     {(currentUser.perfil === 'ADMIN' || currentUser.nome === 'LEANDRO') && (
+                     {(hasCounselorActions => {
+                        const isCreatorAdmin = (doc.criado_por_id === currentUser.id || !doc.criado_por_id) && 
+                          (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome === 'LEANDRO');
+                        
+                        return isCreatorAdmin && !hasCounselorActions;
+                      })(!!(
+                        (doc.ciência_registrada_por && doc.ciência_registrada_por.length > 0) ||
+                        doc.medidas_detalhadas?.some(m => m.confirmacoes && m.confirmacoes.length > 0) ||
+                        doc.status.some(s => s !== 'AGUARDANDO_ANALISE' && s !== 'EM_PREENCHIMENTO' && !s.startsWith('NOTIFICACAO_')) ||
+                        (doc.medidas_detalhadas && doc.medidas_detalhadas.length > 0) ||
+                        (doc.relato_providencias && doc.relato_providencias.trim() !== '') ||
+                        (doc.fundamentacao_tecnica && doc.fundamentacao_tecnica.trim() !== '') ||
+                        (doc.monitoramento?.requisicoes && doc.monitoramento.requisicoes.length > 0) ||
+                        (doc.historico_monitoramento && doc.historico_monitoramento.length > 0)
+                      )) && (
                         <button 
                           onClick={(e) => { 
                             e.stopPropagation(); 
-                            if (window.confirm(`Deseja EXCLUIR permanentemente o prontuário #${doc.id}? Esta ação é irreversível.`)) {
+                            if (window.confirm(`ATENÇÃO: Deseja realmente EXCLUIR permanentemente o prontuário #${doc.id}? O sistema reverterá a escala e a distribuição de providência imediata para o estado anterior. Esta ação é irreversível.`)) {
                               onDeleteDoc(doc.id); 
                             }
                           }} 

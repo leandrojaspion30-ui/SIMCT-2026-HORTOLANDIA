@@ -44,6 +44,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     bairro: initialData?.bairro || '',
     relato_inicial: initialData?.observacoes_iniciais || '',
     conselheiro_referencia_id: initialData?.conselheiro_referencia_id || '',
+    providencia_imediata_manual: initialData?.providencia_imediata_manual || '',
     criancas: initialData?.criancas || [{ nome: '', nao_informado: false, data_nascimento: '', cpf: '', genero_identidade: '' }] as ChildData[]
   });
 
@@ -133,6 +134,11 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
   }, [allUsers, documents, isReferenceLocked, formData.conselheiro_referencia_id, initialData, formData.unidade_id, isManualReference, nameMap]);
 
   const assignedImediata = useMemo(() => {
+    // 0. SOBRESCRITA MANUAL: Se houver providência manual acionada
+    if (formData.providencia_imediata_manual) {
+      return allUsers.find(u => u.id === formData.providencia_imediata_manual);
+    }
+
     // 1. PRIORIDADE ABSOLUTA: Notificação desbloqueia e define a imediata
     if (formData.notificacao) {
       return allUsers.find(u => u.nome.toUpperCase() === formData.notificacao.toUpperCase() && u.unidade_id === formData.unidade_id);
@@ -142,6 +148,16 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     
     // Para novos documentos, a imediata é sempre baseada no dia real de hoje (todayDate) e usa a escala/trio de hoje
     const dateToUse = todayDate;
+
+    // Novo requisito: se já tem conselheiro de referência e ele está na providência imediata do dia (trioNames), ele deve ser a providência imediata
+    const refUser = assignedReference;
+    const refUserName = refUser?.nome?.toUpperCase();
+    const mappedRefName = (refUserName && nameMap && nameMap[refUserName]) ? nameMap[refUserName] : refUserName;
+    const isRefUserInTrio = mappedRefName && trioNames.map(n => n.toUpperCase()).includes(mappedRefName.toUpperCase());
+
+    if (isRefUserInTrio && refUser) {
+      return refUser;
+    }
 
     // 2. Persistência Familiar no mesmo dia de recebimento/aporte real (Hoje)
     const sameFamilyTodayDirect = documents.find(d => {
@@ -174,14 +190,14 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     }
     
     // 3. Lógica de Distribuição Justa (Rodízio de Providência Imediata)
-    // Filtramos para ignorar documentos que foram atribuídos por persistência familiar para não quebrar a sequência de hoje
+    // Filtramos para ignorar documentos que foram atribuídos por persistência familiar ou manual para não quebrar a sequência de hoje
     const todayDocs = documents
       .filter(d => {
         const isDocOfToday = d.data_aporte === dateToUse || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === dateToUse);
         if (!isDocOfToday || d.unidade_id !== formData.unidade_id) {
           return false;
         }
-        return !d.is_family_persistence;
+        return !d.is_family_persistence && !d.is_manual_providencia;
       })
       .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
 
@@ -197,7 +213,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     const nextName = trioNames[nextIndex];
     
     return allUsers.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === nextName && u.unidade_id === formData.unidade_id);
-  }, [trioNames, documents, todayDate, formData.notificacao, initialData, formData.unidade_id, allUsers, nameMap, familyHistory, formData.cpf_genitora, formData.genitora_nome, formData.criancas]);
+  }, [trioNames, documents, todayDate, formData.notificacao, formData.providencia_imediata_manual, initialData, formData.unidade_id, allUsers, nameMap, familyHistory, formData.cpf_genitora, formData.genitora_nome, formData.criancas, assignedReference]);
 
   const handleChildChange = (index: number, field: keyof ChildData, value: any) => {
     const newChildren = [...formData.criancas];
@@ -328,7 +344,14 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
       return false;
     });
 
-    const isFamilyPersistence = !!sameFamilyTodayDirect;
+    const finalRefId = initialData ? initialData.conselheiro_referencia_id : ((isManualReference || isReferenceLocked) ? formData.conselheiro_referencia_id : (assignedReference?.id || formData.conselheiro_referencia_id));
+    const finalRefUser = allUsers.find(u => u.id === finalRefId);
+    
+    const finalRefName = finalRefUser?.nome?.toUpperCase();
+    const mappedFinalRefName = (finalRefName && nameMap && nameMap[finalRefName]) ? nameMap[finalRefName] : finalRefName;
+    const isRefUserInTrio = mappedFinalRefName && trioNames.map(n => n.toUpperCase()).includes(mappedFinalRefName.toUpperCase());
+
+    const isFamilyPersistence = !!sameFamilyTodayDirect && !(isRefUserInTrio && finalRefUser);
     
     let finalValidators = initialData?.conselheiros_providencia_nomes || trioNames;
 
@@ -367,27 +390,33 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
       numero_comunicado_violacao: formData.numero_comunicado_violacao,
       numero_sipia: formData.numero_sipia,
       notificacao: formData.notificacao,
+      providencia_imediata_manual: formData.providencia_imediata_manual,
       origem: `${formData.origem_categoria} - ${formData.origem}`,
       crianca_nome: formData.criancas[0].nome,
       observacoes_iniciais: formData.relato_inicial,
       data_recebimento: formData.data_aporte,
       hora_rece_bimento: formData.hora_aporte,
       periodo_rece_bimento: classifyTurno(formData.data_aporte, formData.hora_aporte),
-      conselheiro_referencia_id: initialData ? initialData.conselheiro_referencia_id : ((isManualReference || isReferenceLocked) ? formData.conselheiro_referencia_id : (assignedReference?.id || formData.conselheiro_referencia_id)),
+      conselheiro_referencia_id: finalRefId,
       is_manual_override: initialData ? initialData.is_manual_override : (isManualReference || isReferenceLocked),
       conselheiro_providencia_id: assignedImediata?.id || '',
       conselheiros_providencia_nomes: finalValidators,
       is_family_persistence: isFamilyPersistence,
+      is_manual_providencia: !!formData.providencia_imediata_manual,
       status: initialData ? initialData.status : (formData.notificacao ? [`NOTIFICACAO_${formData.notificacao.toUpperCase()}` as DocumentStatus] : ['AGUARDANDO_ANALISE']),
       justificativa_distribuicao: initialData 
         ? initialData.justificativa_distribuicao 
-        : (formData.notificacao 
-            ? `🔔 Imediata vinculada à Notificação: ${formData.notificacao}.` 
-            : (isFamilyPersistence
-                ? `👨‍👩‍👧‍👦 Imediata mantida por vínculo familiar no mesmo dia.`
-                : (isReferenceLocked 
-                    ? `📌 Referência mantida por vínculo histórico.` 
-                    : `✅ Atribuído por Rodízio Alfabético.`)))
+        : (formData.providencia_imediata_manual
+            ? `✍️ Imediata atribuída MANUALMENTE: [${assignedImediata?.nome}].`
+            : (formData.notificacao 
+                ? `🔔 Imediata vinculada à Notificação: ${formData.notificacao}.` 
+                : (isRefUserInTrio && finalRefUser
+                    ? `🎯 Imediata vinculada ao Conselheiro de Referência [${finalRefUser.nome}] de plantão no dia.`
+                    : (isFamilyPersistence
+                        ? `👨‍👩‍👧‍👦 Imediata mantida por vínculo familiar no mesmo dia.`
+                        : (isReferenceLocked 
+                            ? `📌 Referência mantida por vínculo histórico.` 
+                            : `✅ Atribuído por Rodízio Alfabético.`)))))
     };
 
     if (!finalData.conselheiro_referencia_id) {
@@ -513,7 +542,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
             </div>
 
             {/* CAMPO ADICIONAL: Nº OFÍCIO E NOVOS CAMPOS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 pt-2">
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nº Ofício / Documento</label>
                 <input 
@@ -569,6 +598,29 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                     .sort((a, b) => a.nome.localeCompare(b.nome))
                     .map(u => (
                       <option key={u.id} value={u.nome.toUpperCase()}>{u.nome.toUpperCase()}</option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Providência Imediata MANUAL</label>
+                <select 
+                  className="w-full p-3 sm:p-4 bg-white border border-slate-100 rounded-xl font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm cursor-pointer"
+                  value={formData.providencia_imediata_manual}
+                  onChange={e => setFormData({...formData, providencia_imediata_manual: e.target.value})}
+                >
+                  <option value="">AUTOMÁTICA / ESCALA...</option>
+                  {allUsers
+                    .filter(u => {
+                      if (u.unidade_id !== formData.unidade_id) return false;
+                      if (u.status !== 'ATIVO') return false;
+                      if (u.perfil !== 'CONSELHEIRO' && u.perfil !== 'SUPLENTE') return false;
+                      if (u.perfil === 'CONSELHEIRO' && u.substituicao_ativa) return false;
+                      return true;
+                    })
+                    .sort((a, b) => a.nome.localeCompare(b.nome))
+                    .map(u => (
+                      <option key={u.id} value={u.id}>{u.nome.toUpperCase()}</option>
                     ))}
                 </select>
               </div>
@@ -830,8 +882,12 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
               </label>
               <div className="p-4 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 flex items-center justify-between">
                 <span>{assignedImediata?.nome || 'Aguardando...'}</span>
-                <span className={`text-[9px] px-2 py-1 rounded-md uppercase ${(initialData && !formData.notificacao) ? 'bg-slate-100 text-slate-500' : 'bg-amber-50 text-amber-600'}`}>
-                  {(initialData && !formData.notificacao) ? 'Distribuição Bloqueada' : (formData.notificacao ? 'Vínculo de Notificação' : 'Escala do Dia')}
+                <span className={`text-[9px] px-2 py-1 rounded-md uppercase ${(initialData && !formData.notificacao && !formData.providencia_imediata_manual) ? 'bg-slate-100 text-slate-500' : 'bg-amber-50 text-amber-600'}`}>
+                  {(initialData && !formData.notificacao && !formData.providencia_imediata_manual) 
+                    ? 'Distribuição Bloqueada' 
+                    : (formData.providencia_imediata_manual 
+                        ? 'Sobrescrita Manual' 
+                        : (formData.notificacao ? 'Vínculo de Notificação' : 'Escala do Dia'))}
                 </span>
               </div>
             </div>

@@ -175,6 +175,8 @@ export interface Documento {
   numero_comunicado_violacao?: string;
   numero_sipia?: string;
   is_family_persistence?: boolean;
+  is_manual_providencia?: boolean;
+  providencia_imediata_manual?: string;
 }
 
 export interface Atribuicao136Entry {

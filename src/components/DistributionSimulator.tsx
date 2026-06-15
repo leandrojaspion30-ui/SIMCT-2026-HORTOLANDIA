@@ -14,7 +14,10 @@ import {
   Building2,
   Terminal,
   UserCheck,
-  Lock
+  Lock,
+  Bell,
+  FileText,
+  Sliders
 } from 'lucide-react';
 import { Documento, User } from '../types';
 import { CONSELHEIROS_ALFABETICO_POR_UNIDADE, getEffectiveEscala } from '../constants';
@@ -90,6 +93,49 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
       .sort((a, b) => a.nome.localeCompare(b.nome));
   }, [users, selectedUnidade]);
 
+  // Casos reais da unidade selecionada ordenados por data de criação decrescente
+  const unitCasesReal = useMemo(() => {
+    return documents
+      .filter(d => d.unidade_id === selectedUnidade)
+      .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
+  }, [documents, selectedUnidade]);
+
+  // Estatísticas das distribuições de hoje
+  const todayStats = useMemo(() => {
+    const todayDateReal = (() => {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    })();
+
+    const todayUnitCases = documents.filter(d => {
+      const isDocOfToday = d.data_aporte === todayDateReal || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === todayDateReal);
+      return isDocOfToday && d.unidade_id === selectedUnidade;
+    });
+
+    const total = todayUnitCases.length;
+    let manual = 0;
+    let notification = 0;
+    let persistence = 0;
+    let automatic = 0;
+
+    todayUnitCases.forEach(d => {
+      if (d.is_manual_providencia || d.providencia_imediata_manual) {
+        manual++;
+      } else if (d.notificacao) {
+        notification++;
+      } else if (d.is_family_persistence) {
+        persistence++;
+      } else {
+        automatic++;
+      }
+    });
+
+    return { total, manual, notification, persistence, automatic };
+  }, [documents, selectedUnidade]);
+
   // Encontra quem foi o último conselheiro de referência atribuído (não manual)
   const lastAssignedRef = useMemo(() => {
     const newCases = documents
@@ -143,7 +189,14 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         if (!isDocOfToday || d.unidade_id !== selectedUnidade) {
           return false;
         }
-        return !d.is_family_persistence;
+        const isRefOfDocInTrio = (() => {
+          const rUser = users.find(u => u.id === d.conselheiro_referencia_id);
+          const rName = rUser?.nome?.toUpperCase();
+          const mappedRName = (rName && nameMap && nameMap[rName]) ? nameMap[rName] : rName;
+          return mappedRName && escalaTrio.map(n => n.toUpperCase()).includes(mappedRName.toUpperCase());
+        })();
+        const isFamPersistence = d.is_family_persistence && !isRefOfDocInTrio;
+        return !isFamPersistence && !d.is_manual_providencia && !d.providencia_imediata_manual;
       })
       .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
     
@@ -152,7 +205,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
     const lastId = lastAutoDoc.conselheiro_providencia_id;
     const foundUser = users.find(u => u.id === lastId);
     return foundUser ? foundUser.nome.toUpperCase() : null;
-  }, [documents, users, selectedUnidade]);
+  }, [documents, users, selectedUnidade, escalaTrio, nameMap]);
 
   // Próximo conselheiro previsto para a providência imediata
   const nextPredictedImediata = useMemo(() => {
@@ -202,6 +255,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
 
       // Montamos o estado esperado sequencialmente para Referência
       let currentRefName = lastAssignedRef;
+      const expectedRefs: { id: string, nome: string }[] = [];
 
       for (let i = 0; i < simulationSize; i++) {
         // Encontra o próximo previsto
@@ -209,6 +263,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         const nextIdx = activeCounselors.length > 0 ? (lastIdx + 1) % activeCounselors.length : 0;
         const targetCounselor = activeCounselors[nextIdx];
         expectedSequence.push(targetCounselor.nome);
+        expectedRefs.push(targetCounselor);
         currentRefName = targetCounselor.nome;
       }
 
@@ -223,11 +278,21 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
       const virtualTrio = getEffectiveEscala(todayDateReal, '12:00', selectedUnidade, nameMap);
       let currentProvName = lastAssignedImediata;
       for (let i = 0; i < simulationSize; i++) {
-        const lastIdx = virtualTrio.findIndex(name => name.toUpperCase() === currentProvName);
-        const nextIdx = virtualTrio.length > 0 ? (lastIdx + 1) % virtualTrio.length : 0;
-        const targetImediata = virtualTrio[nextIdx];
-        expectedSequenceImediata.push(targetImediata?.toUpperCase() || 'N/A');
-        currentProvName = targetImediata?.toUpperCase();
+        const refUser = expectedRefs[i];
+        const refUserName = refUser?.nome?.toUpperCase();
+        const mappedRefName = (refUserName && nameMap && nameMap[refUserName]) ? nameMap[refUserName] : refUserName;
+        const isRefUserInTrio = mappedRefName && virtualTrio.map(n => n.toUpperCase()).includes(mappedRefName.toUpperCase());
+
+        if (isRefUserInTrio && refUser) {
+          expectedSequenceImediata.push(refUserName);
+          currentProvName = refUserName;
+        } else {
+          const lastIdx = virtualTrio.findIndex(name => name.toUpperCase() === currentProvName);
+          const nextIdx = virtualTrio.length > 0 ? (lastIdx + 1) % virtualTrio.length : 0;
+          const targetImediata = virtualTrio[nextIdx];
+          expectedSequenceImediata.push(targetImediata?.toUpperCase() || 'N/A');
+          currentProvName = targetImediata?.toUpperCase();
+        }
       }
 
       // Simular múltiplos ADMs agindo simultaneamente (concorrência)
@@ -256,10 +321,21 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         const assignedUser = activeCounselors[nxtIdx];
 
         // Lógica de Distribuição Justa (Rodízio de Providência Imediata)
+        const refNameSim = assignedUser?.nome?.toUpperCase();
+        const mappedRefNameSim = (refNameSim && nameMap && nameMap[refNameSim]) ? nameMap[refNameSim] : refNameSim;
+        const isRefSimInTrio = mappedRefNameSim && virtualTrio.map(n => n.toUpperCase()).includes(mappedRefNameSim.toUpperCase());
+
         const virtualTodayDocs = virtualDocsList
           .filter(d => {
             const isDocOfToday = d.data_aporte === todayDateReal || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === todayDateReal);
-            return isDocOfToday && d.unidade_id === selectedUnidade && !d.is_family_persistence && !d.notificacao;
+            const isRefOfDocInTrio = (() => {
+              const rUser = users.find(u => u.id === d.conselheiro_referencia_id);
+              const rName = rUser?.nome?.toUpperCase();
+              const mappedRName = (rName && nameMap && nameMap[rName]) ? nameMap[rName] : rName;
+              return mappedRName && virtualTrio.map(n => n.toUpperCase()).includes(mappedRName.toUpperCase());
+            })();
+            const isFamPersistence = d.is_family_persistence && !isRefOfDocInTrio;
+            return isDocOfToday && d.unidade_id === selectedUnidade && !isFamPersistence && !d.notificacao && !d.is_manual_providencia;
           })
           .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
 
@@ -267,10 +343,18 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         const lastProvUser = users.find(u => u.id === lastProvId);
         const lastProvName = lastProvUser?.nome.toUpperCase();
         
-        const curProvIdx = virtualTrio.indexOf(lastProvName || '');
-        const nxtProvIdx = virtualTrio.length > 0 ? (curProvIdx + 1) % virtualTrio.length : 0;
-        const assignedProvName = virtualTrio[nxtProvIdx] || 'N/A';
-        const assignedProvUser = users.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === assignedProvName.toUpperCase() && u.unidade_id === selectedUnidade);
+        let assignedProvUser: User | undefined;
+        let assignedProvName: string = 'N/A';
+
+        if (isRefSimInTrio && assignedUser) {
+          assignedProvUser = users.find(u => u.id === assignedUser.id);
+          assignedProvName = refNameSim;
+        } else {
+          const curProvIdx = virtualTrio.indexOf(lastProvName || '');
+          const nxtProvIdx = virtualTrio.length > 0 ? (curProvIdx + 1) % virtualTrio.length : 0;
+          assignedProvName = virtualTrio[nxtProvIdx] || 'N/A';
+          assignedProvUser = users.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === assignedProvName.toUpperCase() && u.unidade_id === selectedUnidade);
+        }
 
         // Cria o registro temporário na lista para a próxima iteração simular a sincronização rápida
         const newVirtualDoc: Documento = {
@@ -366,11 +450,13 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
 
     // For expected sequence (Referência)
     let currentRefName = lastAssignedRef;
+    const testExpectedRefs: { id: string, nome: string }[] = [];
     for (let i = 0; i < 3; i++) {
       const lastIdx = activeCounselors.findIndex(c => c.nome === currentRefName);
       const nextIdx = activeCounselors.length > 0 ? (lastIdx + 1) % activeCounselors.length : 0;
       const target = activeCounselors[nextIdx];
       expectedSequence.push(target.nome);
+      testExpectedRefs.push(target);
       currentRefName = target.nome;
     }
 
@@ -378,11 +464,21 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
     const liveTrio = getEffectiveEscala(todayDateReal, '12:00', selectedUnidade, nameMap);
     let currentProvName = lastAssignedImediata;
     for (let i = 0; i < 3; i++) {
-      const lastIdx = liveTrio.findIndex(name => name.toUpperCase() === currentProvName);
-      const nextIdx = liveTrio.length > 0 ? (lastIdx + 1) % liveTrio.length : 0;
-      const target = liveTrio[nextIdx];
-      expectedSequenceImediata.push(target?.toUpperCase() || 'N/A');
-      currentProvName = target?.toUpperCase();
+      const refUser = testExpectedRefs[i];
+      const refUserName = refUser?.nome?.toUpperCase();
+      const mappedRefName = (refUserName && nameMap && nameMap[refUserName]) ? nameMap[refUserName] : refUserName;
+      const isRefUserInTrio = mappedRefName && liveTrio.map(n => n.toUpperCase()).includes(mappedRefName.toUpperCase());
+
+      if (isRefUserInTrio && refUser) {
+        expectedSequenceImediata.push(refUserName);
+        currentProvName = refUserName;
+      } else {
+        const lastIdx = liveTrio.findIndex(name => name.toUpperCase() === currentProvName);
+        const nextIdx = liveTrio.length > 0 ? (lastIdx + 1) % liveTrio.length : 0;
+        const target = liveTrio[nextIdx];
+        expectedSequenceImediata.push(target?.toUpperCase() || 'N/A');
+        currentProvName = target?.toUpperCase();
+      }
     }
 
     try {
@@ -407,7 +503,14 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         const liveTodayDocs = liveDocsList
           .filter(d => {
             const isDocOfToday = d.data_aporte === todayDateReal || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === todayDateReal);
-            return isDocOfToday && d.unidade_id === selectedUnidade && !d.is_family_persistence && !d.notificacao;
+            const isRefOfDocInTrio = (() => {
+              const rUser = users.find(u => u.id === d.conselheiro_referencia_id);
+              const rName = rUser?.nome?.toUpperCase();
+              const mappedRName = (rName && nameMap && nameMap[rName]) ? nameMap[rName] : rName;
+              return mappedRName && liveTrio.map(n => n.toUpperCase()).includes(mappedRName.toUpperCase());
+            })();
+            const isFamPersistence = d.is_family_persistence && !isRefOfDocInTrio;
+            return isDocOfToday && d.unidade_id === selectedUnidade && !isFamPersistence && !d.notificacao && !d.is_manual_providencia;
           })
           .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
 
@@ -415,10 +518,22 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         const lastProvUser = users.find(u => u.id === lastProvId);
         const lastProvName = lastProvUser?.nome.toUpperCase();
 
-        const curProvIdx = liveTrio.indexOf(lastProvName || '');
-        const nxtProvIdx = liveTrio.length > 0 ? (curProvIdx + 1) % liveTrio.length : 0;
-        const assignedProvName = liveTrio[nxtProvIdx] || 'N/A';
-        const assignedProvUser = users.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === assignedProvName.toUpperCase() && u.unidade_id === selectedUnidade);
+        let assignedProvUser: User | undefined;
+        let assignedProvName: string = 'N/A';
+
+        const refNameSim = assignedUser?.nome?.toUpperCase();
+        const mappedRefNameSim = (refNameSim && nameMap && nameMap[refNameSim]) ? nameMap[refNameSim] : refNameSim;
+        const isRefSimInTrio = mappedRefNameSim && liveTrio.map(n => n.toUpperCase()).includes(mappedRefNameSim.toUpperCase());
+
+        if (isRefSimInTrio && assignedUser) {
+          assignedProvUser = users.find(u => u.id === assignedUser.id);
+          assignedProvName = refNameSim;
+        } else {
+          const curProvIdx = liveTrio.indexOf(lastProvName || '');
+          const nxtProvIdx = liveTrio.length > 0 ? (curProvIdx + 1) % liveTrio.length : 0;
+          assignedProvName = liveTrio[nxtProvIdx] || 'N/A';
+          assignedProvUser = users.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === assignedProvName.toUpperCase() && u.unidade_id === selectedUnidade);
+        }
 
         log(`[Gravando no Firestore] Documento de teste ${i + 1}/3...`, 'info');
 
@@ -877,11 +992,203 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
                 )}
               </div>
             </div>
-            
           </div>
         </div>
         )}
 
+      </div>
+
+      {/* PAINEL DE AUDITORIA E DIAGNÓSTICO DE DISTRIBUIÇÃO */}
+      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 sm:p-10 space-y-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-100">
+          <div className="space-y-1">
+            <span className="px-3 py-1 bg-amber-500/10 text-amber-700 rounded-full font-black text-[10px] uppercase tracking-widest border border-amber-500/20">
+              Auditoria em Tempo Real
+            </span>
+            <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+              <Activity className="w-6 h-6 text-indigo-600 animate-pulse" />
+              Painel de Diagnóstico de Distribuições
+            </h3>
+            <p className="text-slate-500 text-xs sm:text-sm font-medium leading-relaxed">
+              Monitore o histórico real de atribuição de Providência Imediata sob as regras de Escala, Sobrescrita Manual e Vínculos de Notificação para a Unidade {selectedUnidade === 1 ? 'I' : 'II'}.
+            </p>
+          </div>
+          
+          {/* STATS DE HOJE */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 shrink-0">
+            <div className="bg-slate-50 border border-slate-100 p-3 rounded-2xl text-center">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Total Hoje</span>
+              <span className="text-lg font-black text-slate-800">{todayStats.total}</span>
+            </div>
+            <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-2xl text-center">
+              <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest block flex items-center justify-center gap-1">
+                <RefreshCw className="w-3 h-3" /> Auto (Escala)
+              </span>
+              <span className="text-lg font-black text-emerald-800">{todayStats.automatic}</span>
+            </div>
+            <div className="bg-rose-50 border border-rose-100 p-3 rounded-2xl text-center">
+              <span className="text-[9px] font-black text-rose-600 uppercase tracking-widest block flex items-center justify-center gap-1">
+                <Zap className="w-3 h-3" /> Manual
+              </span>
+              <span className="text-lg font-black text-rose-800">{todayStats.manual}</span>
+            </div>
+            <div className="bg-blue-50 border border-blue-100 p-3 rounded-2xl text-center">
+              <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest block flex items-center justify-center gap-1">
+                <Bell className="w-3 h-3" /> Notificação
+              </span>
+              <span className="text-lg font-black text-blue-800">{todayStats.notification}</span>
+            </div>
+            <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-2xl text-center">
+              <span className="text-[9px] font-black text-indigo-600 uppercase tracking-widest block flex items-center justify-center gap-1">
+                <Users className="w-3 h-3" /> Família
+              </span>
+              <span className="text-lg font-black text-indigo-800">{todayStats.persistence}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* LISTA DE CASOS */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black uppercase text-slate-400 tracking-widest">
+              Registros Recentes de Atendimento ({unitCasesReal.length})
+            </span>
+            <span className="text-[10px] text-slate-400 font-bold">
+              Mostrando até os 15 casos mais recentes
+            </span>
+          </div>
+
+          <div className="overflow-x-auto border border-slate-100 rounded-2xl shadow-sm">
+            <table className="w-full text-left border-collapse bg-white">
+              <thead>
+                <tr className="bg-slate-50/70 border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-500 border-t-0">
+                  <th className="p-4 pl-6 text-slate-500 font-extrabold uppercase">Caso / Data</th>
+                  <th className="p-4 text-slate-500 font-extrabold uppercase">Criança / Genitora</th>
+                  <th className="p-4 text-slate-500 font-extrabold uppercase">Conselheiro Referência</th>
+                  <th className="p-4 text-slate-500 font-extrabold uppercase">Providência Imediata</th>
+                  <th className="p-4 text-slate-500 font-extrabold uppercase">Origem / Método</th>
+                  <th className="p-4 pr-6 text-slate-500 font-extrabold uppercase">Diagnóstico / Justificativa</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {unitCasesReal.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-10 text-center text-xs text-slate-400 font-bold">
+                      Nenhum prontuário registrado para a Unidade {selectedUnidade === 1 ? 'I' : 'II'}.
+                    </td>
+                  </tr>
+                ) : (
+                  unitCasesReal.slice(0, 15).map((doc) => {
+                    // Detect high-level assignment type
+                    let methodLabel = "Escala do Dia";
+                    let methodStyle = "bg-emerald-50 text-emerald-700 border-emerald-100";
+                    let methodIcon = <RefreshCw className="w-3.5 h-3.5" />;
+
+                    if (doc.is_manual_providencia || doc.providencia_imediata_manual) {
+                      methodLabel = "Sobrescrita Manual";
+                      methodStyle = "bg-rose-50 text-rose-700 border-rose-100";
+                      methodIcon = <Zap className="w-3.5 h-3.5" />;
+                    } else if (doc.notificacao) {
+                      methodLabel = "Vínculo de Notificação";
+                      methodStyle = "bg-blue-50 text-blue-700 border-blue-100";
+                      methodIcon = <Bell className="w-3.5 h-3.5" />;
+                    } else if (doc.is_family_persistence) {
+                      methodLabel = "Persistência Familiar";
+                      methodStyle = "bg-indigo-50 text-indigo-700 border-indigo-100";
+                      methodIcon = <Users className="w-3.5 h-3.5" />;
+                    }
+
+                    // Map name safely
+                    const getMappedName = (id: string, nameField?: string) => {
+                      if (!id) return "Não atribuído";
+                      const found = users.find(u => u.id === id);
+                      return found ? found.nome.toUpperCase() : (nameField?.toUpperCase() || "Desconhecido");
+                    };
+
+                    const refName = getMappedName(doc.conselheiro_referencia_id, doc.conselheiro_referencia_nome);
+                    const provName = getMappedName(doc.conselheiro_providencia_id, doc.conselheiro_providencia_nome);
+
+                    const timeFormatted = (() => {
+                      try {
+                        if (!doc.criado_em) return '';
+                        return new Date(doc.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                      } catch {
+                        return '';
+                      }
+                    })();
+
+                    const dateFormatted = (() => {
+                      try {
+                        const target = doc.data_recebimento || doc.data_aporte || doc.criado_em?.split('T')[0];
+                        if (!target) return '';
+                        const parts = target.split('-');
+                        if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                        return target;
+                      } catch {
+                        return doc.data_recebimento || '';
+                      }
+                    })();
+
+                    return (
+                      <tr key={doc.id} className="hover:bg-slate-50/50 transition-all text-[11px] sm:text-xs">
+                        {/* CASO / DATA */}
+                        <td className="p-4 pl-6 space-y-1">
+                          <span className="font-black text-slate-800 uppercase block tracking-wider">
+                            #{doc.id.slice(0, 8)}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-bold block whitespace-nowrap">
+                            {dateFormatted} {timeFormatted && `às ${timeFormatted}`}
+                          </span>
+                        </td>
+
+                        {/* CRIANÇA / GENITORA */}
+                        <td className="p-4 space-y-0.5">
+                          <div className="font-extrabold text-slate-700 uppercase">
+                            {doc.crianca_nome || "NÃO INFORMADO"}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-medium uppercase truncate max-w-[150px]">
+                            Mãe: {doc.genitora_nome || "NÃO INFORMADA"}
+                          </div>
+                        </td>
+
+                        {/* CONSELHEIRO REFERÊNCIA */}
+                        <td className="p-4">
+                          <div className="flex items-center gap-1.5 font-bold text-slate-600">
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></span>
+                            <span className="uppercase truncate max-w-[130px]">{refName}</span>
+                          </div>
+                        </td>
+
+                        {/* PROVIDÊNCIA IMEDIATA */}
+                        <td className="p-4">
+                          <div className="flex items-center gap-1.5 font-black text-slate-800">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                            <span className="uppercase truncate max-w-[130px]">{provName}</span>
+                          </div>
+                        </td>
+
+                        {/* ORIGEM / MÉTODO */}
+                        <td className="p-4">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider border ${methodStyle}`}>
+                            {methodIcon}
+                            <span>{methodLabel}</span>
+                          </span>
+                        </td>
+
+                        {/* DIAGNÓSTICO / JUSTIFICATIVA */}
+                        <td className="p-4 pr-6 max-w-xs md:max-w-md">
+                          <div className="bg-slate-50 rounded-xl p-2.5 text-[10px] text-slate-500 font-bold leading-relaxed border border-slate-100">
+                            {doc.justificativa_distribuicao || "Distribuição automática síncrona de escala de plantão."}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
     </div>
