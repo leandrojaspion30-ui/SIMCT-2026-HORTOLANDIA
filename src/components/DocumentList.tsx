@@ -43,6 +43,7 @@ interface DocumentListProps {
 }
 
 const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUser, onSelectDoc, onEditDoc, onDeleteDoc, isReadOnly, isMyReferenceView }) => {
+  const [docToDelete, setDocToDelete] = useState<string | null>(null);
   const [myViewMode, setMyViewMode] = useState<'ALL' | 'REF' | 'IMED' | 'VALID'>(isMyReferenceView ? 'REF' : 'ALL');
   const initialFilters = { term: '', bairro: '', status: '', conselheiro_ref_id: '', data_registro: '' };
   const [filters, setFilters] = useState(initialFilters);
@@ -254,7 +255,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUs
                   <div className="shrink-0 flex items-center gap-3">
                      {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); onEditDoc(doc.id); }} className="p-3 bg-white border border-[#E5E7EB] text-[#4B5563] rounded-xl hover:bg-[#111827] hover:text-white transition-all"><FileText className="w-4 h-4" /></button>}
                      {(hasCounselorActions => {
-                        const isCreatorAdmin = (doc.criado_por_id === currentUser.id || !doc.criado_por_id) && 
+                        const isCreatorAdmin = 
                           (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome === 'LEANDRO');
                         
                         return isCreatorAdmin && !hasCounselorActions;
@@ -271,9 +272,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUs
                         <button 
                           onClick={(e) => { 
                             e.stopPropagation(); 
-                            if (window.confirm(`ATENÇÃO: Deseja realmente EXCLUIR permanentemente o prontuário #${doc.id}? O sistema reverterá a escala e a distribuição de providência imediata para o estado anterior. Esta ação é irreversível.`)) {
-                              onDeleteDoc(doc.id); 
-                            }
+                            setDocToDelete(doc.id);
                           }} 
                           className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all"
                         >
@@ -293,6 +292,38 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUs
           </div>
         )}
       </div>
+
+      {docToDelete && (
+        <div id="delete-confirm-modal" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-2xl max-w-md w-full p-8 animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <TriangleAlert className="w-8 h-8" />
+            </div>
+            <h3 className="text-[20px] font-black uppercase text-slate-800 text-center tracking-tight mb-2">Excluir Prontuário?</h3>
+            <p className="text-[13px] font-medium text-slate-500 text-center mb-6 leading-relaxed">
+              Você está prestes a excluir permanentemente o prontuário <span className="font-bold text-slate-900">#{docToDelete}</span>. 
+              O sistema reverterá a escala e a distribuição de providência imediata para o estado anterior. Esta ação é <span className="font-bold text-red-600">irreversível</span>.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => {
+                  onDeleteDoc(docToDelete);
+                  setDocToDelete(null);
+                }}
+                className="w-full py-4 bg-red-600 text-white rounded-xl font-black uppercase text-[11px] tracking-widest shadow-lg shadow-red-100 hover:bg-red-700 transition-all text-center cursor-pointer"
+              >
+                Sim, Excluir Agora
+              </button>
+              <button
+                onClick={() => setDocToDelete(null)}
+                className="w-full py-4 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-xl font-black uppercase text-[11px] tracking-widest transition-all text-center cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

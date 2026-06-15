@@ -69,6 +69,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const [isImprocedente, setIsImprocedente] = useState(doc.is_improcedente || false);
   const [showIntelligence, setShowIntelligence] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [expiredItem, setExpiredItem] = useState<any | null>(null);
   const [extendingReq, setExtendingReq] = useState<any | null>(null);
   const [extForm, setExtForm] = useState({ nova_data: '' });
@@ -455,7 +456,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
           <div className="text-center"><h2 className="text-[20px] font-black uppercase">{doc.crianca_nome}</h2><p className="text-[10px] opacity-60 uppercase">SIMCT #{doc.id}</p></div>
           <div className="flex items-center gap-3">
             {(hasCounselorActions => {
-               const isCreatorAdmin = (doc.criado_por_id === currentUser.id || !doc.criado_por_id) && 
+               const isCreatorAdmin = 
                  (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome === 'LEANDRO');
                
                return isCreatorAdmin && !hasCounselorActions;
@@ -470,11 +471,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                (doc.historico_monitoramento && doc.historico_monitoramento.length > 0)
              )) && (
               <button 
-                onClick={() => {
-                  if (window.confirm(`ATENÇÃO: Deseja realmente EXCLUIR permanentemente o prontuário #${doc.id}? O sistema reverterá a escala e a distribuição de providência imediata para o estado anterior. Esta ação é irreversível.`)) {
-                    onDelete(doc.id);
-                  }
-                }}
+                onClick={() => setShowDeleteConfirm(true)}
                 className="p-3 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white rounded-2xl transition-all"
                 title="Excluir Prontuário"
               >
@@ -1149,6 +1146,38 @@ const DocumentView: React.FC<DocumentViewProps> = ({
           currentUser={currentUser} 
           onClose={() => setShowHistoryModal(false)} 
         />
+      )}
+
+      {showDeleteConfirm && (
+        <div id="delete-confirm-modal-view" className="fixed inset-0 z-[700] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-2xl max-w-md w-full p-8 animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <AlertTriangle className="w-8 h-8" />
+            </div>
+            <h3 className="text-[20px] font-black uppercase text-slate-800 text-center tracking-tight mb-2">Excluir Prontuário?</h3>
+            <p className="text-[13px] font-medium text-slate-500 text-center mb-6 leading-relaxed">
+              Você está prestes a excluir permanentemente o prontuário <span className="font-bold text-slate-900">#{doc.id}</span>. 
+              O sistema reverterá a escala e a distribuição de providência imediata para o estado anterior. Esta ação é <span className="font-bold text-red-600">irreversível</span>.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => {
+                  onDelete(doc.id);
+                  setShowDeleteConfirm(false);
+                }}
+                className="w-full py-4 bg-red-600 text-white rounded-xl font-black uppercase text-[11px] tracking-widest shadow-lg shadow-red-100 hover:bg-red-700 transition-all text-center cursor-pointer"
+              >
+                Sim, Excluir Agora
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="w-full py-4 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-xl font-black uppercase text-[11px] tracking-widest transition-all text-center cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
