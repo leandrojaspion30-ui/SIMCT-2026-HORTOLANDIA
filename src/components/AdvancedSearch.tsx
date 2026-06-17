@@ -98,11 +98,11 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ documents, users, curre
               <input type="text" placeholder="BUSCAR CRIANÇA..." className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] font-bold uppercase" value={filters.crianca_nome} onChange={e => setFilters({...filters, crianca_nome: e.target.value})} />
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase">Responsável (Mãe)</label>
-              <input type="text" placeholder="NOME DA MÃE..." className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] font-bold uppercase" value={filters.genitora_nome} onChange={e => setFilters({...filters, genitora_nome: e.target.value})} />
+              <label className="text-[10px] font-black text-slate-400 uppercase">Nome da Genitora / Genitor / Responsável Legal</label>
+              <input type="text" placeholder="NOME DA GENITORA / GENITOR / RESPONSÁVEL LEGAL..." className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] font-bold uppercase" value={filters.genitora_nome} onChange={e => setFilters({...filters, genitora_nome: e.target.value})} />
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase">CPF (Criança ou Mãe)</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase">CPF (Criança ou Responsável)</label>
               <input type="text" placeholder="000.000.000-00" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] font-bold uppercase" value={filters.cpf} onChange={e => setFilters({...filters, cpf: e.target.value})} />
             </div>
             <div className="space-y-2">
@@ -149,7 +149,7 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ documents, users, curre
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
                 <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase">Protocolo</th>
-                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase">Genitora</th>
+                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase">Genitora / Genitor / Responsável Legal</th>
                 <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase">Bairro</th>
                 <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase">Status</th>
               </tr>

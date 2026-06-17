@@ -67,6 +67,9 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const [relatoProvidencias, setRelatoProvidencias] = useState(doc.relato_providencias || '');
   const [despachoSituacao, setDespachoSituacao] = useState(doc.despacho_situacao || '');
   const [isImprocedente, setIsImprocedente] = useState(doc.is_improcedente || false);
+  const [informacoesDocumento, setInformacoesDocumento] = useState(doc.informacoes_documento || '');
+  const [numeroComunicadoViolacao, setNumeroComunicadoViolacao] = useState(doc.numero_comunicado_violacao || '');
+  const [numeroSipia, setNumeroSipia] = useState(doc.numero_sipia || '');
   const [showIntelligence, setShowIntelligence] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -85,7 +88,10 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     setRelatoProvidencias(doc.relato_providencias || '');
     setDespachoSituacao(doc.despacho_situacao || '');
     setIsImprocedente(doc.is_improcedente || false);
-  }, [doc.id]);
+    setInformacoesDocumento(doc.informacoes_documento || '');
+    setNumeroComunicadoViolacao(doc.numero_comunicado_violacao || '');
+    setNumeroSipia(doc.numero_sipia || '');
+  }, [doc.id, doc.informacoes_documento, doc.numero_comunicado_violacao, doc.numero_sipia]);
 
   const isResponsible = doc.conselheiro_providencia_id === currentUser.id || 
     doc.conselheiro_referencia_id === currentUser.id;
@@ -93,6 +99,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const isADM = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
   const isConselheiro = currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE';
   const canEditTechnicalFields = isImediata && !isADM;
+  const canEditIdentifiers = isResponsible || isADM;
 
   // INTELIGÊNCIA SIMCT: Dossiê Familiar Cruzado
   const familyDossier = useMemo(() => {
@@ -533,15 +540,48 @@ const DocumentView: React.FC<DocumentViewProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-1 hover:border-slate-300 transition-all">
                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Nº Ofício / Documento</span>
-                <span className="text-[12px] font-black text-slate-800 uppercase">{doc.informacoes_documento || 'N/A'}</span>
+                {canEditIdentifiers ? (
+                  <input
+                    type="text"
+                    className="w-full mt-1 bg-white px-3 py-1.5 border border-slate-200 rounded-xl text-[11px] font-black text-slate-800 uppercase outline-none focus:border-blue-500 shadow-sm"
+                    value={informacoesDocumento}
+                    onChange={(e) => setInformacoesDocumento(e.target.value.toUpperCase())}
+                    onBlur={() => onUpdateDocument(doc.id, { informacoes_documento: informacoesDocumento })}
+                    placeholder="DIGITE..."
+                  />
+                ) : (
+                  <span className="text-[12px] font-black text-slate-800 uppercase">{doc.informacoes_documento || 'N/A'}</span>
+                )}
               </div>
               <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-1 hover:border-slate-300 transition-all">
                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Nº Com. de Violação</span>
-                <span className="text-[12px] font-black text-slate-800 uppercase">{doc.numero_comunicado_violacao || 'N/A'}</span>
+                {canEditIdentifiers ? (
+                  <input
+                    type="text"
+                    className="w-full mt-1 bg-white px-3 py-1.5 border border-slate-200 rounded-xl text-[11px] font-black text-slate-800 uppercase outline-none focus:border-blue-500 shadow-sm"
+                    value={numeroComunicadoViolacao}
+                    onChange={(e) => setNumeroComunicadoViolacao(e.target.value.toUpperCase())}
+                    onBlur={() => onUpdateDocument(doc.id, { numero_comunicado_violacao: numeroComunicadoViolacao })}
+                    placeholder="DIGITE..."
+                  />
+                ) : (
+                  <span className="text-[12px] font-black text-slate-800 uppercase">{doc.numero_comunicado_violacao || 'N/A'}</span>
+                )}
               </div>
               <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-1 hover:border-slate-300 transition-all">
                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Nº Procedimento / SIPIA</span>
-                <span className="text-[12px] font-black text-slate-800 uppercase">{doc.numero_sipia || 'N/A'}</span>
+                {canEditIdentifiers ? (
+                  <input
+                    type="text"
+                    className="w-full mt-1 bg-white px-3 py-1.5 border border-slate-200 rounded-xl text-[11px] font-black text-slate-800 uppercase outline-none focus:border-blue-500 shadow-sm"
+                    value={numeroSipia}
+                    onChange={(e) => setNumeroSipia(e.target.value.toUpperCase())}
+                    onBlur={() => onUpdateDocument(doc.id, { numero_sipia: numeroSipia })}
+                    placeholder="DIGITE..."
+                  />
+                ) : (
+                  <span className="text-[12px] font-black text-slate-800 uppercase">{doc.numero_sipia || 'N/A'}</span>
+                )}
               </div>
               <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-1 hover:border-slate-300 transition-all">
                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Origem do Caso</span>

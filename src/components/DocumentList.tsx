@@ -240,7 +240,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUs
                            </div>
                         )}
                         <div className="flex flex-wrap items-center gap-x-6 mt-2">
-                           <div className="flex items-center gap-2 text-[11px] text-[#4B5563] font-bold uppercase"><UserRound className="w-3.5 h-3.5" /> MÃE: {doc.genitora_nome}</div>
+                           <div className="flex items-center gap-2 text-[11px] text-[#4B5563] font-bold uppercase"><UserRound className="w-3.5 h-3.5" /> RESPONSÁVEL: {doc.genitora_nome}</div>
                            <div className="flex items-center gap-2 text-[11px] text-emerald-600 font-bold uppercase"><MapPin className="w-3.5 h-3.5" /> {doc.bairro}</div>
                         </div>
                      </div>

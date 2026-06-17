@@ -54,6 +54,28 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [familyHistory, setFamilyHistory] = useState<Documento[]>([]);
 
+  const [customOrigem, setCustomOrigem] = useState(() => {
+    const val = initialData?.origem?.split(' - ')[1] || '';
+    if (!val) return '';
+    const cat = initialData?.origem?.split(' - ')[0] || '';
+    const baseOptions = ORIGENS_HIERARQUICAS.find(h => h.label === cat)?.options || [];
+    if (baseOptions.includes(val) && val !== 'OUTRO' && val !== 'OUTROS') {
+      return '';
+    }
+    return val;
+  });
+
+  const [selectedOrigemDropdown, setSelectedOrigemDropdown] = useState(() => {
+    const val = initialData?.origem?.split(' - ')[1] || '';
+    if (!val) return '';
+    const cat = initialData?.origem?.split(' - ')[0] || '';
+    const baseOptions = ORIGENS_HIERARQUICAS.find(h => h.label === cat)?.options || [];
+    if (baseOptions.includes(val) && val !== 'OUTRO' && val !== 'OUTROS') {
+      return val;
+    }
+    return baseOptions.includes('OUTROS') ? 'OUTROS' : 'OUTRO';
+  });
+
   const isADM = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
 
   // DIRETRIZ 41/50/53: Reconhecimento por CPF e Auto-preenchimento
@@ -444,7 +466,13 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     onSubmit(finalData, []);
   };
 
-  const currentInstitutions = ORIGENS_HIERARQUICAS.find(h => h.label === formData.origem_categoria)?.options || [];
+  const currentInstitutions = useMemo(() => {
+    const base = ORIGENS_HIERARQUICAS.find(h => h.label === formData.origem_categoria)?.options || [];
+    if (formData.origem_categoria && !base.includes('OUTRO') && !base.includes('OUTROS')) {
+      return [...base, 'OUTRO'];
+    }
+    return base;
+  }, [formData.origem_categoria]);
 
   return (
     <div className="max-w-5xl mx-auto pb-20 animate-in fade-in duration-500">
@@ -514,7 +542,11 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   required
                   className="w-full p-4 sm:p-5 bg-white border border-slate-200 rounded-xl sm:rounded-[1.5rem] font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm cursor-pointer"
                   value={formData.origem_categoria}
-                  onChange={e => setFormData({...formData, origem_categoria: e.target.value, origem: ''})}
+                  onChange={e => {
+                    setFormData({...formData, origem_categoria: e.target.value, origem: ''});
+                    setSelectedOrigemDropdown('');
+                    setCustomOrigem('');
+                  }}
                 >
                   <option value="">SELECIONE CATEGORIA...</option>
                   {ORIGENS_HIERARQUICAS.map(h => <option key={h.label} value={h.label}>{h.label}</option>)}
@@ -528,8 +560,17 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   required
                   disabled={!formData.origem_categoria}
                   className="w-full p-4 sm:p-5 bg-white border border-slate-200 rounded-xl sm:rounded-[1.5rem] font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  value={formData.origem}
-                  onChange={e => setFormData({...formData, origem: e.target.value})}
+                  value={selectedOrigemDropdown}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setSelectedOrigemDropdown(val);
+                    if (val === 'OUTRO' || val === 'OUTROS') {
+                      setFormData(prev => ({ ...prev, origem: customOrigem || val }));
+                    } else {
+                      setFormData(prev => ({ ...prev, origem: val }));
+                      setCustomOrigem('');
+                    }
+                  }}
                 >
                   <option value="">SELECIONE INSTITUIÇÃO...</option>
                   {[...currentInstitutions].sort((a, b) => a.localeCompare(b)).map(inst => (
@@ -552,6 +593,26 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 </select>
               </div>
             </div>
+
+            {(selectedOrigemDropdown === 'OUTRO' || selectedOrigemDropdown === 'OUTROS') && (
+              <div className="pt-2 animate-in slide-in-from-top-2 duration-300">
+                <div className="p-5 bg-white rounded-2xl border border-blue-100 space-y-2">
+                  <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest leading-none">Descreva a Instituição / Escola não cadastrada</label>
+                  <input 
+                    required
+                    type="text"
+                    placeholder="DIGITE O NOME OU DESCRIÇÃO DA INSTITUIÇÃO..."
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-inner"
+                    value={customOrigem}
+                    onChange={e => {
+                      const val = e.target.value.toUpperCase();
+                      setCustomOrigem(val);
+                      setFormData(prev => ({ ...prev, origem: val || selectedOrigemDropdown }));
+                    }}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* CAMPO ADICIONAL: Nº OFÍCIO E NOVOS CAMPOS */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 pt-2">
@@ -648,7 +709,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nome da Genitora {!formData.genitora_nao_informado && '*'}</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nome da Genitora / Genitor / Responsável Legal {!formData.genitora_nao_informado && '*'}</label>
                   <label className="flex items-center gap-2 cursor-pointer group">
                     <input 
                       type="checkbox" 
@@ -669,7 +730,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CPF da Genitora</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CPF da Genitora / Genitor / Responsável Legal</label>
                 <input 
                   type="text" 
                   className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-blue-500"
