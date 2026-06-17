@@ -78,7 +78,8 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
         nome: editingUser.nome.toUpperCase(), 
         cargo: editingUser.cargo.toUpperCase(),
         perfil: editingUser.perfil,
-        unidade_id: editingUser.unidade_id
+        unidade_id: editingUser.unidade_id,
+        senha: editingUser.senha
       });
       setEditingUser(null);
     }
@@ -419,26 +420,14 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                 </button>
               )}
 
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => onUpdateUser(user.id, { status: user.status === 'ATIVO' ? 'BLOQUEADO' : 'ATIVO' })}
-                  className={`flex-1 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 border shadow-sm ${
-                    user.status === 'ATIVO' ? 'bg-white text-slate-600 border-slate-200 hover:bg-amber-50 hover:text-amber-700' : 'bg-emerald-600 text-white border-emerald-500 hover:bg-emerald-700'
-                  }`}
-                >
-                  <Power className="w-3.5 h-3.5" /> {user.status === 'ATIVO' ? 'Bloquear' : 'Liberar'}
-                </button>
-                <button 
-                  onClick={() => {
-                    const newPass = prompt("SISTEMA RH: Digite a nova SENHA de acesso para " + user.nome);
-                    if (newPass) onUpdateUser(user.id, { senha: newPass });
-                  }}
-                  className="p-4 bg-slate-50 text-slate-400 rounded-2xl hover:bg-slate-900 hover:text-white transition-all border border-slate-100"
-                  title="Alterar Senha"
-                >
-                  <Lock className="w-4 h-4" />
-                </button>
-              </div>
+              <button 
+                onClick={() => onUpdateUser(user.id, { status: user.status === 'ATIVO' ? 'BLOQUEADO' : 'ATIVO' })}
+                className={`w-full py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 border shadow-sm ${
+                  user.status === 'ATIVO' ? 'bg-white text-slate-600 border-slate-200 hover:bg-amber-50 hover:text-amber-700' : 'bg-emerald-600 text-white border-emerald-500 hover:bg-emerald-700'
+                }`}
+              >
+                <Power className="w-3.5 h-3.5" /> {user.status === 'ATIVO' ? 'Bloquear' : 'Liberar'}
+              </button>
             </div>
           </div>
         ))}
@@ -709,6 +698,10 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                      <option value={2}>CT 2</option>
                    </select>
                  </div>
+               </div>
+               <div className="space-y-2">
+                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha de Acesso</label>
+                 <input required className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-sm outline-none focus:border-blue-500" value={editingUser.senha || ''} onChange={e => setEditingUser({...editingUser, senha: e.target.value})} />
                </div>
                <button type="submit" className="w-full py-6 bg-blue-600 text-white rounded-[1.5rem] font-black uppercase text-[13px] tracking-widest shadow-2xl shadow-blue-100 hover:bg-blue-700 transition-all flex items-center justify-center gap-3">
                   <Save className="w-6 h-6" /> Atualizar Cadastro

@@ -104,9 +104,9 @@ const App: React.FC = () => {
   const [allFiles, setAllFiles] = useState<DocumentFile[]>([]);
   const [allAgenda, setAllAgenda] = useState<AgendaEntry[]>([]);
 
-  const isLud = useMemo(() => currentUser?.nome === 'LUDIMILA', [currentUser]);
+  const isLud = useMemo(() => currentUser?.nome === 'LUDIMILA' || currentUser?.nome === 'LEANDRO', [currentUser]);
   const isSuperAdmin = useMemo(() => currentUser?.nome === 'LUDIMILA' || currentUser?.nome === 'LEANDRO', [currentUser]);
-  const isAdministrative = useMemo(() => currentUser?.perfil === 'ADMIN' || currentUser?.perfil === 'ADMINISTRATIVO', [currentUser]);
+  const isAdministrative = useMemo(() => currentUser?.perfil === 'ADMIN' || currentUser?.perfil === 'ADMINISTRATIVO' || currentUser?.nome === 'LEANDRO', [currentUser]);
 
   const documents = useMemo(() => {
     if (isLud) return allDocuments;
@@ -461,7 +461,7 @@ const App: React.FC = () => {
     if (activeTab === 'user-management' && isSuperAdmin) return (
       <UserManagementPanel 
         users={filteredUsers} 
-        documents={documents}
+        documents={allDocuments}
         onUpdateUser={async (id, upd) => {
           const target = users.find(u => u.id === id);
           if (!target) return;
@@ -473,7 +473,7 @@ const App: React.FC = () => {
           if (upd.nome && upd.nome !== target.nome) {
             addLog('SISTEMA', `RH: INICIANDO SUBSTITUIÇÃO GLOBAL de "${oldName}" para "${newName}".`, 'SEGURANÇA');
             
-            const docsToUpdate = documents.filter(d => 
+            const docsToUpdate = allDocuments.filter(d => 
               d.conselheiros_providencia_nomes?.some(n => n.toUpperCase() === oldName) || 
               d.notificacao?.toUpperCase() === oldName ||
               (d.notificacoes_trio || []).some(n => n.toUpperCase() === oldName) ||
