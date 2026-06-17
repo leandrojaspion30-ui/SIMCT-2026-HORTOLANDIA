@@ -743,7 +743,7 @@ const App: React.FC = () => {
       case 'my-docs':
         const myReferencedDocs = documents.filter(d => {
           const isFixedRef = d.conselheiro_referencia_id === currentUser.id;
-          const isImediata = d.conselheiros_providencia_nomes?.includes(currentUser.nome.toUpperCase());
+          const isImediata = d.conselheiro_providencia_id === currentUser.id || d.conselheiros_providencia_nomes?.includes(currentUser.nome.toUpperCase());
           return isFixedRef || isImediata;
         });
         return <DocumentList documents={myReferencedDocs} users={users} currentUser={currentUser} isReadOnly={false} onSelectDoc={(id) => handleOpenDocument(id, true)} onEditDoc={(id) => { setEditingDocId(id); setActiveTab('edit'); }} onDeleteDoc={async (id) => {
