@@ -62,7 +62,46 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ documents, users, curre
         const matchRef = !filters.conselheiro_ref_id || doc.conselheiro_referencia_id === filters.conselheiro_ref_id;
         const matchServico = !filters.servico_rede || doc.atribuicoes_136_detalhadas?.some(ad => ad.servicos?.some(s => s.area === filters.servico_rede));
         
-        const matchDate = !filters.data_registro || doc.data_aporte === filters.data_registro;
+        const matchDate = !filters.data_registro || (() => {
+          if (!filters.data_registro) return true;
+          
+          const normalizeToYYYYMMDD = (dateStr: string | undefined | null): string => {
+            if (!dateStr) return '';
+            const dateOnly = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+            const parts = dateOnly.split(/[-/]/);
+            if (parts.length === 3) {
+              if (parts[0].length === 4) {
+                return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+              } else {
+                return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+              }
+            }
+            return '';
+          };
+
+          const filterNorm = normalizeToYYYYMMDD(filters.data_registro);
+          if (!filterNorm) return true;
+          
+          const aporteNorm = normalizeToYYYYMMDD(doc.data_aporte);
+          if (aporteNorm === filterNorm) return true;
+          
+          if (doc.criado_em) {
+            const criadoNorm = normalizeToYYYYMMDD(doc.criado_em);
+            if (criadoNorm === filterNorm) return true;
+            
+            try {
+              const dObj = new Date(doc.criado_em);
+              const year = dObj.getFullYear();
+              const month = String(dObj.getMonth() + 1).padStart(2, '0');
+              const day = String(dObj.getDate()).padStart(2, '0');
+              const localCreatedNorm = `${year}-${month}-${day}`;
+              if (localCreatedNorm === filterNorm) return true;
+            } catch (e) {}
+          }
+          
+          return false;
+        })();
+
         const matchDataInicio = !filters.dataInicio || doc.data_aporte >= filters.dataInicio;
         const matchDataFim = !filters.dataFim || doc.data_aporte <= filters.dataFim;
         
@@ -123,7 +162,7 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ documents, users, curre
               <label className="text-[10px] font-black text-slate-400 uppercase">Conselheiro de Referência</label>
               <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] font-bold" value={filters.conselheiro_ref_id} onChange={e => setFilters({...filters, conselheiro_ref_id: e.target.value})}>
                 <option value="">QUALQUER CONSELHEIRO</option>
-                {users.filter(u => (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === currentUser.unidade_id).map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                {users.filter(u => u.status !== 'EXCLUIDO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === currentUser.unidade_id).map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
               </select>
             </div>
             <div className="space-y-2">

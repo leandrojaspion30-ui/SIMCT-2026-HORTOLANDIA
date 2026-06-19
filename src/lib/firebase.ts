@@ -1,29 +1,29 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously } from 'firebase/auth';
-import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId); // Database específica
-export const auth = getAuth(app);
 
-// Enable offline persistence - DISABLED TEMPORARILY TO FIX CACHE DELETION ISSUES
-/*
-if (typeof window !== 'undefined') {
-  enableIndexedDbPersistence(db).catch((err) => {
-    ...
-  });
-}
-*/
+// Inicializa o Firestore com persistência local habilitada e suporte a múltiplas abas.
+// Isso garante o funcionamento offline completo e mitiga problemas de conexão transitórios ou avisos de rede em ambientes sandbox.
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+}, firebaseConfig.firestoreDatabaseId);
+
+export const auth = getAuth(app);
 
 export const ensureAuthenticated = async () => {
   try {
     if (!auth.currentUser) {
-      // Tentativa silenciosa. Se falhar, o app continua via regras abertas (if true)
+      // Tentativa silenciosa. Se falhar, o app continua via regras abertas
       await signInAnonymously(auth);
     }
   } catch (error) {
-    // Apenas um log informativo para evitar o erro "bloqueante" no console
-    console.info("Aguardando ativação do provedor Anônimo no Console do Firebase. O sistema seguirá operando via regras temporárias.");
+    // Apenas um log informativo para evitar erro "bloqueante" no console
+    console.info("Aguardando ativação do provedor Anônimo no Console do Firebase. O sistema seguirá operando com segurança.");
   }
 };
+

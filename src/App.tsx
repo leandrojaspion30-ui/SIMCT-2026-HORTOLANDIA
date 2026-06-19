@@ -321,6 +321,44 @@ const App: React.FC = () => {
     await saveLog(newLog);
   }, [currentUser]);
 
+  // Limpeza de usuários (excluir do sistema o JAIME, JOÃO MELO e PEDRO)
+  useEffect(() => {
+    if (!users || users.length === 0) return;
+    const targets = ["JAIME", "JOAO MELO", "JOÃO MELO", "PEDRO"];
+    const toExclude = users.filter(u => {
+      if (!u.nome) return false;
+      if (u.status === 'EXCLUIDO') return false;
+      const normName = u.nome.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return targets.some(t => {
+        const normT = t.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        return normName === normT || u.id === t.toLowerCase().replace(/\s/g, '_');
+      });
+    });
+
+    if (toExclude.length > 0) {
+      toExclude.forEach(async (u) => {
+        try {
+          console.log(`[SIMCT] Excluindo usuário: ${u.nome} (ID: ${u.id})`);
+          await saveUser({ id: u.id, status: 'EXCLUIDO', deletado_em: new Date().toISOString() });
+          try {
+            await saveLog({
+              id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+              unidade_id: u.unidade_id || 1,
+              documento_id: 'SISTEMA',
+              usuario_id: 'SISTEMA',
+              usuario_nome: 'SISTEMA',
+              acao: `RH: Exclusão automática do usuário ${u.nome} solicitada.`,
+              tipo: 'SEGURANÇA',
+              data_hora: new Date().toISOString()
+            });
+          } catch (logErr) {}
+        } catch (err) {
+          console.error(`Erro ao excluir ${u.nome}:`, err);
+        }
+      });
+    }
+  }, [users]);
+
   const userNameMap = useMemo(() => {
     const map: Record<string, string> = {};
     users.forEach(u => {
