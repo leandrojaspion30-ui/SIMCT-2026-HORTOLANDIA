@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart, Timer, Save, Eye, EyeOff } from 'lucide-react';
+import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, ArrowLeft, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart, Timer, Save, Eye, EyeOff } from 'lucide-react';
 import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada } from './types';
 import { INITIAL_USERS, UserWithPassword, INITIAL_AGENDA } from './constants';
 import { db, ensureAuthenticated } from './lib/firebase';
@@ -103,6 +103,12 @@ const App: React.FC = () => {
   const [allLogs, setAllLogs] = useState<Log[]>([]);
   const [allFiles, setAllFiles] = useState<DocumentFile[]>([]);
   const [allAgenda, setAllAgenda] = useState<AgendaEntry[]>([]);
+  const [navHistory, setNavHistory] = useState<{
+    activeTab: typeof activeTab;
+    selectedDocId: string | null;
+    editingDocId: string | null;
+    forceDirectEdit: boolean;
+  }[]>([]);
 
   const isLud = useMemo(() => currentUser?.nome === 'LUDIMILA' || currentUser?.nome === 'LEANDRO', [currentUser]);
   const isSuperAdmin = useMemo(() => currentUser?.nome === 'LUDIMILA' || currentUser?.nome === 'LEANDRO', [currentUser]);
@@ -393,6 +399,9 @@ const App: React.FC = () => {
     setIsLogoutModalOpen(false);
     setCurrentUser(null);
     setSelectedDocId(null);
+    setEditingDocId(null);
+    setForceDirectEdit(false);
+    setNavHistory([]);
     setActiveTab('dashboard');
   };
 
@@ -412,11 +421,50 @@ const App: React.FC = () => {
     addLog('SISTEMA', `Aceite do Termo de Sigilo e Confidencialidade (Versão: ${version})`, 'SEGURANÇA');
   };
 
+  const pushStateToHistory = useCallback((currentTab: typeof activeTab, currentSelectedDocId: string | null, currentEditingDocId: string | null, currentForceEdit: boolean) => {
+    setNavHistory(prev => {
+      const entry = {
+        activeTab: currentTab,
+        selectedDocId: currentSelectedDocId,
+        editingDocId: currentEditingDocId,
+        forceDirectEdit: currentForceEdit
+      };
+      const last = prev[prev.length - 1];
+      if (last && last.activeTab === entry.activeTab && last.selectedDocId === entry.selectedDocId && last.editingDocId === entry.editingDocId && last.forceDirectEdit === entry.forceDirectEdit) {
+        return prev;
+      }
+      return [...prev, entry];
+    });
+  }, []);
+
+  const navigateTo = useCallback((tab: typeof activeTab, options?: { docId?: string | null; editId?: string | null; forceEdit?: boolean }) => {
+    pushStateToHistory(activeTab, selectedDocId, editingDocId, forceDirectEdit);
+    setActiveTab(tab);
+    setSelectedDocId(options?.docId !== undefined ? options.docId : null);
+    setEditingDocId(options?.editId !== undefined ? options.editId : null);
+    setForceDirectEdit(options?.forceEdit !== undefined ? options.forceEdit : false);
+  }, [activeTab, selectedDocId, editingDocId, forceDirectEdit, pushStateToHistory]);
+
+  const goBack = useCallback(() => {
+    if (navHistory.length === 0) {
+      setSelectedDocId(null);
+      setEditingDocId(null);
+      setForceDirectEdit(false);
+      setActiveTab('dashboard');
+      return;
+    }
+    const previous = navHistory[navHistory.length - 1];
+    setNavHistory(prev => prev.slice(0, -1));
+    setActiveTab(previous.activeTab);
+    setSelectedDocId(previous.selectedDocId);
+    setEditingDocId(previous.editingDocId);
+    setForceDirectEdit(previous.forceDirectEdit);
+  }, [navHistory]);
+
   const handleOpenDocument = useCallback((id: string, isFromReference: boolean = false) => {
-    setSelectedDocId(id);
-    if (isFromReference) setForceDirectEdit(true);
+    navigateTo(activeTab, { docId: id, forceEdit: isFromReference });
     addLog(id, `VISUALIZAÇÃO: Prontuário aberto para consulta de dados técnicos.`, 'DOCUMENTO');
-  }, [addLog]);
+  }, [activeTab, addLog, navigateTo]);
 
   const handleDocumentSubmit = async (data: any, files: File[]) => {
     if (editingDocId) {
@@ -449,10 +497,7 @@ const App: React.FC = () => {
   };
 
   const handleNavigate = (tab: typeof activeTab) => { 
-    setSelectedDocId(null); 
-    setEditingDocId(null); 
-    setForceDirectEdit(false);
-    setActiveTab(tab); 
+    navigateTo(tab);
   };
 
   const renderContent = () => {
@@ -660,25 +705,25 @@ const App: React.FC = () => {
           addLog('SISTEMA', `RH: RESET TOTAL DO SISTEMA - Todos os procedimentos foram apagados.`, 'SEGURANÇA');
         }}
         onAddLog={(action) => addLog('SISTEMA', action, 'SEGURANÇA')} 
-        setActiveTab={(tab: any) => setActiveTab(tab)}
+        setActiveTab={(tab: any) => navigateTo(tab)}
       />
     );
     
     if (activeTab === 'register' && isLud) {
-      setActiveTab('dashboard');
+      navigateTo('dashboard');
       return null;
     }
 
-    if (activeTab === 'register' || activeTab === 'plantao') return <DocumentRegistration documents={documents} users={filteredUsers} agenda={agenda} currentUser={currentUser} onSubmit={handleDocumentSubmit} onCancel={() => handleNavigate('dashboard')} isReadOnly={activeTab === 'register' ? !isAdministrative : false} title={activeTab === 'plantao' ? 'SIMCT - Novo Proced/Plantão' : undefined} nameMap={userNameMap} allUsers={filteredUsers} />;
-    if (activeTab === 'edit' && editingDocId) return <DocumentRegistration documents={documents} users={filteredUsers} agenda={agenda} currentUser={currentUser} initialData={documents.find(d => d.id === editingDocId)} onSubmit={handleDocumentSubmit} onCancel={() => handleNavigate('dashboard')} isReadOnly={!isAdministrative} nameMap={userNameMap} allUsers={filteredUsers} />;
+    if (activeTab === 'register' || activeTab === 'plantao') return <DocumentRegistration documents={documents} users={filteredUsers} agenda={agenda} currentUser={currentUser} onSubmit={handleDocumentSubmit} onCancel={goBack} isReadOnly={activeTab === 'register' ? !isAdministrative : false} title={activeTab === 'plantao' ? 'SIMCT - Novo Proced/Plantão' : undefined} nameMap={userNameMap} allUsers={filteredUsers} />;
+    if (activeTab === 'edit' && editingDocId) return <DocumentRegistration documents={documents} users={filteredUsers} agenda={agenda} currentUser={currentUser} initialData={documents.find(d => d.id === editingDocId)} onSubmit={handleDocumentSubmit} onCancel={goBack} isReadOnly={!isAdministrative} nameMap={userNameMap} allUsers={filteredUsers} />;
     
     if (selectedDocId) {
       const doc = documents.find(d => d.id === selectedDocId);
       if (!doc) return null;
-      return <DocumentView document={doc} allDocuments={documents} users={users} agenda={agenda} files={[]} logs={logs.filter(l => l.documento_id === selectedDocId)} currentUser={currentUser} isReadOnly={isAdministrative} forceEdit={forceDirectEdit} onBack={() => setSelectedDocId(null)} onEdit={() => { setEditingDocId(doc.id); setActiveTab('edit'); }} onDelete={async (id) => { 
+      return <DocumentView document={doc} allDocuments={documents} users={users} agenda={agenda} files={[]} logs={logs.filter(l => l.documento_id === selectedDocId)} currentUser={currentUser} isReadOnly={isAdministrative} forceEdit={forceDirectEdit} onBack={goBack} onEdit={() => navigateTo('edit', { editId: doc.id })} onDelete={async (id) => { 
           addLog(id, `EXCLUSÃO: Documento removido permanentemente do banco de dados SIMCT.`, 'DOCUMENTO');
           await deleteDocument(id);
-          setSelectedDocId(null);
+          goBack();
       }} onUpdateStatus={async (id, s) => {
           addLog(id, `STATUS: Documento alterado para a situação [${s[s.length-1]}].`, 'SISTEMA');
           await saveDocument({ id, status: s });
@@ -686,7 +731,7 @@ const App: React.FC = () => {
     }
 
     if (activeTab === 'logs' && !(isSuperAdmin || isAdministrative)) {
-      setActiveTab('dashboard');
+      navigateTo('dashboard');
       return null;
     }
 
@@ -717,7 +762,7 @@ const App: React.FC = () => {
             {expiredMonitoringItems.length > 0 && (
               <div 
                 className="p-6 bg-amber-500 rounded-[2rem] border-4 border-amber-400 shadow-xl flex items-center justify-between group hover:scale-[1.01] transition-all cursor-pointer" 
-                onClick={() => setActiveTab('monitoring')}
+                onClick={() => navigateTo('monitoring')}
               >
                  <div className="flex items-center gap-6">
                     <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center">
@@ -733,7 +778,7 @@ const App: React.FC = () => {
                  </div>
               </div>
             )}
-            <DocumentList documents={documents} users={users} currentUser={currentUser} isReadOnly={false} onSelectDoc={handleOpenDocument} onEditDoc={(id) => { setEditingDocId(id); setActiveTab('edit'); }} onDeleteDoc={async (id) => {
+            <DocumentList documents={documents} users={users} currentUser={currentUser} isReadOnly={false} onSelectDoc={handleOpenDocument} onEditDoc={(id) => navigateTo('edit', { editId: id })} onDeleteDoc={async (id) => {
                 addLog(id, `EXCLUSÃO: Documento removido permanentemente via Painel Geral.`, 'DOCUMENTO');
                 await deleteDocument(id);
             }} onScience={() => {}} onUpdateStatus={() => {}} />
@@ -746,7 +791,7 @@ const App: React.FC = () => {
           const isImediata = d.conselheiro_providencia_id === currentUser.id || d.conselheiros_providencia_nomes?.includes(currentUser.nome.toUpperCase());
           return isFixedRef || isImediata;
         });
-        return <DocumentList documents={myReferencedDocs} users={users} currentUser={currentUser} isReadOnly={false} onSelectDoc={(id) => handleOpenDocument(id, true)} onEditDoc={(id) => { setEditingDocId(id); setActiveTab('edit'); }} onDeleteDoc={async (id) => {
+        return <DocumentList documents={myReferencedDocs} users={users} currentUser={currentUser} isReadOnly={false} onSelectDoc={(id) => handleOpenDocument(id, true)} onEditDoc={(id) => navigateTo('edit', { editId: id })} onDeleteDoc={async (id) => {
             addLog(id, `EXCLUSÃO: Documento removido permanentemente via Minha Referência.`, 'DOCUMENTO');
             await deleteDocument(id);
         }} onScience={() => {}} onUpdateStatus={() => {}} isMyReferenceView={true} />;
@@ -946,12 +991,24 @@ const App: React.FC = () => {
       </aside>
       <main className={`flex-1 ${isSidebarOpen ? 'lg:ml-80' : 'lg:ml-24'} ml-0 transition-all min-h-screen print:ml-0 overflow-x-hidden w-full`}>
         <div className="p-3 sm:p-6 lg:p-8 print:p-0">
-          <header className="flex items-center justify-between mb-6 lg:mb-12 print:hidden gap-2">
-            <div className="flex-1 min-w-0">
-              <h2 className="text-[10px] lg:text-[13px] font-medium text-[#4B5563] uppercase tracking-widest truncate">ZELAR PELO CUMPRIMENTO DO DIREITO</h2>
-              <div className="flex flex-col lg:flex-row lg:items-center gap-0 lg:gap-2 mt-1">
-                <span className="text-[14px] lg:text-[16px] font-bold text-[#111827] uppercase truncate">{currentUser.nome}</span>
-                <span className="text-[12px] lg:text-[14px] font-medium text-[#2563EB] uppercase whitespace-nowrap">({currentUser.cargo})</span>
+          <header className="flex items-center justify-between mb-6 lg:mb-12 print:hidden gap-4">
+            <div className="flex items-center gap-4 flex-1 min-w-0">
+              {navHistory.length > 0 && (
+                <button 
+                  onClick={goBack} 
+                  className="flex items-center gap-2 p-3 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm hover:bg-slate-50 text-slate-700 font-bold text-[12px] uppercase shrink-0 transition-all hover:border-[#2563EB]/40 active:scale-95"
+                  title="Voltar para a tela anterior"
+                >
+                  <ArrowLeft className="w-5 h-5 text-slate-600" />
+                  <span className="hidden sm:inline">Voltar</span>
+                </button>
+              )}
+              <div className="min-w-0">
+                <h2 className="text-[10px] lg:text-[13px] font-medium text-[#4B5563] uppercase tracking-widest truncate">ZELAR PELO CUMPRIMENTO DO DIREITO</h2>
+                <div className="flex flex-col lg:flex-row lg:items-center gap-0 lg:gap-2 mt-1">
+                  <span className="text-[14px] lg:text-[16px] font-bold text-[#111827] uppercase truncate">{currentUser.nome}</span>
+                  <span className="text-[12px] lg:text-[14px] font-medium text-[#2563EB] uppercase whitespace-nowrap">({currentUser.cargo})</span>
+                </div>
               </div>
             </div>
             <button 
@@ -1005,7 +1062,7 @@ const App: React.FC = () => {
         <AppointmentAlert 
           event={imminentEvent} 
           onView={(id) => {
-            setActiveTab('agenda');
+            navigateTo('agenda');
             setAcknowledgedEventIds(prev => [...prev, id]);
           }}
           onDismiss={(id) => setAcknowledgedEventIds(prev => [...prev, id])}
@@ -1015,7 +1072,7 @@ const App: React.FC = () => {
         <AppointmentAlert 
           event={{...twoHourReminder, descricao: `LEMBRETE (2H): ${twoHourReminder.descricao}`}} 
           onView={(id) => {
-            setActiveTab('agenda');
+            navigateTo('agenda');
             setAcknowledgedReminderIds(prev => [...prev, `${id}-2h`]);
           }}
           onDismiss={(id) => setAcknowledgedReminderIds(prev => [...prev, `${id}-2h`])}
