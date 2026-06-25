@@ -16,10 +16,23 @@ interface StatisticsViewProps {
 
 const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, users, currentUser, isGlobal }) => {
   const COLORS = ['#2563EB', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+  const [selectedUnidadeFilter, setSelectedUnidadeFilter] = useState<'all' | 1 | 2>('all');
+
+  const filteredDocuments = useMemo(() => {
+    if (!isGlobal) return documents;
+    if (selectedUnidadeFilter === 'all') return documents;
+    return documents.filter(d => (d.unidade_id || 1) === selectedUnidadeFilter);
+  }, [documents, isGlobal, selectedUnidadeFilter]);
+
+  const filteredAgenda = useMemo(() => {
+    if (!isGlobal) return agenda;
+    if (selectedUnidadeFilter === 'all') return agenda;
+    return agenda.filter(a => (a.unidade_id || 1) === selectedUnidadeFilter);
+  }, [agenda, isGlobal, selectedUnidadeFilter]);
 
   const aiStats = useMemo(() => {
     const stats = {
-      totalCriancas: documents.reduce((acc, d) => acc + (d.criancas?.length || 0), 0),
+      totalCriancas: filteredDocuments.reduce((acc, d) => acc + (d.criancas?.length || 0), 0),
       direitos: {} as Record<string, number>,
       bairros: {} as Record<string, number>,
       agentes: {} as Record<string, number>,
@@ -41,7 +54,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       acoesPorConselheiro: {} as Record<string, number>
     };
 
-    documents.forEach(doc => {
+    filteredDocuments.forEach(doc => {
       stats.bairros[doc.bairro] = (stats.bairros[doc.bairro] || 0) + 1;
       stats.origens[doc.origem] = (stats.origens[doc.origem] || 0) + 1;
       stats.canaisComunicado[doc.canal_comunicado] = (stats.canaisComunicado[doc.canal_comunicado] || 0) + 1;
@@ -104,7 +117,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
     });
 
     return stats;
-  }, [documents]);
+  }, [filteredDocuments]);
 
   const bairroData = useMemo(() => 
     Object.entries(aiStats.bairros).map(([name, value]) => ({ name, value }))
@@ -165,15 +178,15 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
   , [aiStats]);
 
   const totalAttributions = useMemo(() => 
-    documents.reduce((acc, doc) => acc + (doc.atribuicoes_136?.length || 0), 0)
-  , [documents]);
+    filteredDocuments.reduce((acc, doc) => acc + (doc.atribuicoes_136?.length || 0), 0)
+  , [filteredDocuments]);
 
   const counselorPerformance = useMemo(() => {
     return users
       .filter(u => u.status !== 'EXCLUIDO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && (isGlobal ? true : (u.unidade_id || 1) === (currentUser.unidade_id || 1)))
       .map(u => {
-        const myDocs = documents.filter(d => d.conselheiro_referencia_id === u.id);
-        const myAgenda = agenda.filter(a => a.conselheiro_id === u.id);
+        const myDocs = filteredDocuments.filter(d => d.conselheiro_referencia_id === u.id);
+        const myAgenda = filteredAgenda.filter(a => a.conselheiro_id === u.id);
         
         return {
           id: u.id,
@@ -187,7 +200,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         };
       })
       .sort((a, b) => b.docs - a.docs);
-  }, [documents, agenda]);
+  }, [filteredDocuments, filteredAgenda]);
 
   const handleExportCSV = () => {
     const headers = ["Conselheiro", "Unidade", "Documentos", "Disque 100", "Notificações", "Atendimentos", "Monitoramentos"];
@@ -272,13 +285,51 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         </div>
       </header>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+      {isGlobal && (
+        <div className="bg-slate-50 border border-slate-100 p-2 rounded-3xl flex flex-wrap gap-2 print:hidden">
+          <button
+            onClick={() => setSelectedUnidadeFilter('all')}
+            className={`flex-1 min-w-[120px] py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 ${
+              selectedUnidadeFilter === 'all'
+                ? 'bg-[#111827] text-white shadow-md'
+                : 'bg-white text-slate-600 hover:text-slate-950 hover:bg-slate-100 border border-slate-200/60'
+            }`}
+          >
+            <PieChart className="w-4 h-4" />
+            <span>Ambas as Unidades</span>
+          </button>
+          <button
+            onClick={() => setSelectedUnidadeFilter(1)}
+            className={`flex-1 min-w-[120px] py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 ${
+              selectedUnidadeFilter === 1
+                ? 'bg-[#111827] text-white shadow-md'
+                : 'bg-white text-slate-600 hover:text-slate-950 hover:bg-slate-100 border border-slate-200/60'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+            <span>Unidade I (Sede)</span>
+          </button>
+          <button
+            onClick={() => setSelectedUnidadeFilter(2)}
+            className={`flex-1 min-w-[120px] py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 ${
+              selectedUnidadeFilter === 2
+                ? 'bg-[#111827] text-white shadow-md'
+                : 'bg-white text-slate-600 hover:text-slate-950 hover:bg-slate-100 border border-slate-200/60'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
+            <span>Unidade II (Sub-Sede)</span>
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 print:grid-cols-2 print:gap-4">
         <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-100 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
             <FileText className="w-5 h-5 text-blue-500" />
             <span className="text-[10px] sm:text-[11px] font-black text-slate-400 uppercase tracking-widest">Total de Casos</span>
           </div>
-          <p className="text-3xl sm:text-[42px] font-black text-slate-900 leading-none">{documents.length}</p>
+          <p className="text-3xl sm:text-[42px] font-black text-slate-900 leading-none">{filteredDocuments.length}</p>
         </div>
         <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-100 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
@@ -286,7 +337,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
             <span className="text-[10px] sm:text-[11px] font-black text-slate-400 uppercase tracking-widest">Em Monitoramento</span>
           </div>
           <p className="text-3xl sm:text-[42px] font-black text-slate-900 leading-none">
-            {documents.filter(d => d.status.includes('MONITORAMENTO')).length}
+            {filteredDocuments.filter(d => d.status.includes('MONITORAMENTO')).length}
           </p>
         </div>
         <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-100 shadow-sm">
@@ -295,7 +346,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
             <span className="text-[10px] sm:text-[11px] font-black text-slate-400 uppercase tracking-widest">Aguardando Validação</span>
           </div>
           <p className="text-3xl sm:text-[42px] font-black text-slate-900 leading-none">
-            {documents.filter(d => d.status.includes('AGUARDANDO_VALIDACAO')).length}
+            {filteredDocuments.filter(d => d.status.includes('AGUARDANDO_VALIDACAO')).length}
           </p>
         </div>
         <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-100 shadow-sm">
@@ -307,15 +358,22 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
-        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 print:grid-cols-1 print:gap-8">
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid">
           <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6 sm:mb-8">Distribuição por Bairro</h3>
-          <div className="h-64 sm:h-80 print:h-[400px]">
+          <div className="h-64 sm:h-80 print:h-[450px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={bairroData} layout="vertical" margin={{ left: 0, right: 30 }}>
+              <BarChart data={bairroData} layout="vertical" margin={{ left: 15, right: 30 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
                 <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fontSize: 9, fontWeight: 700, fill: '#64748B'}} width={80} />
+                <YAxis 
+                  dataKey="name" 
+                  type="category" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{fontSize: 8, fontWeight: 800, fill: '#64748B'}} 
+                  width={180} 
+                />
                 <Tooltip 
                   contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '9px', fontWeight: '900'}}
                 />
@@ -325,7 +383,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
           </div>
         </div>
 
-        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm text-center">
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm text-center print:break-inside-avoid">
           <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6 sm:mb-8 md:text-left">Situação dos Procedimentos</h3>
           <div className="h-64 sm:h-80 print:h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -353,9 +411,9 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       </div>
 
       {/* NOVA SEÇÃO: FAIXA ETÁRIA E ATRIBUIÇÕES DO CONSELHO */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-1 print:gap-8">
         {/* Gráfico de Faixa Etária */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid">
           <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-8">Distribuição por Faixa Etária</h3>
           <div className="h-80 print:h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -391,7 +449,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         </div>
 
         {/* Gráfico de Atribuições Art. 136 */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid">
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Ações do Conselho (Art. 136 ECA)</h3>
             <span className="px-3 py-1 bg-violet-50 text-violet-600 rounded-lg text-[10px] font-black uppercase">Total: {totalAttributions}</span>
@@ -420,8 +478,8 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       </div>
       
       {/* NOVA SEÇÃO: DETALHAMENTO DAS MEDIDAS APLICADAS (SEPARADAS POR ARTIGO) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-1 print:gap-8">
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid">
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Medidas Art. 101 (Criança/Adolescente)</h3>
             <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase">Proteção</span>
@@ -448,7 +506,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
           </div>
         </div>
 
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid">
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Medidas Art. 129 (Pais/Responsáveis)</h3>
             <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-black uppercase">Orientação</span>
@@ -477,7 +535,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       </div>
       
       {/* SEÇÃO ORIGINAL: FREQUÊNCIA GERAL DE MEDIDAS */}
-      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid">
         <div className="flex items-center justify-between mb-8">
           <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Detalhamento das Medidas Aplicadas</h3>
           <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-black uppercase">Frequência de Ações</span>
@@ -505,7 +563,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       </div>
 
       {/* NOVA SEÇÃO: DETALHAMENTO DOS SERVIÇOS REQUISITADOS (ART. 136 III) */}
-      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid">
         <div className="flex items-center justify-between mb-8">
           <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Serviços Requisitados (Art. 136 III)</h3>
           <span className="px-3 py-1 bg-purple-50 text-purple-600 rounded-lg text-[10px] font-black uppercase">Detalhamento por Serviço</span>
@@ -533,9 +591,9 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       </div>
 
       {/* NOVA SEÇÃO: ORIGEM E CANAIS DE COMUNICAÇÃO */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-1 print:gap-8">
         {/* Gráfico de Origem */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid">
           <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-8">Identificação da Origem</h3>
           <div className="h-80 print:h-[450px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -553,7 +611,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         </div>
 
         {/* Gráfico de Canais de Comunicação */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid">
           <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-8">Canais de Comunicado</h3>
           <div className="h-80 print:h-[450px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -581,10 +639,10 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         </div>
       </div>
 
-      <AIStatisticsAnalyzer stats={aiStats} totalDocs={documents.length} />
+      {isGlobal && <AIStatisticsAnalyzer stats={aiStats} totalDocs={filteredDocuments.length} />}
 
       {/* NOVA SEÇÃO: DESEMPENHO DOS CONSELHEIROS */}
-      <div className="bg-white p-6 sm:p-10 rounded-[2rem] sm:rounded-[3rem] border border-slate-100 shadow-sm">
+      <div className="bg-white p-6 sm:p-10 rounded-[2rem] sm:rounded-[3rem] border border-slate-100 shadow-sm print:break-inside-avoid">
         <div className="flex items-center gap-4 mb-6 sm:mb-10">
           <div className="p-3 bg-blue-50 rounded-2xl text-blue-600">
             <UserCheck className="w-6 h-6" />
@@ -596,7 +654,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         </div>
 
         {/* LAYOUT PARA MOBILE (CARDS) */}
-        <div className="grid grid-cols-1 gap-4 md:hidden px-2">
+        <div className="grid grid-cols-1 gap-4 md:hidden px-2 print:hidden">
           {counselorPerformance.map(perf => (
             <div key={perf.id} className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 space-y-4">
               <div className="flex justify-between items-start">
@@ -649,7 +707,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         </div>
 
         {/* LAYOUT PARA DESKTOP (TABELA) */}
-        <div className="hidden md:block overflow-x-auto -mx-6 sm:-mx-10 px-6 sm:px-10">
+        <div className="hidden md:block print:block overflow-x-auto -mx-6 sm:-mx-10 px-6 sm:px-10">
           <table className="w-full text-left border-separate border-spacing-y-3 min-w-[750px]">
             <thead>
               <tr className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -680,7 +738,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
                     <div className="flex flex-col items-center">
                       <span className="text-[14px] sm:text-[16px] font-black text-slate-800">{perf.docs}</span>
                       <div className="w-8 h-1 bg-blue-100 rounded-full mt-1 overflow-hidden">
-                        <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, (perf.docs / (documents.length || 1)) * 500)}%` }}></div>
+                        <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, (perf.docs / (filteredDocuments.length || 1)) * 500)}%` }}></div>
                       </div>
                     </div>
                   </td>
