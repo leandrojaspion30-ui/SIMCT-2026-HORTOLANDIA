@@ -1,9 +1,109 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check } from 'lucide-react';
 import { Documento, User, ChildData, DocumentStatus, AgendaEntry } from '../types';
 import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, CANAIS_COMUNICADO_LIST, getEffectiveEscala, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
+
+interface SearchableSelectProps {
+  options: string[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  disabled?: boolean;
+  className?: string;
+}
+
+const SearchableSelect: React.FC<SearchableSelectProps> = ({ options, value, onChange, placeholder, disabled, className }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredOptions = useMemo(() => {
+    return options.filter(opt => opt.toLowerCase().includes(search.toLowerCase()));
+  }, [options, search]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSearch('');
+    }
+  }, [isOpen]);
+
+  return (
+    <div className="relative w-full" ref={containerRef}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setIsOpen(!isOpen)}
+        className={`${className || ''} w-full text-left flex items-center justify-between cursor-pointer`}
+      >
+        <span className={value ? "text-slate-800" : "text-slate-400"}>
+          {value || placeholder}
+        </span>
+        <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-100 max-h-60 flex flex-col">
+          <div className="p-2 border-b border-slate-100 flex items-center gap-2 bg-slate-50">
+            <Search className="w-4 h-4 text-slate-400 shrink-0" />
+            <input
+              type="text"
+              placeholder="PESQUISAR..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full bg-transparent text-[11px] font-bold uppercase text-slate-800 outline-none placeholder:text-slate-400"
+              autoFocus
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="text-[10px] text-slate-400 hover:text-slate-600 font-bold px-1"
+              >
+                LIMPAR
+              </button>
+            )}
+          </div>
+          <div className="overflow-y-auto flex-1">
+            {filteredOptions.length === 0 ? (
+              <div className="p-4 text-[10px] font-bold uppercase text-slate-400 text-center">
+                Nenhum resultado encontrado
+              </div>
+            ) : (
+              filteredOptions.map(opt => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => {
+                    onChange(opt);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full text-left p-3 text-[11px] font-bold uppercase hover:bg-slate-50 transition-colors flex items-center justify-between ${
+                    value === opt ? 'bg-blue-50/50 text-blue-600' : 'text-slate-700'
+                  }`}
+                >
+                  <span>{opt}</span>
+                  {value === opt && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface DocumentRegistrationProps {
   documents: Documento[];
@@ -556,13 +656,13 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
               {/* COLUNA 2: INSTITUIÇÃO */}
               <div className="space-y-2">
                 <label className="lg:hidden text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Instituição</label>
-                <select 
-                  required
-                  disabled={!formData.origem_categoria}
-                  className="w-full p-4 sm:p-5 bg-white border border-slate-200 rounded-xl sm:rounded-[1.5rem] font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                <SearchableSelect
+                  disabled={isReadOnly || !formData.origem_categoria}
+                  className="w-full p-4 sm:p-5 bg-white border border-slate-200 rounded-xl sm:rounded-[1.5rem] font-bold uppercase text-[10px] sm:text-[11px] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  placeholder="SELECIONE INSTITUIÇÃO..."
+                  options={[...currentInstitutions].sort((a, b) => a.localeCompare(b))}
                   value={selectedOrigemDropdown}
-                  onChange={e => {
-                    const val = e.target.value;
+                  onChange={val => {
                     setSelectedOrigemDropdown(val);
                     if (val === 'OUTRO' || val === 'OUTROS') {
                       setFormData(prev => ({ ...prev, origem: customOrigem || val }));
@@ -571,12 +671,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                       setCustomOrigem('');
                     }
                   }}
-                >
-                  <option value="">SELECIONE INSTITUIÇÃO...</option>
-                  {[...currentInstitutions].sort((a, b) => a.localeCompare(b)).map(inst => (
-                    <option key={inst} value={inst}>{inst}</option>
-                  ))}
-                </select>
+                />
               </div>
 
               {/* COLUNA 3: CANAL */}
@@ -741,15 +836,14 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bairro da Criança *</label>
-                <select 
-                  required 
-                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500"
+                <SearchableSelect
+                  disabled={isReadOnly}
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold uppercase text-[11px]"
+                  placeholder="SELECIONE O BAIRRO..."
+                  options={getBairrosByUnidade(formData.unidade_id)}
                   value={formData.bairro}
-                  onChange={e => setFormData({...formData, bairro: e.target.value})}
-                >
-                  <option value="">Selecione o Bairro...</option>
-                  {getBairrosByUnidade(formData.unidade_id).map(b => <option key={b} value={b}>{b}</option>)}
-                </select>
+                  onChange={val => setFormData({...formData, bairro: val})}
+                />
               </div>
             </div>
           </section>
@@ -803,10 +897,9 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Data Nascimento {!crianca.nao_informado && '*'}</label>
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Data Nascimento</label>
                       <input 
                         type="date" 
-                        required={!crianca.nao_informado} 
                         max={todayDate}
                         className={`w-full p-3 bg-white border rounded-lg font-bold outline-none focus:border-blue-500 text-xs sm:text-sm ${crianca.error ? 'border-red-500 bg-red-50' : 'border-slate-200'}`} 
                         value={crianca.data_nascimento} 
