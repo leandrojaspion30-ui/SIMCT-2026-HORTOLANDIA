@@ -217,12 +217,34 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
     document.body.removeChild(link);
   };
 
+  const isInIframe = useMemo(() => {
+    try {
+      return window.self !== window.top;
+    } catch (e) {
+      return true;
+    }
+  }, []);
+
   const handlePrint = () => {
+    window.focus();
     window.print();
   };
 
   return (
     <div className="space-y-8 pb-20 print:p-0 print:space-y-4">
+      {isInIframe && (
+        <div className="bg-amber-50 border border-amber-200 rounded-[1.5rem] p-6 flex items-start gap-4 shadow-sm print:hidden">
+          <div className="p-3 bg-amber-100 rounded-2xl text-amber-600 shrink-0 flex items-center justify-center">
+            <span className="text-lg">💡</span>
+          </div>
+          <div className="text-amber-800 text-[11px] font-semibold leading-relaxed uppercase space-y-1">
+            <p className="font-black text-amber-950 text-[12px]">Dica Importante para Impressão</p>
+            <p>Como o sistema está sendo visualizado dentro de um painel de testes (iframe), a impressão direta pode ser desconfigurada ou bloqueada pelo navegador.</p>
+            <p>Para gerar o PDF ou imprimir com qualidade perfeita, clique no ícone de <strong className="font-black text-amber-950">"Abrir em nova aba"</strong> (o botão com uma seta saindo de um quadrado no canto superior direito da tela do AI Studio) e depois use o botão "Imprimir PDF" nesta página!</p>
+          </div>
+        </div>
+      )}
+
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 print:hidden">
         <div className="flex items-center gap-4">
           <div className="p-4 bg-violet-50 rounded-3xl text-violet-600">
