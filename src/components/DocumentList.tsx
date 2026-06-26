@@ -61,19 +61,47 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUs
           if (!isPending || (!isRef && !isInTrio)) return false;
         }
 
-        const cleanTermOnlyDigits = filters.term.replace(/\D/g, '');
+        const termUpper = filters.term.trim().toUpperCase();
+        const cleanTermOnlyDigits = termUpper.replace(/\D/g, '');
         const matchCpfInTerm = cleanTermOnlyDigits && (
           (doc.cpf_genitora?.replace(/\D/g, '') || '').includes(cleanTermOnlyDigits) ||
           (doc.cpf_crianca?.replace(/\D/g, '') || '').includes(cleanTermOnlyDigits) ||
           doc.criancas?.some(c => (c.cpf?.replace(/\D/g, '') || '').includes(cleanTermOnlyDigits))
         );
 
-        const matchTerm = !filters.term || 
-          doc.crianca_nome.toUpperCase().includes(filters.term.toUpperCase()) || 
-          doc.id.toUpperCase().includes(filters.term.toUpperCase()) ||
-          (doc.despacho_situacao && doc.despacho_situacao.toUpperCase().includes(filters.term.toUpperCase())) ||
-          (doc.genitora_nome && doc.genitora_nome.toUpperCase().includes(filters.term.toUpperCase())) ||
-          doc.criancas?.some(c => c.nome?.toUpperCase().includes(filters.term.toUpperCase())) ||
+        const checkInText = (text: string | undefined | null) => {
+          return text ? text.toUpperCase().includes(termUpper) : false;
+        };
+
+        const matchTerm = !termUpper || 
+          checkInText(doc.id) ||
+          checkInText(doc.crianca_nome) ||
+          checkInText(doc.genitora_nome) ||
+          checkInText(doc.origem) ||
+          checkInText(doc.canal_comunicado) ||
+          checkInText(doc.notificacao) ||
+          checkInText(doc.bairro) ||
+          checkInText(doc.endereco) ||
+          checkInText(doc.telefone) ||
+          checkInText(doc.informacoes_documento) ||
+          checkInText(doc.observacoes_iniciais) ||
+          checkInText(doc.relato_providencias) ||
+          checkInText(doc.fundamentacao_tecnica) ||
+          checkInText(doc.despacho_situacao) ||
+          checkInText(doc.observacao_monitoramento) ||
+          checkInText(doc.conselheiro_referencia_nome) ||
+          checkInText(doc.conselheiro_providencia_nome) ||
+          checkInText(doc.numero_comunicado_violacao) ||
+          checkInText(doc.numero_sipia) ||
+          checkInText(doc.providencia_imediata_manual) ||
+          checkInText(doc.justificativa_improcedencia) ||
+          checkInText(doc.justificativa_distribuicao) ||
+          doc.conselheiros_providencia_nomes?.some(name => checkInText(name)) ||
+          doc.criancas?.some(c => checkInText(c.nome) || checkInText(c.cpf) || checkInText(c.genero_identidade) || checkInText(c.data_nascimento)) ||
+          doc.violacoesSipia?.some(v => checkInText(v.fundamental) || checkInText(v.grupo) || checkInText(v.especifico)) ||
+          doc.agentesVioladores?.some(a => checkInText(a.principal) || checkInText(a.categoria)) ||
+          doc.medidas_detalhadas?.some(m => checkInText(m.texto) || checkInText(m.artigo_inciso)) ||
+          doc.atribuicoes_136_detalhadas?.some(at => checkInText(at.inciso) || checkInText(at.texto) || at.servicos?.some(s => checkInText(s.area) || checkInText(s.servico) || checkInText(s.servico_custom) || checkInText(s.observacao))) ||
           !!matchCpfInTerm;
         
         const matchBairro = !filters.bairro || doc.bairro === filters.bairro;
