@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { Documento, AgendaEntry, User } from '../types';
 import { INITIAL_USERS, STATUS_LABELS } from '../constants';
-import { BarChart3, PieChart, TrendingUp, Users, FileText, ShieldAlert, Sparkles, UserCheck, Bell, PhoneCall, Activity, Download, Printer } from 'lucide-react';
+import { BarChart3, PieChart, TrendingUp, Users, FileText, ShieldAlert, Sparkles, UserCheck, Bell, PhoneCall, Activity, Download, Printer, X, Calendar } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell } from 'recharts';
 import AIStatisticsAnalyzer from './AIStatisticsAnalyzer';
 
@@ -24,7 +24,7 @@ const DataListTable: React.FC<{ data: DataListItem[]; total?: number; label?: st
   const divisor = total || sum || 1;
 
   return (
-    <div className="text-[11px] font-bold uppercase text-slate-600 space-y-1.5 flex flex-col h-full">
+    <div className="text-[11px] font-bold uppercase text-slate-600 space-y-1.5 flex flex-col h-full print:h-auto print:w-full">
       <div className="flex items-center justify-between text-[9px] font-black text-slate-400 tracking-wider pb-1.5 border-b border-slate-100 uppercase">
         <span>{label}</span>
         <div className="flex gap-4">
@@ -32,13 +32,13 @@ const DataListTable: React.FC<{ data: DataListItem[]; total?: number; label?: st
           <span className="w-12 text-right">%</span>
         </div>
       </div>
-      <div className="overflow-y-auto pr-1 flex-1 max-h-60 scrollbar-thin divide-y divide-slate-100/60">
+      <div className="overflow-y-auto pr-1 flex-1 max-h-60 scrollbar-thin divide-y divide-slate-100/60 print:max-h-none print:overflow-visible print:h-auto">
         {data.map((item, idx) => {
           const pct = ((item.value / divisor) * 100).toFixed(1);
           const displayName = item.name ? (STATUS_LABELS[item.name as any] || item.name) : 'NÃO INFORMADO';
           return (
-            <div key={idx} className="flex items-center justify-between py-2 text-[10px] hover:bg-slate-50 rounded px-1 group transition-colors">
-              <span className="truncate pr-2 text-slate-700 font-bold group-hover:text-slate-900" title={displayName}>
+            <div key={idx} className="flex items-center justify-between py-2 text-[10px] hover:bg-slate-50 rounded px-1 group transition-colors print:break-inside-avoid print:py-1.5">
+              <span className="truncate print:whitespace-normal print:overflow-visible pr-2 text-slate-700 font-bold group-hover:text-slate-900 print:text-[10px] print:font-extrabold" title={displayName}>
                 {displayName}
               </span>
               <div className="flex gap-4 shrink-0 font-mono font-black text-slate-950">
@@ -59,18 +59,42 @@ const DataListTable: React.FC<{ data: DataListItem[]; total?: number; label?: st
 const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, users, currentUser, isGlobal }) => {
   const COLORS = ['#2563EB', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
   const [selectedUnidadeFilter, setSelectedUnidadeFilter] = useState<'all' | 1 | 2>('all');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
 
   const filteredDocuments = useMemo(() => {
-    if (!isGlobal) return documents;
-    if (selectedUnidadeFilter === 'all') return documents;
-    return documents.filter(d => (d.unidade_id || 1) === selectedUnidadeFilter);
-  }, [documents, isGlobal, selectedUnidadeFilter]);
+    let docs = documents;
+    if (isGlobal && selectedUnidadeFilter !== 'all') {
+      docs = docs.filter(d => (d.unidade_id || 1) === selectedUnidadeFilter);
+    }
+    if (startDate) {
+      docs = docs.filter(d => {
+        const docDate = d.data_aporte || d.data_recebimento || d.criado_em?.split('T')[0];
+        return docDate && docDate >= startDate;
+      });
+    }
+    if (endDate) {
+      docs = docs.filter(d => {
+        const docDate = d.data_aporte || d.data_recebimento || d.criado_em?.split('T')[0];
+        return docDate && docDate <= endDate;
+      });
+    }
+    return docs;
+  }, [documents, isGlobal, selectedUnidadeFilter, startDate, endDate]);
 
   const filteredAgenda = useMemo(() => {
-    if (!isGlobal) return agenda;
-    if (selectedUnidadeFilter === 'all') return agenda;
-    return agenda.filter(a => (a.unidade_id || 1) === selectedUnidadeFilter);
-  }, [agenda, isGlobal, selectedUnidadeFilter]);
+    let ags = agenda;
+    if (isGlobal && selectedUnidadeFilter !== 'all') {
+      ags = ags.filter(a => (a.unidade_id || 1) === selectedUnidadeFilter);
+    }
+    if (startDate) {
+      ags = ags.filter(a => a.data && a.data >= startDate);
+    }
+    if (endDate) {
+      ags = ags.filter(a => a.data && a.data <= endDate);
+    }
+    return ags;
+  }, [agenda, isGlobal, selectedUnidadeFilter, startDate, endDate]);
 
   const aiStats = useMemo(() => {
     const stats = {
@@ -327,43 +351,92 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         </div>
       </header>
 
-      {isGlobal && (
-        <div className="bg-slate-50 border border-slate-100 p-2 rounded-3xl flex flex-wrap gap-2 print:hidden">
-          <button
-            onClick={() => setSelectedUnidadeFilter('all')}
-            className={`flex-1 min-w-[120px] py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 ${
-              selectedUnidadeFilter === 'all'
-                ? 'bg-[#111827] text-white shadow-md'
-                : 'bg-white text-slate-600 hover:text-slate-950 hover:bg-slate-100 border border-slate-200/60'
-            }`}
-          >
-            <PieChart className="w-4 h-4" />
-            <span>Ambas as Unidades</span>
-          </button>
-          <button
-            onClick={() => setSelectedUnidadeFilter(1)}
-            className={`flex-1 min-w-[120px] py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 ${
-              selectedUnidadeFilter === 1
-                ? 'bg-[#111827] text-white shadow-md'
-                : 'bg-white text-slate-600 hover:text-slate-950 hover:bg-slate-100 border border-slate-200/60'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
-            <span>Unidade I (Sede)</span>
-          </button>
-          <button
-            onClick={() => setSelectedUnidadeFilter(2)}
-            className={`flex-1 min-w-[120px] py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 ${
-              selectedUnidadeFilter === 2
-                ? 'bg-[#111827] text-white shadow-md'
-                : 'bg-white text-slate-600 hover:text-slate-950 hover:bg-slate-100 border border-slate-200/60'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
-            <span>Unidade II (Sub-Sede)</span>
-          </button>
+      <div className="bg-white border border-slate-100 p-6 rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm flex flex-col lg:flex-row gap-6 items-end justify-between print:hidden">
+        {isGlobal ? (
+          <div className="flex-1 w-full space-y-2">
+            <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Filtrar por Unidade</label>
+            <div className="bg-slate-50 border border-slate-100 p-1.5 rounded-2xl flex flex-wrap gap-2">
+              <button
+                onClick={() => setSelectedUnidadeFilter('all')}
+                className={`flex-1 min-w-[120px] py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-1.5 ${
+                  selectedUnidadeFilter === 'all'
+                    ? 'bg-[#111827] text-white shadow-md'
+                    : 'bg-white text-slate-600 hover:text-slate-950 hover:bg-slate-100 border border-slate-200/60'
+                }`}
+              >
+                <PieChart className="w-4 h-4" />
+                <span>Ambas as Unidades</span>
+              </button>
+              <button
+                onClick={() => setSelectedUnidadeFilter(1)}
+                className={`flex-1 min-w-[120px] py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-1.5 ${
+                  selectedUnidadeFilter === 1
+                    ? 'bg-[#111827] text-white shadow-md'
+                    : 'bg-white text-slate-600 hover:text-slate-950 hover:bg-slate-100 border border-slate-200/60'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                <span>Unidade I (Sede)</span>
+              </button>
+              <button
+                onClick={() => setSelectedUnidadeFilter(2)}
+                className={`flex-1 min-w-[120px] py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-1.5 ${
+                  selectedUnidadeFilter === 2
+                    ? 'bg-[#111827] text-white shadow-md'
+                    : 'bg-white text-slate-600 hover:text-slate-950 hover:bg-slate-100 border border-slate-200/60'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
+                <span>Unidade II (Sub-Sede)</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 hidden lg:block">
+            {/* Espaço para alinhamento quando não for global */}
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto items-end">
+          <div className="space-y-2 w-full sm:w-auto">
+            <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Data Inicial</label>
+            <div className="relative">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full sm:w-48 px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-colors"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2 w-full sm:w-auto">
+            <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Data Final</label>
+            <div className="relative">
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full sm:w-48 px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-colors"
+              />
+            </div>
+          </div>
+
+          {(startDate || endDate) && (
+            <button
+              onClick={() => {
+                setStartDate('');
+                setEndDate('');
+              }}
+              className="px-5 py-3.5 border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 active:scale-95 w-full sm:w-auto h-[46px] shrink-0"
+              title="Limpar filtros de data"
+            >
+              <X className="w-4 h-4" />
+              <span>Limpar</span>
+            </button>
+          )}
         </div>
-      )}
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 print:grid-cols-2 print:gap-4">
         <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-100 shadow-sm">
@@ -401,7 +474,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 print:grid-cols-1 print:gap-8">
-        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
           <div className="flex-1 min-w-0">
             <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6">Distribuição por Bairro</h3>
             <div className="h-64 sm:h-80 print:h-[450px]">
@@ -425,12 +498,12 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
             <DataListTable data={bairroData} total={filteredDocuments.length} label="Bairro" />
           </div>
         </div>
 
-        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
           <div className="flex-1 min-w-0">
             <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6 md:text-left">Situação dos Procedimentos</h3>
             <div className="h-64 sm:h-80 print:h-[400px]">
@@ -456,7 +529,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
             <DataListTable data={statusData} total={filteredDocuments.length} label="Status" />
           </div>
         </div>
@@ -465,7 +538,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       {/* NOVA SEÇÃO: FAIXA ETÁRIA E ATRIBUIÇÕES DO CONSELHO */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-1 print:gap-8">
         {/* Gráfico de Faixa Etária */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
           <div className="flex-1 min-w-0">
             <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6">Distribuição por Faixa Etária</h3>
             <div className="h-64 sm:h-80 print:h-[400px]">
@@ -500,13 +573,13 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
                ))}
             </div>
           </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
             <DataListTable data={ageGroupData} total={aiStats.totalCriancas} label="Faixa Etária" />
           </div>
         </div>
 
         {/* Gráfico de Atribuições Art. 136 */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Ações do Conselho (Art. 136 ECA)</h3>
@@ -532,7 +605,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
             <DataListTable data={attributionsData} total={totalAttributions} label="Ação" />
           </div>
         </div>
@@ -540,7 +613,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       
       {/* NOVA SEÇÃO: DETALHAMENTO DAS MEDIDAS APLICADAS (SEPARADAS POR ARTIGO) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-1 print:gap-8">
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Medidas Art. 101 (Criança/Adolescente)</h3>
@@ -567,12 +640,12 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
             <DataListTable data={measures101Data} label="Medida" />
           </div>
         </div>
 
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Medidas Art. 129 (Pais/Responsáveis)</h3>
@@ -599,14 +672,14 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
             <DataListTable data={measures129Data} label="Medida" />
           </div>
         </div>
       </div>
       
       {/* SEÇÃO ORIGINAL: FREQUÊNCIA GERAL DE MEDIDAS */}
-      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Detalhamento das Medidas Aplicadas</h3>
@@ -633,13 +706,13 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
             </ResponsiveContainer>
           </div>
         </div>
-        <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+        <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
           <DataListTable data={measuresData} label="Medida" />
         </div>
       </div>
 
       {/* NOVA SEÇÃO: DETALHAMENTO DOS SERVIÇOS REQUISITADOS (ART. 136 III) */}
-      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Serviços Requisitados (Art. 136 III)</h3>
@@ -666,7 +739,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
             </ResponsiveContainer>
           </div>
         </div>
-        <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+        <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
           <DataListTable data={servicos136IIIData} label="Serviço" />
         </div>
       </div>
@@ -674,7 +747,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       {/* NOVA SEÇÃO: ORIGEM E CANAIS DE COMUNICAÇÃO */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-1 print:gap-8">
         {/* Gráfico de Origem */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
           <div className="flex-1 min-w-0">
             <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6">Identificação da Origem</h3>
             <div className="h-64 sm:h-80 print:h-[450px]">
@@ -698,13 +771,13 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
             <DataListTable data={originsData} label="Origem" />
           </div>
         </div>
 
         {/* Gráfico de Canais de Comunicação */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
           <div className="flex-1 min-w-0">
             <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6">Canais de Comunicado</h3>
             <div className="h-64 sm:h-80 print:h-[450px]">
@@ -730,7 +803,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
             <DataListTable data={channelsData} label="Canal" />
           </div>
         </div>
