@@ -14,6 +14,48 @@ interface StatisticsViewProps {
   isGlobal?: boolean;
 }
 
+interface DataListItem {
+  name: string;
+  value: number;
+}
+
+const DataListTable: React.FC<{ data: DataListItem[]; total?: number; label?: string }> = ({ data, total, label = "Categoria" }) => {
+  const sum = useMemo(() => data.reduce((acc, d) => acc + d.value, 0), [data]);
+  const divisor = total || sum || 1;
+
+  return (
+    <div className="text-[11px] font-bold uppercase text-slate-600 space-y-1.5 flex flex-col h-full">
+      <div className="flex items-center justify-between text-[9px] font-black text-slate-400 tracking-wider pb-1.5 border-b border-slate-100 uppercase">
+        <span>{label}</span>
+        <div className="flex gap-4">
+          <span className="w-12 text-right">QTD</span>
+          <span className="w-12 text-right">%</span>
+        </div>
+      </div>
+      <div className="overflow-y-auto pr-1 flex-1 max-h-60 scrollbar-thin divide-y divide-slate-100/60">
+        {data.map((item, idx) => {
+          const pct = ((item.value / divisor) * 100).toFixed(1);
+          const displayName = item.name ? (STATUS_LABELS[item.name as any] || item.name) : 'NÃO INFORMADO';
+          return (
+            <div key={idx} className="flex items-center justify-between py-2 text-[10px] hover:bg-slate-50 rounded px-1 group transition-colors">
+              <span className="truncate pr-2 text-slate-700 font-bold group-hover:text-slate-900" title={displayName}>
+                {displayName}
+              </span>
+              <div className="flex gap-4 shrink-0 font-mono font-black text-slate-950">
+                <span className="w-12 text-right">{item.value}</span>
+                <span className="w-12 text-right text-slate-400">{pct}%</span>
+              </div>
+            </div>
+          );
+        })}
+        {data.length === 0 && (
+          <div className="text-center py-6 text-[9px] font-black text-slate-300">NENHUM DADO DISPONÍVEL</div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, users, currentUser, isGlobal }) => {
   const COLORS = ['#2563EB', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
   const [selectedUnidadeFilter, setSelectedUnidadeFilter] = useState<'all' | 1 | 2>('all');
@@ -359,53 +401,63 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 print:grid-cols-1 print:gap-8">
-        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid">
-          <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6 sm:mb-8">Distribuição por Bairro</h3>
-          <div className="h-64 sm:h-80 print:h-[450px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={bairroData} layout="vertical" margin={{ left: 15, right: 30 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
-                <XAxis type="number" hide />
-                <YAxis 
-                  dataKey="name" 
-                  type="category" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{fontSize: 8, fontWeight: 800, fill: '#64748B'}} 
-                  width={180} 
-                />
-                <Tooltip 
-                  contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '9px', fontWeight: '900'}}
-                />
-                <Bar dataKey="value" fill="#2563EB" radius={[0, 4, 4, 0]} barSize={12} />
-              </BarChart>
-            </ResponsiveContainer>
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6">Distribuição por Bairro</h3>
+            <div className="h-64 sm:h-80 print:h-[450px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={bairroData} layout="vertical" margin={{ left: 5, right: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
+                  <XAxis type="number" hide />
+                  <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{fontSize: 7, fontWeight: 800, fill: '#64748B'}} 
+                    width={110} 
+                  />
+                  <Tooltip 
+                    contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '9px', fontWeight: '900'}}
+                  />
+                  <Bar dataKey="value" fill="#2563EB" radius={[0, 4, 4, 0]} barSize={12} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+            <DataListTable data={bairroData} total={filteredDocuments.length} label="Bairro" />
           </div>
         </div>
 
-        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm text-center print:break-inside-avoid">
-          <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6 sm:mb-8 md:text-left">Situação dos Procedimentos</h3>
-          <div className="h-64 sm:h-80 print:h-[400px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <RePieChart>
-                <Pie
-                  data={statusData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {statusData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '9px', fontWeight: '900'}}
-                />
-              </RePieChart>
-            </ResponsiveContainer>
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6 md:text-left">Situação dos Procedimentos</h3>
+            <div className="h-64 sm:h-80 print:h-[400px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <RePieChart>
+                  <Pie
+                    data={statusData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {statusData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '9px', fontWeight: '900'}}
+                  />
+                </RePieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+            <DataListTable data={statusData} total={filteredDocuments.length} label="Status" />
           </div>
         </div>
       </div>
@@ -413,228 +465,273 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       {/* NOVA SEÇÃO: FAIXA ETÁRIA E ATRIBUIÇÕES DO CONSELHO */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-1 print:gap-8">
         {/* Gráfico de Faixa Etária */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid">
-          <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-8">Distribuição por Faixa Etária</h3>
-          <div className="h-80 print:h-[400px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <RePieChart>
-                <Pie
-                  data={ageGroupData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={5}
-                  dataKey="value"
-                  label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
-                >
-                  {ageGroupData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={['#2563EB', '#10B981', '#F59E0B'][index % 3]} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
-                />
-              </RePieChart>
-            </ResponsiveContainer>
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6">Distribuição por Faixa Etária</h3>
+            <div className="h-64 sm:h-80 print:h-[400px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <RePieChart>
+                  <Pie
+                    data={ageGroupData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                    label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                  >
+                    {ageGroupData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={['#2563EB', '#10B981', '#F59E0B'][index % 3]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
+                  />
+                </RePieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex justify-center gap-4 mt-2 flex-wrap">
+               {ageGroupData.map((g, i) => (
+                 <div key={i} className="flex items-center gap-1.5">
+                   <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: ['#2563EB', '#10B981', '#F59E0B'][i % 3]}}></div>
+                   <span className="text-[8px] font-black text-slate-500 uppercase">{g.name}</span>
+                 </div>
+               ))}
+            </div>
           </div>
-          <div className="flex justify-center gap-6 mt-4">
-             {ageGroupData.map((g, i) => (
-               <div key={i} className="flex items-center gap-2">
-                 <div className="w-3 h-3 rounded-full" style={{backgroundColor: ['#2563EB', '#10B981', '#F59E0B'][i % 3]}}></div>
-                 <span className="text-[9px] font-black text-slate-500 uppercase">{g.name}: {g.value}</span>
-               </div>
-             ))}
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+            <DataListTable data={ageGroupData} total={aiStats.totalCriancas} label="Faixa Etária" />
           </div>
         </div>
 
         {/* Gráfico de Atribuições Art. 136 */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Ações do Conselho (Art. 136 ECA)</h3>
-            <span className="px-3 py-1 bg-violet-50 text-violet-600 rounded-lg text-[10px] font-black uppercase">Total: {totalAttributions}</span>
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Ações do Conselho (Art. 136 ECA)</h3>
+            </div>
+            <div className="h-64 sm:h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={attributionsData} layout="vertical" margin={{ left: 5, right: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
+                  <XAxis type="number" hide />
+                  <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    width={90}
+                    tick={{fontSize: 7, fontWeight: 800, fill: '#64748b'}} 
+                  />
+                  <Tooltip 
+                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
+                  />
+                  <Bar dataKey="value" fill="#8B5CF6" radius={[0, 8, 8, 0]} barSize={12} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={attributionsData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
-                <XAxis type="number" hide />
-                <YAxis 
-                  dataKey="name" 
-                  type="category" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  width={120}
-                  tick={{fontSize: 8, fontWeight: 800, fill: '#64748b'}} 
-                />
-                <Tooltip 
-                  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
-                />
-                <Bar dataKey="value" fill="#8B5CF6" radius={[0, 8, 8, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+            <DataListTable data={attributionsData} total={totalAttributions} label="Ação" />
           </div>
         </div>
       </div>
       
       {/* NOVA SEÇÃO: DETALHAMENTO DAS MEDIDAS APLICADAS (SEPARADAS POR ARTIGO) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-1 print:gap-8">
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Medidas Art. 101 (Criança/Adolescente)</h3>
-            <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase">Proteção</span>
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Medidas Art. 101 (Criança/Adolescente)</h3>
+              <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase">Proteção</span>
+            </div>
+            <div className="h-64 sm:h-80 print:h-[450px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={measures101Data} layout="vertical" margin={{ left: 5, right: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
+                  <XAxis type="number" hide />
+                  <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    width={110}
+                    tick={{fontSize: 7, fontWeight: 800, fill: '#64748b'}} 
+                  />
+                  <Tooltip 
+                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
+                  />
+                  <Bar dataKey="value" fill="#2563EB" radius={[0, 8, 8, 0]} barSize={12} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className="h-80 print:h-[450px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={measures101Data} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
-                <XAxis type="number" hide />
-                <YAxis 
-                  dataKey="name" 
-                  type="category" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  width={180}
-                  tick={{fontSize: 8, fontWeight: 800, fill: '#64748b'}} 
-                />
-                <Tooltip 
-                  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
-                />
-                <Bar dataKey="value" fill="#2563EB" radius={[0, 8, 8, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+            <DataListTable data={measures101Data} label="Medida" />
           </div>
         </div>
 
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Medidas Art. 129 (Pais/Responsáveis)</h3>
-            <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-black uppercase">Orientação</span>
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Medidas Art. 129 (Pais/Responsáveis)</h3>
+              <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-black uppercase">Orientação</span>
+            </div>
+            <div className="h-64 sm:h-80 print:h-[450px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={measures129Data} layout="vertical" margin={{ left: 5, right: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
+                  <XAxis type="number" hide />
+                  <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    width={110}
+                    tick={{fontSize: 7, fontWeight: 800, fill: '#64748b'}} 
+                  />
+                  <Tooltip 
+                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
+                  />
+                  <Bar dataKey="value" fill="#F59E0B" radius={[0, 8, 8, 0]} barSize={12} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className="h-80 print:h-[450px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={measures129Data} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
-                <XAxis type="number" hide />
-                <YAxis 
-                  dataKey="name" 
-                  type="category" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  width={180}
-                  tick={{fontSize: 8, fontWeight: 800, fill: '#64748b'}} 
-                />
-                <Tooltip 
-                  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
-                />
-                <Bar dataKey="value" fill="#F59E0B" radius={[0, 8, 8, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+            <DataListTable data={measures129Data} label="Medida" />
           </div>
         </div>
       </div>
       
       {/* SEÇÃO ORIGINAL: FREQUÊNCIA GERAL DE MEDIDAS */}
-      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid">
-        <div className="flex items-center justify-between mb-8">
-          <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Detalhamento das Medidas Aplicadas</h3>
-          <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-black uppercase">Frequência de Ações</span>
+      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Detalhamento das Medidas Aplicadas</h3>
+            <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-black uppercase">Frequência de Ações</span>
+          </div>
+          <div className="h-64 sm:h-80 print:h-[500px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={measuresData} layout="vertical" margin={{ left: 5, right: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
+                <XAxis type="number" hide />
+                <YAxis 
+                  dataKey="name" 
+                  type="category" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  width={110}
+                  tick={{fontSize: 7, fontWeight: 800, fill: '#64748b'}} 
+                />
+                <Tooltip 
+                  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
+                />
+                <Bar dataKey="value" fill="#10B981" radius={[0, 8, 8, 0]} barSize={12} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-        <div className="h-96 print:h-[500px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={measuresData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
-              <XAxis type="number" hide />
-              <YAxis 
-                dataKey="name" 
-                type="category" 
-                axisLine={false} 
-                tickLine={false} 
-                width={250}
-                tick={{fontSize: 8, fontWeight: 800, fill: '#64748b'}} 
-              />
-              <Tooltip 
-                contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
-              />
-              <Bar dataKey="value" fill="#10B981" radius={[0, 8, 8, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+          <DataListTable data={measuresData} label="Medida" />
         </div>
       </div>
 
       {/* NOVA SEÇÃO: DETALHAMENTO DOS SERVIÇOS REQUISITADOS (ART. 136 III) */}
-      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid">
-        <div className="flex items-center justify-between mb-8">
-          <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Serviços Requisitados (Art. 136 III)</h3>
-          <span className="px-3 py-1 bg-purple-50 text-purple-600 rounded-lg text-[10px] font-black uppercase">Detalhamento por Serviço</span>
+      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Serviços Requisitados (Art. 136 III)</h3>
+            <span className="px-3 py-1 bg-purple-50 text-purple-600 rounded-lg text-[10px] font-black uppercase">Detalhamento por Serviço</span>
+          </div>
+          <div className="h-64 sm:h-80 print:h-[500px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={servicos136IIIData} layout="vertical" margin={{ left: 5, right: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
+                <XAxis type="number" hide />
+                <YAxis 
+                  dataKey="name" 
+                  type="category" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  width={110}
+                  tick={{fontSize: 7, fontWeight: 800, fill: '#64748b'}} 
+                />
+                <Tooltip 
+                  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
+                />
+                <Bar dataKey="value" fill="#8B5CF6" radius={[0, 8, 8, 0]} barSize={12} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-        <div className="h-96 print:h-[500px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={servicos136IIIData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
-              <XAxis type="number" hide />
-              <YAxis 
-                dataKey="name" 
-                type="category" 
-                axisLine={false} 
-                tickLine={false} 
-                width={250}
-                tick={{fontSize: 8, fontWeight: 800, fill: '#64748b'}} 
-              />
-              <Tooltip 
-                contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
-              />
-              <Bar dataKey="value" fill="#8B5CF6" radius={[0, 8, 8, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+          <DataListTable data={servicos136IIIData} label="Serviço" />
         </div>
       </div>
 
       {/* NOVA SEÇÃO: ORIGEM E CANAIS DE COMUNICAÇÃO */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-1 print:gap-8">
         {/* Gráfico de Origem */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid">
-          <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-8">Identificação da Origem</h3>
-          <div className="h-80 print:h-[450px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={originsData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 9, fontWeight: 700, fill: '#94A3B8'}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700, fill: '#94A3B8'}} />
-                <Tooltip 
-                  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
-                />
-                <Bar dataKey="value" fill="#3B82F6" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6">Identificação da Origem</h3>
+            <div className="h-64 sm:h-80 print:h-[450px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={originsData} layout="vertical" margin={{ left: 5, right: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
+                  <XAxis type="number" hide />
+                  <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    width={90}
+                    tick={{fontSize: 7, fontWeight: 800, fill: '#64748b'}} 
+                  />
+                  <Tooltip 
+                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
+                  />
+                  <Bar dataKey="value" fill="#3B82F6" radius={[0, 8, 8, 0]} barSize={12} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+            <DataListTable data={originsData} label="Origem" />
           </div>
         </div>
 
         {/* Gráfico de Canais de Comunicação */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid">
-          <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-8">Canais de Comunicado</h3>
-          <div className="h-80 print:h-[450px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <RePieChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                <Pie
-                  data={channelsData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                  label={({ name, percent }) => `${name.split(' ')[0]}: ${(percent * 100).toFixed(0)}%`}
-                >
-                  {channelsData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
-                />
-              </RePieChart>
-            </ResponsiveContainer>
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-avoid flex flex-col md:flex-row gap-6">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6">Canais de Comunicado</h3>
+            <div className="h-64 sm:h-80 print:h-[450px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <RePieChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                  <Pie
+                    data={channelsData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={70}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {channelsData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
+                  />
+                </RePieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col">
+            <DataListTable data={channelsData} label="Canal" />
           </div>
         </div>
       </div>
