@@ -4,6 +4,7 @@ import { Documento, AgendaEntry, User } from '../types';
 import { INITIAL_USERS, STATUS_LABELS } from '../constants';
 import { BarChart3, PieChart, TrendingUp, Users, FileText, ShieldAlert, Sparkles, UserCheck, Bell, PhoneCall, Activity, Download, Printer, X, Calendar } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell } from 'recharts';
+import { formatLocalDateString } from '../lib/dateUtils';
 import AIStatisticsAnalyzer from './AIStatisticsAnalyzer';
 
 interface StatisticsViewProps {
@@ -310,7 +311,65 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
   };
 
   return (
-    <div className="space-y-8 pb-20 print:p-0 print:space-y-4">
+    <div className="space-y-8 pb-20 print:p-0 print:space-y-6">
+      {/* CABEÇALHO OFICIAL DE IMPRESSÃO (Apenas Visível no PDF/Print) */}
+      <div className="hidden print:flex flex-col space-y-6 border-b-2 border-slate-900 pb-6 mb-8 w-full">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            {/* Brasão de Hortolândia Simplificado e Elegante em SVG */}
+            <div className="w-16 h-16 shrink-0 text-slate-950">
+              <svg viewBox="0 0 100 100" className="w-full h-full fill-current">
+                <path d="M50 5 L85 25 V60 C85 80 50 95 50 95 C50 95 15 80 15 60 V25 L50 5 Z" fill="none" stroke="currentColor" strokeWidth="4" />
+                <path d="M50 15 L75 30 V55 C75 70 50 82 50 82 C50 82 25 70 25 55 V30 L50 15 Z" fill="currentColor" opacity="0.15" />
+                <line x1="50" y1="5" x2="50" y2="95" stroke="currentColor" strokeWidth="2" strokeDasharray="3 3" />
+                <circle cx="50" cy="45" r="12" fill="none" stroke="currentColor" strokeWidth="3" />
+                <path d="M42 45 H58 M50 37 V53" stroke="currentColor" strokeWidth="2" />
+                <path d="M30 15 H70" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+                <path d="M35 10 H65" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-[10px] font-black tracking-widest text-slate-500 uppercase leading-none">ESTADO DE SÃO PAULO</p>
+              <h2 className="text-[16px] font-black text-slate-950 leading-tight uppercase mt-0.5">Prefeitura Municipal de Hortolândia</h2>
+              <h1 className="text-[14px] font-extrabold text-slate-800 tracking-tight uppercase leading-none mt-1">Conselho Tutelar - Colegiado Unificado</h1>
+            </div>
+          </div>
+          <div className="text-right">
+            <span className="px-3 py-1 bg-slate-100 text-slate-950 rounded-md text-[9px] font-black border border-slate-200 uppercase tracking-wider">
+              Relatório Oficial de Gestão
+            </span>
+            <p className="text-[10px] font-bold text-slate-500 uppercase mt-2">SIMCT • HORTOLÂNDIA</p>
+          </div>
+        </div>
+
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-4 text-[10px]">
+          <div>
+            <span className="font-black text-slate-400 uppercase block">Documento</span>
+            <span className="font-extrabold text-slate-800 uppercase text-[11px]">Relatório Estatístico</span>
+          </div>
+          <div>
+            <span className="font-black text-slate-400 uppercase block">Filtro de Unidade</span>
+            <span className="font-extrabold text-slate-800 uppercase text-[11px]">
+              {selectedUnidadeFilter === 'all' ? 'Ambas as Unidades' : selectedUnidadeFilter === 1 ? 'Unidade I (Sede)' : 'Unidade II (Sub-Sede)'}
+            </span>
+          </div>
+          <div>
+            <span className="font-black text-slate-400 uppercase block">Período de Análise</span>
+            <span className="font-extrabold text-slate-800 uppercase text-[11px]">
+              {startDate || endDate 
+                ? `${startDate ? formatLocalDateString(startDate) : 'Início'} até ${endDate ? formatLocalDateString(endDate) : 'Hoje'}`
+                : 'Período Integral (Todos os Registros)'}
+            </span>
+          </div>
+          <div>
+            <span className="font-black text-slate-400 uppercase block">Data de Emissão</span>
+            <span className="font-extrabold text-slate-800 uppercase text-[11px]">
+              {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+        </div>
+      </div>
+
       {isInIframe && (
         <div className="bg-amber-50 border border-amber-200 rounded-[1.5rem] p-6 flex items-start gap-4 shadow-sm print:hidden">
           <div className="p-3 bg-amber-100 rounded-2xl text-amber-600 shrink-0 flex items-center justify-center">
@@ -473,11 +532,11 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 print:grid-cols-1 print:gap-8">
-        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 print:grid-cols-2 print:gap-4 print-avoid-break">
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
           <div className="flex-1 min-w-0">
             <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6">Distribuição por Bairro</h3>
-            <div className="h-64 sm:h-80 print:h-[450px]">
+            <div className="h-64 sm:h-80 print:h-[180px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={bairroData} layout="vertical" margin={{ left: 5, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
@@ -498,15 +557,15 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
             <DataListTable data={bairroData} total={filteredDocuments.length} label="Bairro" />
           </div>
         </div>
 
-        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
           <div className="flex-1 min-w-0">
             <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6 md:text-left">Situação dos Procedimentos</h3>
-            <div className="h-64 sm:h-80 print:h-[400px]">
+            <div className="h-64 sm:h-80 print:h-[180px]">
               <ResponsiveContainer width="100%" height="100%">
                 <RePieChart>
                   <Pie
@@ -529,19 +588,26 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
             <DataListTable data={statusData} total={filteredDocuments.length} label="Status" />
           </div>
         </div>
       </div>
 
+      {/* QUEBRA DE PÁGINA PARA PÁGINA 2 */}
+      <div className="print-page-break h-0" />
+      <div className="hidden print:flex justify-between items-center text-[9px] text-slate-400 border-b border-slate-200 pb-2 mb-6 uppercase font-black">
+        <span>SIMCT • Relatório de Gestão • Hortolândia</span>
+        <span>Página 2</span>
+      </div>
+
       {/* NOVA SEÇÃO: FAIXA ETÁRIA E ATRIBUIÇÕES DO CONSELHO */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-1 print:gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-2 print:gap-4 print-avoid-break">
         {/* Gráfico de Faixa Etária */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
           <div className="flex-1 min-w-0">
-            <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6">Distribuição por Faixa Etária</h3>
-            <div className="h-64 sm:h-80 print:h-[400px]">
+            <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6">Distribuição por Faixa Etária</h3>
+            <div className="h-64 sm:h-80 print:h-[180px]">
               <ResponsiveContainer width="100%" height="100%">
                 <RePieChart>
                   <Pie
@@ -564,7 +630,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
                 </RePieChart>
               </ResponsiveContainer>
             </div>
-            <div className="flex justify-center gap-4 mt-2 flex-wrap">
+            <div className="flex justify-center gap-4 mt-2 flex-wrap print:hidden">
                {ageGroupData.map((g, i) => (
                  <div key={i} className="flex items-center gap-1.5">
                    <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: ['#2563EB', '#10B981', '#F59E0B'][i % 3]}}></div>
@@ -573,18 +639,18 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
                ))}
             </div>
           </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
             <DataListTable data={ageGroupData} total={aiStats.totalCriancas} label="Faixa Etária" />
           </div>
         </div>
 
         {/* Gráfico de Atribuições Art. 136 */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Ações do Conselho (Art. 136 ECA)</h3>
+              <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest">Ações do Conselho (Art. 136 ECA)</h3>
             </div>
-            <div className="h-64 sm:h-80">
+            <div className="h-64 sm:h-80 print:h-[180px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={attributionsData} layout="vertical" margin={{ left: 5, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
@@ -605,21 +671,28 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
             <DataListTable data={attributionsData} total={totalAttributions} label="Ação" />
           </div>
         </div>
       </div>
+
+      {/* QUEBRA DE PÁGINA PARA PÁGINA 3 */}
+      <div className="print-page-break h-0" />
+      <div className="hidden print:flex justify-between items-center text-[9px] text-slate-400 border-b border-slate-200 pb-2 mb-6 uppercase font-black">
+        <span>SIMCT • Relatório de Gestão • Hortolândia</span>
+        <span>Página 3</span>
+      </div>
       
       {/* NOVA SEÇÃO: DETALHAMENTO DAS MEDIDAS APLICADAS (SEPARADAS POR ARTIGO) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-1 print:gap-8">
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-2 print:gap-4 print-avoid-break">
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Medidas Art. 101 (Criança/Adolescente)</h3>
-              <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase">Proteção</span>
+              <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest">Medidas Art. 101</h3>
+              <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase print:hidden">Proteção</span>
             </div>
-            <div className="h-64 sm:h-80 print:h-[450px]">
+            <div className="h-64 sm:h-80 print:h-[180px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={measures101Data} layout="vertical" margin={{ left: 5, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
@@ -640,18 +713,18 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
             <DataListTable data={measures101Data} label="Medida" />
           </div>
         </div>
 
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Medidas Art. 129 (Pais/Responsáveis)</h3>
-              <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-black uppercase">Orientação</span>
+              <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest">Medidas Art. 129</h3>
+              <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-black uppercase print:hidden">Orientação</span>
             </div>
-            <div className="h-64 sm:h-80 print:h-[450px]">
+            <div className="h-64 sm:h-80 print:h-[180px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={measures129Data} layout="vertical" margin={{ left: 5, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
@@ -672,85 +745,101 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
             <DataListTable data={measures129Data} label="Medida" />
           </div>
         </div>
       </div>
+
+      {/* QUEBRA DE PÁGINA PARA PÁGINA 4 */}
+      <div className="print-page-break h-0" />
+      <div className="hidden print:flex justify-between items-center text-[9px] text-slate-400 border-b border-slate-200 pb-2 mb-6 uppercase font-black">
+        <span>SIMCT • Relatório de Gestão • Hortolândia</span>
+        <span>Página 4</span>
+      </div>
       
-      {/* SEÇÃO ORIGINAL: FREQUÊNCIA GERAL DE MEDIDAS */}
-      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Detalhamento das Medidas Aplicadas</h3>
-            <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-black uppercase">Frequência de Ações</span>
+      {/* SEÇÃO ORIGINAL: FREQUÊNCIA GERAL DE MEDIDAS (Agrupados em Grid para Impressão) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-2 print:gap-4 print-avoid-break">
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest">Detalhamento das Medidas</h3>
+              <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-black uppercase print:hidden">Frequência</span>
+            </div>
+            <div className="h-64 sm:h-80 print:h-[180px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={measuresData} layout="vertical" margin={{ left: 5, right: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
+                  <XAxis type="number" hide />
+                  <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    width={110}
+                    tick={{fontSize: 7, fontWeight: 800, fill: '#64748b'}} 
+                  />
+                  <Tooltip 
+                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
+                  />
+                  <Bar dataKey="value" fill="#10B981" radius={[0, 8, 8, 0]} barSize={12} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className="h-64 sm:h-80 print:h-[500px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={measuresData} layout="vertical" margin={{ left: 5, right: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
-                <XAxis type="number" hide />
-                <YAxis 
-                  dataKey="name" 
-                  type="category" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  width={110}
-                  tick={{fontSize: 7, fontWeight: 800, fill: '#64748b'}} 
-                />
-                <Tooltip 
-                  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
-                />
-                <Bar dataKey="value" fill="#10B981" radius={[0, 8, 8, 0]} barSize={12} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
+            <DataListTable data={measuresData} label="Medida" />
           </div>
         </div>
-        <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
-          <DataListTable data={measuresData} label="Medida" />
+
+        {/* NOVA SEÇÃO: DETALHAMENTO DOS SERVIÇOS REQUISITADOS (ART. 136 III) */}
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest">Serviços Requisitados</h3>
+              <span className="px-3 py-1 bg-purple-50 text-purple-600 rounded-lg text-[10px] font-black uppercase print:hidden">Requisição</span>
+            </div>
+            <div className="h-64 sm:h-80 print:h-[180px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={servicos136IIIData} layout="vertical" margin={{ left: 5, right: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
+                  <XAxis type="number" hide />
+                  <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    width={110}
+                    tick={{fontSize: 7, fontWeight: 800, fill: '#64748b'}} 
+                  />
+                  <Tooltip 
+                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
+                  />
+                  <Bar dataKey="value" fill="#8B5CF6" radius={[0, 8, 8, 0]} barSize={12} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
+            <DataListTable data={servicos136IIIData} label="Serviço" />
+          </div>
         </div>
       </div>
 
-      {/* NOVA SEÇÃO: DETALHAMENTO DOS SERVIÇOS REQUISITADOS (ART. 136 III) */}
-      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest">Serviços Requisitados (Art. 136 III)</h3>
-            <span className="px-3 py-1 bg-purple-50 text-purple-600 rounded-lg text-[10px] font-black uppercase">Detalhamento por Serviço</span>
-          </div>
-          <div className="h-64 sm:h-80 print:h-[500px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={servicos136IIIData} layout="vertical" margin={{ left: 5, right: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
-                <XAxis type="number" hide />
-                <YAxis 
-                  dataKey="name" 
-                  type="category" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  width={110}
-                  tick={{fontSize: 7, fontWeight: 800, fill: '#64748b'}} 
-                />
-                <Tooltip 
-                  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
-                />
-                <Bar dataKey="value" fill="#8B5CF6" radius={[0, 8, 8, 0]} barSize={12} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-        <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
-          <DataListTable data={servicos136IIIData} label="Serviço" />
-        </div>
+      {/* QUEBRA DE PÁGINA PARA PÁGINA 5 */}
+      <div className="print-page-break h-0" />
+      <div className="hidden print:flex justify-between items-center text-[9px] text-slate-400 border-b border-slate-200 pb-2 mb-6 uppercase font-black">
+        <span>SIMCT • Relatório de Gestão • Hortolândia</span>
+        <span>Página 5</span>
       </div>
 
       {/* NOVA SEÇÃO: ORIGEM E CANAIS DE COMUNICAÇÃO */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-1 print:gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-2 print:gap-4 print-avoid-break">
         {/* Gráfico de Origem */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
           <div className="flex-1 min-w-0">
-            <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6">Identificação da Origem</h3>
-            <div className="h-64 sm:h-80 print:h-[450px]">
+            <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6">Identificação da Origem</h3>
+            <div className="h-64 sm:h-80 print:h-[180px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={originsData} layout="vertical" margin={{ left: 5, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
@@ -771,16 +860,16 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
             <DataListTable data={originsData} label="Origem" />
           </div>
         </div>
 
         {/* Gráfico de Canais de Comunicação */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm print:break-inside-auto print:flex-col print:gap-8 flex flex-col md:flex-row gap-6">
+        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
           <div className="flex-1 min-w-0">
-            <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6">Canais de Comunicado</h3>
-            <div className="h-64 sm:h-80 print:h-[450px]">
+            <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6">Canais de Comunicado</h3>
+            <div className="h-64 sm:h-80 print:h-[180px]">
               <ResponsiveContainer width="100%" height="100%">
                 <RePieChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                   <Pie
@@ -803,10 +892,17 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t print:border-l-0 print:pt-6 print:pl-0">
+          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
             <DataListTable data={channelsData} label="Canal" />
           </div>
         </div>
+      </div>
+
+      {/* QUEBRA DE PÁGINA PARA PÁGINA 6 */}
+      <div className="print-page-break h-0" />
+      <div className="hidden print:flex justify-between items-center text-[9px] text-slate-400 border-b border-slate-200 pb-2 mb-6 uppercase font-black">
+        <span>SIMCT • Relatório de Gestão • Hortolândia</span>
+        <span>Página 6</span>
       </div>
 
       {isGlobal && <AIStatisticsAnalyzer stats={aiStats} totalDocs={filteredDocuments.length} />}
@@ -940,6 +1036,55 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* BLOCO DE ASSINATURAS DO COLEGIADO (Visível apenas em impressão no rodapé da última página) */}
+      <div className="hidden print:block mt-12 avoid-break">
+        <div className="border-t-2 border-slate-300 pt-6 mt-12">
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center mb-10">
+            Hortolândia - SP, {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+          </p>
+          
+          <div className="grid grid-cols-2 gap-x-12 gap-y-10 text-center">
+            {/* Linha 1 */}
+            <div className="flex flex-col items-center">
+              <div className="w-64 border-b border-slate-400 mb-1"></div>
+              <span className="text-[10px] font-black text-slate-800 uppercase">Coordenação do Conselho Tutelar</span>
+              <span className="text-[8px] font-bold text-slate-400 uppercase">Conselho Tutelar de Hortolândia</span>
+            </div>
+            
+            <div className="flex flex-col items-center">
+              <div className="w-64 border-b border-slate-400 mb-1"></div>
+              <span className="text-[10px] font-black text-slate-800 uppercase">Conselheiro(a) Relator(a)</span>
+              <span className="text-[8px] font-bold text-slate-400 uppercase">Membro do Colegiado</span>
+            </div>
+
+            {/* Linha 2 */}
+            <div className="flex flex-col items-center">
+              <div className="w-64 border-b border-slate-400 mb-1"></div>
+              <span className="text-[10px] font-black text-slate-800 uppercase">Membro do Colegiado</span>
+              <span className="text-[8px] font-bold text-slate-400 uppercase">Conselheiro Tutelar Titular</span>
+            </div>
+
+            <div className="flex flex-col items-center">
+              <div className="w-64 border-b border-slate-400 mb-1"></div>
+              <span className="text-[10px] font-black text-slate-800 uppercase">Membro do Colegiado</span>
+              <span className="text-[8px] font-bold text-slate-400 uppercase">Conselheiro Tutelar Titular</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center mt-10">
+            <div className="w-64 border-b border-slate-400 mb-1"></div>
+            <span className="text-[10px] font-black text-slate-800 uppercase">Membro do Colegiado</span>
+            <span className="text-[8px] font-bold text-slate-400 uppercase">Conselheiro Tutelar Titular</span>
+          </div>
+
+          <div className="mt-12 text-center">
+            <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+              SIMCT • SISTEMA INTEGRADO MUNICIPAL DO CONSELHO TUTELAR • HORTOLÂNDIA/SP
+            </p>
+          </div>
         </div>
       </div>
     </div>

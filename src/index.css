@@ -9,10 +9,17 @@
   @media print {
     body {
       background: white !important;
+      color: #0f172a !important;
       padding: 0 !important;
       margin: 0 !important;
+      font-size: 11px !important;
     }
     
+    @page {
+      size: A4 portrait;
+      margin: 15mm 12mm 15mm 12mm;
+    }
+
     .print\:hidden {
       display: none !important;
     }
@@ -29,6 +36,41 @@
     * {
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
+    }
+
+    /* Page Break Utilities */
+    .print-page-break {
+      page-break-after: always !important;
+      break-after: page !important;
+      height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: none !important;
+    }
+
+    .print-avoid-break {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+
+    /* Ajustes finos para gráficos e tabelas impressos */
+    .recharts-legend-wrapper, .recharts-tooltip-wrapper {
+      display: none !important;
+    }
+
+    /* Garantir que tabelas não quebrem feio */
+    tr {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+
+    /* Ajustar contrastes de texto para preto puro na impressão para legibilidade profissional */
+    .text-slate-400, .text-slate-500 {
+      color: #475569 !important;
+    }
+
+    .text-slate-900, .text-slate-950, .text-slate-800 {
+      color: #000000 !important;
     }
   }
 }
