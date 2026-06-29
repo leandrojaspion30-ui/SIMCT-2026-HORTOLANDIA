@@ -57,6 +57,86 @@ const DataListTable: React.FC<{ data: DataListItem[]; total?: number; label?: st
   );
 };
 
+interface ProfessionalHorizontalChartProps {
+  title: string;
+  data: DataListItem[];
+  total?: number;
+  labelType?: 'percentage' | 'absolute' | 'both';
+  footerNote?: string;
+  barColor?: string;
+}
+
+const ProfessionalHorizontalChart: React.FC<ProfessionalHorizontalChartProps> = ({ 
+  title, 
+  data, 
+  total, 
+  labelType = 'both', 
+  footerNote, 
+  barColor = '#dc2626' 
+}) => {
+  const maxValue = useMemo(() => Math.max(...data.map(d => d.value), 1), [data]);
+  const totalSum = useMemo(() => data.reduce((acc, d) => acc + d.value, 0), [data]);
+  const divisor = total || totalSum || 1;
+
+  return (
+    <div className="w-full bg-white border border-slate-200/80 shadow-sm overflow-hidden flex flex-col rounded-[1.5rem] sm:rounded-[2rem] print:shadow-none print:border-slate-300 print:break-inside-avoid print:rounded-2xl">
+      {/* Banner de cabeçalho azul escuro */}
+      <div className="bg-[#1e3a8a] text-white py-3.5 px-6 text-center print:py-2.5 print:px-4">
+        <h4 className="text-[11px] sm:text-[12px] font-black uppercase tracking-wider leading-snug print:text-[10px]">{title}</h4>
+      </div>
+      
+      {/* Corpo do Gráfico */}
+      <div className="p-6 sm:p-8 flex-1 flex flex-col justify-between bg-white print:p-4">
+        <div className="space-y-4">
+          {data.map((item, idx) => {
+            const percentage = ((item.value / divisor) * 100);
+            const percentageStr = percentage.toFixed(1).replace('.', ',');
+            const barWidthPercent = Math.max((item.value / maxValue) * 100, 1.5); // Garante visibilidade mínima
+            const displayName = item.name ? (STATUS_LABELS[item.name as any] || item.name) : 'NÃO INFORMADO';
+
+            return (
+              <div key={idx} className="flex items-center text-[11px] sm:text-[12px] print:text-[10px]">
+                {/* Rótulo da esquerda (Alinhado à direita) */}
+                <div className="w-[35%] sm:w-[30%] text-right pr-4 font-bold text-slate-700 leading-tight truncate print:whitespace-normal print:overflow-visible" title={displayName}>
+                  {displayName}
+                </div>
+                
+                {/* Linha vertical (Eixo Y) e a Barra */}
+                <div className="flex-1 flex items-center border-l-2 border-slate-300 pl-3 h-8 relative">
+                  <div 
+                    className="h-5 rounded-r transition-all duration-500 ease-out hover:opacity-90 shadow-sm" 
+                    style={{ 
+                      width: `${barWidthPercent}%`,
+                      backgroundColor: barColor
+                    }}
+                  />
+                  {/* Valor impresso ao final da barra */}
+                  <span className="ml-3 font-mono font-black text-slate-900 text-[10px] print:text-[9px] whitespace-nowrap">
+                    {labelType === 'percentage' && `${percentageStr}%`}
+                    {labelType === 'absolute' && item.value}
+                    {labelType === 'both' && `${item.value} (${percentageStr}%)`}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+          {data.length === 0 && (
+            <div className="text-center py-12 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              Nenhum dado disponível
+            </div>
+          )}
+        </div>
+
+        {/* Rodapé do gráfico */}
+        <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center text-[9px] font-black uppercase text-slate-400 tracking-wider print:mt-4 print:pt-3">
+          <span>{footerNote || `Total: ${totalSum} registros`}</span>
+          <span className="font-mono">SIMCT HORTOLÂNDIA</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, users, currentUser, isGlobal }) => {
   const COLORS = ['#2563EB', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
   const [selectedUnidadeFilter, setSelectedUnidadeFilter] = useState<'all' | 1 | 2>('all');
@@ -533,65 +613,21 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 print:grid-cols-2 print:gap-4 print-avoid-break">
-        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
-          <div className="flex-1 min-w-0">
-            <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6">Distribuição por Bairro</h3>
-            <div className="h-64 sm:h-80 print:h-[180px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={bairroData} layout="vertical" margin={{ left: 5, right: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
-                  <XAxis type="number" hide />
-                  <YAxis 
-                    dataKey="name" 
-                    type="category" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{fontSize: 7, fontWeight: 800, fill: '#64748B'}} 
-                    width={110} 
-                  />
-                  <Tooltip 
-                    contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '9px', fontWeight: '900'}}
-                  />
-                  <Bar dataKey="value" fill="#2563EB" radius={[0, 4, 4, 0]} barSize={12} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
-            <DataListTable data={bairroData} total={filteredDocuments.length} label="Bairro" />
-          </div>
-        </div>
+        <ProfessionalHorizontalChart 
+          title="Gráfico 1: Distribuição de Procedimentos por Bairro" 
+          data={bairroData} 
+          total={filteredDocuments.length}
+          barColor="#dc2626"
+          footerNote="Hortolândia • Total de casos georreferenciados por Bairro"
+        />
 
-        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
-          <div className="flex-1 min-w-0">
-            <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6 md:text-left">Situação dos Procedimentos</h3>
-            <div className="h-64 sm:h-80 print:h-[180px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <RePieChart>
-                  <Pie
-                    data={statusData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {statusData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '9px', fontWeight: '900'}}
-                  />
-                </RePieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
-            <DataListTable data={statusData} total={filteredDocuments.length} label="Status" />
-          </div>
-        </div>
+        <ProfessionalHorizontalChart 
+          title="Gráfico 2: Situação e Status dos Procedimentos" 
+          data={statusData} 
+          total={filteredDocuments.length}
+          barColor="#dc2626"
+          footerNote="Hortolândia • Status operacional de andamento dos registros"
+        />
       </div>
 
       {/* QUEBRA DE PÁGINA PARA PÁGINA 2 */}
@@ -603,78 +639,21 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
 
       {/* NOVA SEÇÃO: FAIXA ETÁRIA E ATRIBUIÇÕES DO CONSELHO */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-2 print:gap-4 print-avoid-break">
-        {/* Gráfico de Faixa Etária */}
-        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
-          <div className="flex-1 min-w-0">
-            <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6">Distribuição por Faixa Etária</h3>
-            <div className="h-64 sm:h-80 print:h-[180px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <RePieChart>
-                  <Pie
-                    data={ageGroupData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                    label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
-                  >
-                    {ageGroupData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={['#2563EB', '#10B981', '#F59E0B'][index % 3]} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
-                  />
-                </RePieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="flex justify-center gap-4 mt-2 flex-wrap print:hidden">
-               {ageGroupData.map((g, i) => (
-                 <div key={i} className="flex items-center gap-1.5">
-                   <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: ['#2563EB', '#10B981', '#F59E0B'][i % 3]}}></div>
-                   <span className="text-[8px] font-black text-slate-500 uppercase">{g.name}</span>
-                 </div>
-               ))}
-            </div>
-          </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
-            <DataListTable data={ageGroupData} total={aiStats.totalCriancas} label="Faixa Etária" />
-          </div>
-        </div>
+        <ProfessionalHorizontalChart 
+          title="Gráfico 3: Distribuição Demográfica por Faixa Etária" 
+          data={ageGroupData} 
+          total={aiStats.totalCriancas}
+          barColor="#dc2626"
+          footerNote="Hortolândia • Faixa etária do público infantojuvenil atendido"
+        />
 
-        {/* Gráfico de Atribuições Art. 136 */}
-        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest">Ações do Conselho (Art. 136 ECA)</h3>
-            </div>
-            <div className="h-64 sm:h-80 print:h-[180px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={attributionsData} layout="vertical" margin={{ left: 5, right: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
-                  <XAxis type="number" hide />
-                  <YAxis 
-                    dataKey="name" 
-                    type="category" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    width={90}
-                    tick={{fontSize: 7, fontWeight: 800, fill: '#64748b'}} 
-                  />
-                  <Tooltip 
-                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
-                  />
-                  <Bar dataKey="value" fill="#8B5CF6" radius={[0, 8, 8, 0]} barSize={12} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
-            <DataListTable data={attributionsData} total={totalAttributions} label="Ação" />
-          </div>
-        </div>
+        <ProfessionalHorizontalChart 
+          title="Gráfico 4: Ações do Conselho Tutelar (Art. 136 ECA)" 
+          data={attributionsData} 
+          total={totalAttributions}
+          barColor="#dc2626"
+          footerNote="Hortolândia • Atribuições e providências institucionais tomadas"
+        />
       </div>
 
       {/* QUEBRA DE PÁGINA PARA PÁGINA 3 */}
@@ -686,69 +665,19 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       
       {/* NOVA SEÇÃO: DETALHAMENTO DAS MEDIDAS APLICADAS (SEPARADAS POR ARTIGO) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-2 print:gap-4 print-avoid-break">
-        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest">Medidas Art. 101</h3>
-              <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase print:hidden">Proteção</span>
-            </div>
-            <div className="h-64 sm:h-80 print:h-[180px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={measures101Data} layout="vertical" margin={{ left: 5, right: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
-                  <XAxis type="number" hide />
-                  <YAxis 
-                    dataKey="name" 
-                    type="category" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    width={110}
-                    tick={{fontSize: 7, fontWeight: 800, fill: '#64748b'}} 
-                  />
-                  <Tooltip 
-                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
-                  />
-                  <Bar dataKey="value" fill="#2563EB" radius={[0, 8, 8, 0]} barSize={12} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
-            <DataListTable data={measures101Data} label="Medida" />
-          </div>
-        </div>
+        <ProfessionalHorizontalChart 
+          title="Gráfico 5: Medidas de Proteção Aplicadas (Art. 101 ECA)" 
+          data={measures101Data} 
+          barColor="#dc2626"
+          footerNote="Hortolândia • Medidas de proteção aplicadas às crianças e adolescentes"
+        />
 
-        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest">Medidas Art. 129</h3>
-              <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-black uppercase print:hidden">Orientação</span>
-            </div>
-            <div className="h-64 sm:h-80 print:h-[180px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={measures129Data} layout="vertical" margin={{ left: 5, right: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
-                  <XAxis type="number" hide />
-                  <YAxis 
-                    dataKey="name" 
-                    type="category" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    width={110}
-                    tick={{fontSize: 7, fontWeight: 800, fill: '#64748b'}} 
-                  />
-                  <Tooltip 
-                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
-                  />
-                  <Bar dataKey="value" fill="#F59E0B" radius={[0, 8, 8, 0]} barSize={12} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
-            <DataListTable data={measures129Data} label="Medida" />
-          </div>
-        </div>
+        <ProfessionalHorizontalChart 
+          title="Gráfico 6: Medidas Aplicadas aos Pais ou Responsáveis (Art. 129 ECA)" 
+          data={measures129Data} 
+          barColor="#dc2626"
+          footerNote="Hortolândia • Medidas de orientação, apoio e responsabilização familiar"
+        />
       </div>
 
       {/* QUEBRA DE PÁGINA PARA PÁGINA 4 */}
@@ -760,70 +689,19 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       
       {/* SEÇÃO ORIGINAL: FREQUÊNCIA GERAL DE MEDIDAS (Agrupados em Grid para Impressão) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-2 print:gap-4 print-avoid-break">
-        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest">Detalhamento das Medidas</h3>
-              <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-black uppercase print:hidden">Frequência</span>
-            </div>
-            <div className="h-64 sm:h-80 print:h-[180px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={measuresData} layout="vertical" margin={{ left: 5, right: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
-                  <XAxis type="number" hide />
-                  <YAxis 
-                    dataKey="name" 
-                    type="category" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    width={110}
-                    tick={{fontSize: 7, fontWeight: 800, fill: '#64748b'}} 
-                  />
-                  <Tooltip 
-                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
-                  />
-                  <Bar dataKey="value" fill="#10B981" radius={[0, 8, 8, 0]} barSize={12} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
-            <DataListTable data={measuresData} label="Medida" />
-          </div>
-        </div>
+        <ProfessionalHorizontalChart 
+          title="Gráfico 7: Detalhamento Geral de Todas as Medidas Aplicadas" 
+          data={measuresData} 
+          barColor="#dc2626"
+          footerNote="Hortolândia • Consolidação geral de frequência das medidas aplicadas"
+        />
 
-        {/* NOVA SEÇÃO: DETALHAMENTO DOS SERVIÇOS REQUISITADOS (ART. 136 III) */}
-        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest">Serviços Requisitados</h3>
-              <span className="px-3 py-1 bg-purple-50 text-purple-600 rounded-lg text-[10px] font-black uppercase print:hidden">Requisição</span>
-            </div>
-            <div className="h-64 sm:h-80 print:h-[180px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={servicos136IIIData} layout="vertical" margin={{ left: 5, right: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
-                  <XAxis type="number" hide />
-                  <YAxis 
-                    dataKey="name" 
-                    type="category" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    width={110}
-                    tick={{fontSize: 7, fontWeight: 800, fill: '#64748b'}} 
-                  />
-                  <Tooltip 
-                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
-                  />
-                  <Bar dataKey="value" fill="#8B5CF6" radius={[0, 8, 8, 0]} barSize={12} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
-            <DataListTable data={servicos136IIIData} label="Serviço" />
-          </div>
-        </div>
+        <ProfessionalHorizontalChart 
+          title="Gráfico 8: Serviços Requisitados pelo Conselho (Art. 136, III ECA)" 
+          data={servicos136IIIData} 
+          barColor="#dc2626"
+          footerNote="Hortolândia • Serviços públicos requisitados na rede municipal"
+        />
       </div>
 
       {/* QUEBRA DE PÁGINA PARA PÁGINA 5 */}
@@ -835,67 +713,19 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
 
       {/* NOVA SEÇÃO: ORIGEM E CANAIS DE COMUNICAÇÃO */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-2 print:gap-4 print-avoid-break">
-        {/* Gráfico de Origem */}
-        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
-          <div className="flex-1 min-w-0">
-            <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6">Identificação da Origem</h3>
-            <div className="h-64 sm:h-80 print:h-[180px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={originsData} layout="vertical" margin={{ left: 5, right: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
-                  <XAxis type="number" hide />
-                  <YAxis 
-                    dataKey="name" 
-                    type="category" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    width={90}
-                    tick={{fontSize: 7, fontWeight: 800, fill: '#64748b'}} 
-                  />
-                  <Tooltip 
-                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
-                  />
-                  <Bar dataKey="value" fill="#3B82F6" radius={[0, 8, 8, 0]} barSize={12} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
-            <DataListTable data={originsData} label="Origem" />
-          </div>
-        </div>
+        <ProfessionalHorizontalChart 
+          title="Gráfico 9: Identificação da Origem das Denúncias e Casos" 
+          data={originsData} 
+          barColor="#dc2626"
+          footerNote="Hortolândia • Entidades ou canais de origem geradores da demanda"
+        />
 
-        {/* Gráfico de Canais de Comunicação */}
-        <div className="bg-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 shadow-sm print:shadow-none print:border-slate-200 print:rounded-2xl print:p-4 print:break-inside-avoid flex flex-col md:flex-row gap-6 print:flex-col print:gap-4">
-          <div className="flex-1 min-w-0">
-            <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-widest mb-6">Canais de Comunicado</h3>
-            <div className="h-64 sm:h-80 print:h-[180px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <RePieChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                  <Pie
-                    data={channelsData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={70}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {channelsData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', textTransform: 'uppercase', fontSize: '10px', fontWeight: '900'}}
-                  />
-                </RePieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="w-full md:w-56 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col print:w-full print:border-t-0 print:border-l-0 print:pt-0 print:pl-0">
-            <DataListTable data={channelsData} label="Canal" />
-          </div>
-        </div>
+        <ProfessionalHorizontalChart 
+          title="Gráfico 10: Canais de Comunicação Utilizados" 
+          data={channelsData} 
+          barColor="#dc2626"
+          footerNote="Hortolândia • Canais e meios de comunicação formalizados no sistema"
+        />
       </div>
 
       {/* QUEBRA DE PÁGINA PARA PÁGINA 6 */}
