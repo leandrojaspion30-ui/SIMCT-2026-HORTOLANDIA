@@ -12,11 +12,16 @@ import {
   Eye,
   EyeOff,
   AlertTriangle,
-  Plus
+  Plus,
+  User,
+  Users,
+  MapPin,
+  Activity,
+  FilePlus
 } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
-import { Documento, MonitoringInfo, User as UserType, RequisicaoServico, LogType } from '../types';
-import { REDE_HORTOLANDIA } from '../constants';
+import { Documento, MonitoringInfo, User as UserType, RequisicaoServico, LogType, DocumentStatus } from '../types';
+import { REDE_HORTOLANDIA, BAIRROS } from '../constants';
 import { formatLocalDateString, parseLocalDate } from '../lib/dateUtils';
 
 interface MonitoringDashboardProps {
@@ -28,6 +33,7 @@ interface MonitoringDashboardProps {
   onUpdateMonitoring: (id: string, monitoring: MonitoringInfo) => void;
   onAddLog: (docId: string, acao: string, tipo?: LogType) => void;
   isReadOnly?: boolean;
+  onSaveDocument?: (doc: Partial<Documento>) => Promise<void>;
 }
 
 const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({ 
@@ -37,7 +43,8 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
   onUpdateMonitoring,
   onRemoveMonitoring,
   onAddLog,
-  isReadOnly
+  isReadOnly,
+  onSaveDocument
 }) => {
   const [filters, setFilters] = useState({ termo: '' });
   const [extendingReq, setExtendingReq] = useState<{ docId: string, req: RequisicaoServico } | null>(null);
@@ -47,6 +54,30 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
   const [showAddService, setShowAddService] = useState<string | null>(null);
   const [newService, setNewService] = useState({ area: '', servico: '', prazo: '05 DIAS', prazo_custom: '', servico_custom: '', observacao: '' });
   const [expiredItem, setExpiredItem] = useState<{ doc: Documento, req: RequisicaoServico } | null>(null);
+
+  const [showInsertManual, setShowInsertManual] = useState(false);
+  const [insertType, setInsertType] = useState<'existing' | 'new'>('existing');
+  const [selectedDocId, setSelectedDocId] = useState<string>('');
+  const [newDocData, setNewDocData] = useState({
+    criancaNome: '',
+    genitoraNome: '',
+    bairro: '',
+  });
+  const [manualService, setManualService] = useState({
+    area: '',
+    servico: '',
+    prazo: '05 DIAS',
+    prazo_custom: '',
+    servico_custom: '',
+    observacao: '',
+  });
+
+  const availableDocs = useMemo(() => {
+    return documents.filter(d => {
+      const isCurrentlyMonitored = d.monitoramento && !d.monitoramento.concluido;
+      return !isCurrentlyMonitored;
+    });
+  }, [documents]);
 
   const filteredMonitoringDocs = useMemo(() => {
     return documents.filter(d => {
@@ -160,6 +191,123 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
     setNewService({ area: '', servico: '', prazo: '05 DIAS', prazo_custom: '', servico_custom: '', observacao: '' });
   };
 
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  const handleInsertManualMonitoring = async () => {
+    if (!onSaveDocument) return;
+    setModalError(null);
+
+    // Validate service details first since any monitoring case needs a tracked service
+    if (!manualService.area || !manualService.servico) {
+      setModalError("Por favor, selecione uma Área e um Serviço.");
+      return;
+    }
+
+    if (manualService.servico === 'OUTROS SERVIÇOS / FORA DA REDE' && !manualService.servico_custom) {
+      setModalError("Por favor, especifique o nome do serviço para 'Outros Serviços'.");
+      return;
+    }
+
+    const today = new Date();
+    let daysToAdd = 5;
+    
+    if (manualService.prazo === 'CUSTOM') {
+      daysToAdd = parseInt(manualService.prazo_custom) || 5;
+    } else {
+      daysToAdd = parseInt(manualService.prazo.split(' ')[0]) || 5;
+    }
+
+    const deadline = new Date(today);
+    deadline.setDate(today.getDate() + daysToAdd);
+
+    const newReq: RequisicaoServico = {
+      id: `req-${Date.now()}`,
+      area: manualService.area,
+      servico: manualService.servico === 'OUTROS SERVIÇOS / FORA DA REDE' ? (manualService.servico_custom || 'OUTRO SERVIÇO') : manualService.servico,
+      dataFinal: deadline.toISOString(),
+      prazo: manualService.prazo === 'CUSTOM' ? `${daysToAdd} DIAS` : manualService.prazo,
+      prazo_custom: manualService.prazo === 'CUSTOM' ? manualService.prazo_custom : undefined,
+      observacao: manualService.observacao,
+      isForaDaRede: manualService.servico === 'OUTROS SERVIÇOS / FORA DA REDE'
+    };
+
+    if (insertType === 'existing') {
+      if (!selectedDocId) {
+        setModalError("Por favor, selecione um procedimento existente.");
+        return;
+      }
+
+      const existingDoc = documents.find(d => d.id === selectedDocId);
+      if (!existingDoc) return;
+
+      const currentMonitoring = existingDoc.monitoramento || { concluido: false, prazoEsperado: deadline.toISOString(), requisicoes: [] };
+      const currentStatus = existingDoc.status || [];
+      const updatedStatus = currentStatus.includes('MONITORAMENTO') ? currentStatus : [...currentStatus, 'MONITORAMENTO' as DocumentStatus];
+
+      const updatedDoc: Partial<Documento> = {
+        id: existingDoc.id,
+        status: updatedStatus,
+        monitoramento: {
+          ...currentMonitoring,
+          concluido: false,
+          prazoEsperado: deadline.toISOString(),
+          requisicoes: [...(currentMonitoring.requisicoes || []).filter(r => !r.excluidoDoMonitoramento), newReq]
+        }
+      };
+
+      await onSaveDocument(updatedDoc);
+      onAddLog(existingDoc.id, `MONITORAMENTO: Iniciado acompanhamento manual via vinculação de procedimento existente. Serviço [${newReq.servico}].`, 'MONITORAMENTO');
+    } else {
+      // Insert new document
+      if (!newDocData.criancaNome || !newDocData.bairro) {
+        setModalError("Por favor, preencha o nome da criança e selecione o bairro.");
+        return;
+      }
+
+      const tempId = `doc-${Math.random().toString(36).substr(2, 9)}`;
+      const manualDoc: Partial<Documento> = {
+        id: tempId,
+        unidade_id: currentUser.unidade_id || 1,
+        origem: 'MONITORAMENTO MANUAL',
+        canal_comunicado: 'ATENDIMENTO PRESENCIAL',
+        data_recebimento: new Date().toISOString().split('T')[0],
+        data_aporte: new Date().toISOString().split('T')[0],
+        hora_aporte: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        crianca_nome: newDocData.criancaNome.toUpperCase(),
+        criancas: [{
+          nome: newDocData.criancaNome.toUpperCase(),
+          data_nascimento: '',
+          genero_identidade: 'NÃO INFORMADO'
+        }],
+        genitora_nome: (newDocData.genitoraNome || 'NÃO INFORMADO').toUpperCase(),
+        bairro: newDocData.bairro,
+        informacoes_documento: 'Monitoramento manual inserido diretamente pelo painel.',
+        observacoes_iniciais: 'Prontuário gerado automaticamente para monitoramento.',
+        status: ['MONITORAMENTO' as DocumentStatus],
+        conselheiro_referencia_id: currentUser.id,
+        conselheiro_referencia_nome: currentUser.nome,
+        conselheiro_providencia_id: currentUser.id,
+        conselheiro_providencia_nome: currentUser.nome,
+        conselheiros_providencia_nomes: [currentUser.nome],
+        criado_em: new Date().toISOString(),
+        monitoramento: {
+          concluido: false,
+          prazoEsperado: deadline.toISOString(),
+          requisicoes: [newReq]
+        }
+      };
+
+      await onSaveDocument(manualDoc);
+      onAddLog(tempId, `MONITORAMENTO: Novo prontuário criado para acompanhamento manual. Serviço [${newReq.servico}].`, 'MONITORAMENTO');
+    }
+
+    // Reset fields and close
+    setShowInsertManual(false);
+    setSelectedDocId('');
+    setNewDocData({ criancaNome: '', genitoraNome: '', bairro: '' });
+    setManualService({ area: '', servico: '', prazo: '05 DIAS', prazo_custom: '', servico_custom: '', observacao: '' });
+  };
+
   // DIRETRIZ: Alerta de prazo vencido obrigatório
   React.useEffect(() => {
     const today = new Date();
@@ -209,7 +357,20 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
               <Layers className="w-5 h-5 text-[#2563EB]" />
               <h2 className="text-[15px] font-bold text-[#111827] uppercase tracking-widest">Controle de Prazos</h2>
            </div>
-           <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase">{filteredMonitoringDocs.length} Atendimentos</span>
+           <div className="flex items-center gap-3 flex-wrap">
+              {!isReadOnly && (
+                <button 
+                  onClick={() => {
+                    setShowInsertManual(true);
+                    setModalError(null);
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-sm flex items-center gap-2 text-[11px] font-black uppercase"
+                >
+                  <Plus className="w-4 h-4" /> Inserir Manualmente
+                </button>
+              )}
+              <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase">{filteredMonitoringDocs.length} Atendimentos</span>
+           </div>
         </div>
         
         {/* Desktop View Table */}
@@ -521,6 +682,265 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
                 className="py-5 bg-red-600 text-white rounded-2xl font-black uppercase text-[12px] hover:bg-red-700 transition-all shadow-lg flex items-center justify-center gap-2"
               >
                 <Trash2 className="w-5 h-5" /> Encerrar Monitoramento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showInsertManual && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 backdrop-blur-md bg-slate-900/40 overflow-y-auto animate-in fade-in">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-2xl w-full p-8 md:p-10 border border-[#E5E7EB] animate-in zoom-in-95 my-8 relative flex flex-col max-h-[90vh]">
+            <button 
+              onClick={() => setShowInsertManual(false)} 
+              className="absolute top-6 right-6 p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-all"
+            >
+              <X className="w-6 h-6" />
+            </button>
+
+            <div className="flex items-center gap-4 border-b border-slate-100 pb-4 mb-6">
+              <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl">
+                <FilePlus className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-[20px] font-bold text-[#111827] uppercase tracking-tight">Iniciar Monitoramento Manual</h3>
+                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-0.5">Cadastrar acompanhamento de caso</p>
+              </div>
+            </div>
+
+            {modalError && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl flex items-start gap-3 text-[11px] font-bold uppercase tracking-wide">
+                <AlertTriangle className="w-5 h-5 shrink-0 text-red-500" />
+                <span>{modalError}</span>
+              </div>
+            )}
+
+            <div className="overflow-y-auto flex-1 pr-1 space-y-6 scrollbar-thin">
+              {/* Tipo de Inserção: Segmented Control */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-black text-[#4B5563] uppercase tracking-wider">Tipo de Vínculo</label>
+                <div className="grid grid-cols-2 gap-2 bg-[#F3F4F6] p-1.5 rounded-2xl">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInsertType('existing');
+                      setModalError(null);
+                    }}
+                    className={`py-3 text-[11px] font-black uppercase rounded-xl transition-all ${
+                      insertType === 'existing'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    Vincular a Procedimento Existente
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInsertType('new');
+                      setModalError(null);
+                    }}
+                    className={`py-3 text-[11px] font-black uppercase rounded-xl transition-all ${
+                      insertType === 'new'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    Novo Caso Manual
+                  </button>
+                </div>
+              </div>
+
+              {/* Informações Básicas baseadas no Tipo de Vínculo */}
+              {insertType === 'existing' ? (
+                <div className="space-y-2">
+                  <label className="text-[11px] font-black text-[#4B5563] uppercase tracking-wider">Procedimento Existente</label>
+                  <select
+                    value={selectedDocId}
+                    onChange={(e) => {
+                      setSelectedDocId(e.target.value);
+                      setModalError(null);
+                    }}
+                    className="w-full p-4 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase tracking-wide focus:border-blue-500"
+                  >
+                    <option value="">SELECIONAR CASO/PRONTUÁRIO...</option>
+                    {availableDocs.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.crianca_nome} (REF: {d.id}) - MÃE: {d.genitora_nome || 'NÃO INFORMADA'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="space-y-4 border border-slate-100 p-5 rounded-3xl bg-slate-50/50">
+                  <div className="text-[11px] font-black text-slate-800 uppercase tracking-widest border-b pb-2 mb-2 flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-blue-600" /> Identificação do Caso
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-[#4B5563] uppercase tracking-wider">Nome da Criança / Adolescente</label>
+                      <input
+                        type="text"
+                        placeholder="NOME COMPLETO..."
+                        className="w-full p-4 bg-white border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase tracking-wide focus:border-blue-500"
+                        value={newDocData.criancaNome}
+                        onChange={(e) => {
+                          setNewDocData(prev => ({ ...prev, criancaNome: e.target.value }));
+                          setModalError(null);
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-[#4B5563] uppercase tracking-wider">Nome da Mãe / Responsável</label>
+                      <input
+                        type="text"
+                        placeholder="NOME COMPLETO (OPCIONAL)..."
+                        className="w-full p-4 bg-white border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase tracking-wide focus:border-blue-500"
+                        value={newDocData.genitoraNome}
+                        onChange={(e) => {
+                          setNewDocData(prev => ({ ...prev, genitoraNome: e.target.value }));
+                          setModalError(null);
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-[#4B5563] uppercase tracking-wider">Bairro (Hortolândia)</label>
+                    <select
+                      value={newDocData.bairro}
+                      onChange={(e) => {
+                        setNewDocData(prev => ({ ...prev, bairro: e.target.value }));
+                        setModalError(null);
+                      }}
+                      className="w-full p-4 bg-white border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase tracking-wide focus:border-blue-500"
+                    >
+                      <option value="">SELECIONAR BAIRRO...</option>
+                      {BAIRROS.map((b) => (
+                        <option key={b} value={b}>
+                          {b}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Informações da Primeira Requisição de Serviço */}
+              <div className="space-y-4 border border-slate-100 p-5 rounded-3xl bg-blue-50/20">
+                <div className="text-[11px] font-black text-blue-900 uppercase tracking-widest border-b border-blue-100 pb-2 mb-2 flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-blue-600" /> Detalhes do Serviço / Requisição Inicial
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-[#4B5563] uppercase tracking-wider">Área / Serviço Público</label>
+                    <select
+                      className="w-full p-4 bg-white border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase focus:border-blue-500"
+                      value={manualService.area ? `${manualService.area}|${manualService.servico}` : ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (!val) {
+                          setManualService(prev => ({ ...prev, area: '', servico: '' }));
+                          return;
+                        }
+                        const [area, servico] = val.split('|');
+                        setManualService(prev => ({ ...prev, area, servico }));
+                        setModalError(null);
+                      }}
+                    >
+                      <option value="">SELECIONAR ÁREA E SERVIÇO...</option>
+                      <optgroup label="OUTROS">
+                        <option value="OUTROS|OUTROS SERVIÇOS / FORA DA REDE">OUTROS SERVIÇOS / FORA DA REDE</option>
+                      </optgroup>
+                      {Object.entries(REDE_HORTOLANDIA).map(([area, servicos]) => (
+                        <optgroup key={area} label={area}>
+                          {servicos.map(s => (
+                            <option key={s} value={`${area}|${s}`}>{s}</option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  </div>
+
+                  {manualService.servico === 'OUTROS SERVIÇOS / FORA DA REDE' && (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-[#4B5563] uppercase tracking-wider">Nome Customizado do Serviço</label>
+                      <input
+                        type="text"
+                        placeholder="ESPECIFIQUE O SERVIÇO..."
+                        className="w-full p-4 bg-white border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase tracking-wide focus:border-blue-500"
+                        value={manualService.servico_custom || ''}
+                        onChange={(e) => {
+                          setManualService(prev => ({ ...prev, servico_custom: e.target.value }));
+                          setModalError(null);
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-[#4B5563] uppercase tracking-wider">Prazo de Resposta / Retorno</label>
+                    <div className="flex gap-2">
+                      <select
+                        className="flex-1 p-4 bg-white border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase focus:border-blue-500"
+                        value={manualService.prazo}
+                        onChange={(e) => {
+                          setManualService(prev => ({ ...prev, prazo: e.target.value }));
+                          setModalError(null);
+                        }}
+                      >
+                        <option value="24H">24 HORAS (URGENTE)</option>
+                        <option value="48H">48 HORAS</option>
+                        <option value="05 DIAS">05 DIAS</option>
+                        <option value="10 DIAS">10 DIAS</option>
+                        <option value="15 DIAS">15 DIAS</option>
+                        <option value="CUSTOM">PERSONALIZAR...</option>
+                      </select>
+                      {manualService.prazo === 'CUSTOM' && (
+                        <input
+                          type="number"
+                          placeholder="DIAS"
+                          className="w-24 p-4 bg-white border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase focus:border-blue-500"
+                          value={manualService.prazo_custom}
+                          onChange={(e) => {
+                            setManualService(prev => ({ ...prev, prazo_custom: e.target.value }));
+                            setModalError(null);
+                          }}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-[#4B5563] uppercase tracking-wider">Observações Técnicas</label>
+                  <textarea
+                    className="w-full p-4 bg-white border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase min-h-[100px] focus:border-blue-500"
+                    placeholder="DETALHAMENTO DA REQUISIÇÃO..."
+                    value={manualService.observacao}
+                    onChange={(e) => {
+                      setManualService(prev => ({ ...prev, observacao: e.target.value }));
+                      setModalError(null);
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 pt-4 border-t border-slate-100 flex gap-4">
+              <button
+                type="button"
+                onClick={() => setShowInsertManual(false)}
+                className="flex-1 py-4 bg-slate-100 text-[#4B5563] rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-slate-200 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleInsertManualMonitoring}
+                className="flex-1 py-4 bg-[#111827] text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-blue-600 transition-all shadow-md"
+              >
+                Confirmar Cadastro
               </button>
             </div>
           </div>

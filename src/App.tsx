@@ -839,7 +839,9 @@ const App: React.FC = () => {
       }} onRemoveMonitoring={async (id) => {
           addLog(id, `MONITORAMENTO: Acompanhamento de caso encerrado com sucesso.`, 'MONITORAMENTO');
           await deleteDocument(id);
-      }} isReadOnly={isAdministrative} />;
+      }} isReadOnly={isAdministrative && currentUser?.nome !== 'LEANDRO'} onSaveDocument={async (docData) => {
+          await saveDocument(docData);
+      }} />;
       case 'agenda': return <AgendaView agenda={agenda} users={filteredUsers} setAgenda={async (items) => {
           // Find the new entry if it's an array set call
           if (Array.isArray(items)) {
