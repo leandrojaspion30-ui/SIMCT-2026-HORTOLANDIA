@@ -17,12 +17,114 @@ import {
   Users,
   MapPin,
   Activity,
-  FilePlus
+  FilePlus,
+  ChevronDown,
+  Check
 } from 'lucide-react';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Documento, MonitoringInfo, User as UserType, RequisicaoServico, LogType, DocumentStatus } from '../types';
 import { REDE_HORTOLANDIA, BAIRROS } from '../constants';
 import { formatLocalDateString, parseLocalDate } from '../lib/dateUtils';
+
+interface SearchableSelectProps {
+  options: string[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  disabled?: boolean;
+  className?: string;
+}
+
+const SearchableSelect: React.FC<SearchableSelectProps> = ({ options, value, onChange, placeholder, disabled, className }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredOptions = useMemo(() => {
+    return options.filter(opt => opt.toLowerCase().includes(search.toLowerCase()));
+  }, [options, search]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSearch('');
+    }
+  }, [isOpen]);
+
+  return (
+    <div className="relative w-full" ref={containerRef}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setIsOpen(!isOpen)}
+        className={`${className || ''} w-full text-left flex items-center justify-between cursor-pointer`}
+      >
+        <span className={value ? "text-slate-800" : "text-slate-400"}>
+          {value || placeholder}
+        </span>
+        <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-100 max-h-60 flex flex-col">
+          <div className="p-2 border-b border-slate-100 flex items-center gap-2 bg-slate-50">
+            <Search className="w-4 h-4 text-slate-400 shrink-0" />
+            <input
+              type="text"
+              placeholder="PESQUISAR..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full bg-transparent text-[11px] font-bold uppercase text-slate-800 outline-none placeholder:text-slate-400"
+              autoFocus
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="text-[10px] text-slate-400 hover:text-slate-600 font-bold px-1"
+              >
+                LIMPAR
+              </button>
+            )}
+          </div>
+          <div className="overflow-y-auto flex-1">
+            {filteredOptions.length === 0 ? (
+              <div className="p-4 text-[10px] font-bold uppercase text-slate-400 text-center">
+                Nenhum resultado encontrado
+              </div>
+            ) : (
+              filteredOptions.map(opt => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => {
+                    onChange(opt);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full text-left p-3 text-[11px] font-bold uppercase hover:bg-slate-50 transition-colors flex items-center justify-between ${
+                    value === opt ? 'bg-blue-50/50 text-blue-600' : 'text-slate-700'
+                  }`}
+                >
+                  <span>{opt}</span>
+                  {value === opt && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface MonitoringDashboardProps {
   documents: Documento[];
@@ -58,6 +160,7 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
   const [showInsertManual, setShowInsertManual] = useState(false);
   const [insertType, setInsertType] = useState<'existing' | 'new'>('existing');
   const [selectedDocId, setSelectedDocId] = useState<string>('');
+  const [searchDocQuery, setSearchDocQuery] = useState('');
   const [newDocData, setNewDocData] = useState({
     criancaNome: '',
     genitoraNome: '',
@@ -78,6 +181,19 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
       return !isCurrentlyMonitored;
     });
   }, [documents]);
+
+  const filteredAvailableDocs = useMemo(() => {
+    if (!searchDocQuery || searchDocQuery.trim().length < 2) {
+      return [];
+    }
+    const query = searchDocQuery.toUpperCase();
+    return availableDocs.filter(d => {
+      const childMatch = d.crianca_nome && d.crianca_nome.toUpperCase().includes(query);
+      const motherMatch = d.genitora_nome && d.genitora_nome.toUpperCase().includes(query);
+      const idMatch = d.id && d.id.toUpperCase().includes(query);
+      return childMatch || motherMatch || idMatch;
+    });
+  }, [availableDocs, searchDocQuery]);
 
   const filteredMonitoringDocs = useMemo(() => {
     return documents.filter(d => {
@@ -304,6 +420,7 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
     // Reset fields and close
     setShowInsertManual(false);
     setSelectedDocId('');
+    setSearchDocQuery('');
     setNewDocData({ criancaNome: '', genitoraNome: '', bairro: '' });
     setManualService({ area: '', servico: '', prazo: '05 DIAS', prazo_custom: '', servico_custom: '', observacao: '' });
   };
@@ -363,6 +480,7 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
                   onClick={() => {
                     setShowInsertManual(true);
                     setModalError(null);
+                    setSearchDocQuery('');
                   }}
                   className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-sm flex items-center gap-2 text-[11px] font-black uppercase"
                 >
@@ -753,23 +871,58 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
 
               {/* Informações Básicas baseadas no Tipo de Vínculo */}
               {insertType === 'existing' ? (
-                <div className="space-y-2">
-                  <label className="text-[11px] font-black text-[#4B5563] uppercase tracking-wider">Procedimento Existente</label>
-                  <select
-                    value={selectedDocId}
-                    onChange={(e) => {
-                      setSelectedDocId(e.target.value);
-                      setModalError(null);
-                    }}
-                    className="w-full p-4 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase tracking-wide focus:border-blue-500"
-                  >
-                    <option value="">SELECIONAR CASO/PRONTUÁRIO...</option>
-                    {availableDocs.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.crianca_nome} (REF: {d.id}) - MÃE: {d.genitora_nome || 'NÃO INFORMADA'}
-                      </option>
-                    ))}
-                  </select>
+                <div className="space-y-4 border border-slate-100 p-5 rounded-3xl bg-slate-50/50">
+                  <div className="text-[11px] font-black text-[#111827] uppercase tracking-widest border-b pb-2 mb-2 flex items-center gap-1.5">
+                    <Search className="w-3.5 h-3.5 text-blue-600" /> Selecione o Procedimento Encontrado
+                  </div>
+                  
+                  <div className="space-y-4 p-4 bg-white border border-slate-100 rounded-2xl">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-[#4B5563] uppercase tracking-wider">Buscar por Criança ou Genitora</label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="DIGITE O NOME PARA PESQUISAR..."
+                          className="w-full p-4 pl-12 bg-slate-50 border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase tracking-wide focus:border-blue-500 focus:bg-white transition-all"
+                          value={searchDocQuery}
+                          onChange={(e) => {
+                            setSearchDocQuery(e.target.value);
+                            setSelectedDocId('');
+                            setModalError(null);
+                          }}
+                        />
+                        <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-[#4B5563] uppercase tracking-wider">Procedimento Correspondente</label>
+                      <select
+                        value={selectedDocId}
+                        onChange={(e) => {
+                          setSelectedDocId(e.target.value);
+                          setModalError(null);
+                        }}
+                        className="w-full p-4 bg-white border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase tracking-wide focus:border-blue-500"
+                        disabled={searchDocQuery.trim().length < 2}
+                      >
+                        {searchDocQuery.trim().length < 2 ? (
+                          <option value="">DIGITE PELO MENOS 2 CARACTERES ACIMA PARA BUSCAR...</option>
+                        ) : filteredAvailableDocs.length === 0 ? (
+                          <option value="">NENHUM CASO ENCONTRADO PARA "{searchDocQuery.toUpperCase()}"</option>
+                        ) : (
+                          <>
+                            <option value="">SELECIONAR CASO/PRONTUÁRIO ({filteredAvailableDocs.length})...</option>
+                            {filteredAvailableDocs.map((d) => (
+                              <option key={d.id} value={d.id}>
+                                {d.crianca_nome} (REF: {d.id}) - MÃE: {d.genitora_nome || 'NÃO INFORMADA'}
+                              </option>
+                            ))}
+                          </>
+                        )}
+                      </select>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4 border border-slate-100 p-5 rounded-3xl bg-slate-50/50">
@@ -805,22 +958,17 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-[#4B5563] uppercase tracking-wider">Bairro (Hortolândia)</label>
-                    <select
+                    <label className="text-[10px] font-black text-[#4B5563] uppercase tracking-wider">Bairro da Criança *</label>
+                    <SearchableSelect
+                      className="w-full p-4 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl font-bold uppercase text-[11px] tracking-wide focus:border-blue-500"
+                      placeholder="SELECIONE O BAIRRO..."
+                      options={BAIRROS}
                       value={newDocData.bairro}
-                      onChange={(e) => {
-                        setNewDocData(prev => ({ ...prev, bairro: e.target.value }));
+                      onChange={(val) => {
+                        setNewDocData(prev => ({ ...prev, bairro: val }));
                         setModalError(null);
                       }}
-                      className="w-full p-4 bg-white border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase tracking-wide focus:border-blue-500"
-                    >
-                      <option value="">SELECIONAR BAIRRO...</option>
-                      {BAIRROS.map((b) => (
-                        <option key={b} value={b}>
-                          {b}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </div>
                 </div>
               )}
