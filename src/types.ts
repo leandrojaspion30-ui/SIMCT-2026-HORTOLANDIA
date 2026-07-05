@@ -22,6 +22,8 @@ export interface User {
   termo_aceito_em?: string;
   termo_versao?: string;
   deletado_em?: string;
+  current_session_id?: string;
+  last_heartbeat?: string;
 }
 
 export type DocumentStatus = 
@@ -99,11 +101,23 @@ export interface RequisicaoServico {
   excluidoDoMonitoramento?: boolean;
 }
 
+export interface Oficio {
+  id: string;
+  numero: string;
+  numero_comunicado?: string;
+  numero_sipia?: string;
+  prazo: string; // Date string
+  data_emissao: string;
+  concluido?: boolean;
+  excluido?: boolean;
+}
+
 export interface MonitoringInfo {
   concluido: boolean;
   prazoEsperado: string;
   historicoPrazos?: HistoricoPrazo[];
   requisicoes?: RequisicaoServico[];
+  oficios?: Oficio[];
 }
 
 export interface HistoricoMonitoramento {

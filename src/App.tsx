@@ -78,6 +78,7 @@ const App: React.FC = () => {
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 1024);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(localStorage.getItem('simct_session_id'));
 
   useEffect(() => {
     const handleResize = () => {
@@ -231,7 +232,23 @@ const App: React.FC = () => {
     localStorage.setItem('pt_ack_reminders', JSON.stringify(acknowledgedReminderIds));
   }, [acknowledgedEventIds, acknowledgedReminderIds]);
 
-  // Efeito para sincronização/reconhecimento automático em tempo real das alterações de suplência e status no Firestore
+  // Heartbeat Effect: Updates the user's last heartbeat in Firestore every 20 seconds
+  useEffect(() => {
+    if (!currentUser || !currentSessionId) return;
+    
+    const realId = currentUser.real_user_id || currentUser.id;
+    
+    const interval = setInterval(async () => {
+      try {
+        await saveUser({ id: realId, last_heartbeat: new Date().toISOString() });
+      } catch (err) {
+        console.error("Heartbeat failed:", err);
+      }
+    }, 20000); // 20 seconds
+    
+    return () => clearInterval(interval);
+  }, [currentUser, currentSessionId]);
+
   useEffect(() => {
     if (!currentUser) return;
     
@@ -239,6 +256,20 @@ const App: React.FC = () => {
     const freshUser = users.find(u => u.id === realId);
     
     if (freshUser) {
+      // Check for session hijacking/duplicate session
+      if (currentSessionId && freshUser.current_session_id && freshUser.current_session_id !== currentSessionId) {
+        // Double check heartbeat to see if the other session is truly alive
+        const now = Date.now();
+        const lastHB = freshUser.last_heartbeat ? new Date(freshUser.last_heartbeat).getTime() : 0;
+        if (now - lastHB < 60000) { // 1 minute threshold
+           setCurrentUser(null);
+           setCurrentSessionId(null);
+           localStorage.removeItem('simct_session_id');
+           alert("SESSÃO ENCERRADA: Este usuário foi conectado em outro dispositivo ou navegador.");
+           return;
+        }
+      }
+
       const now = new Date().toISOString().split('T')[0];
       
       const shouldDeactivateSubstitutedAccess = 
@@ -432,10 +463,19 @@ const App: React.FC = () => {
     setIsLogoutModalOpen(true);
   };
 
-  const confirmLogout = (savePending: boolean) => {
+  const confirmLogout = async (savePending: boolean) => {
     addLog('SISTEMA', `Efetuou Logoff Seguro (Salvamento de rascunhos pendentes: ${savePending ? 'SIM' : 'NÃO'})`, 'SEGURANÇA');
+    
+    // Clear session in DB if we are the current session
+    if (currentUser) {
+      const realId = currentUser.real_user_id || currentUser.id;
+      await saveUser({ id: realId, current_session_id: undefined });
+    }
+
     setIsLogoutModalOpen(false);
     setCurrentUser(null);
+    setCurrentSessionId(null);
+    localStorage.removeItem('simct_session_id');
     setSelectedDocId(null);
     setEditingDocId(null);
     setForceDirectEdit(false);
@@ -877,7 +917,7 @@ const App: React.FC = () => {
             <img src={CT_LOGO_URL} alt="SIMCT" className="w-16 h-16 mb-4" />
             <h1 className="text-[18px] font-bold uppercase tracking-tight">SIM<span className="text-[#2563EB]">CT</span> Hortolândia</h1>
           </header>
-          <form onSubmit={(e) => { 
+          <form onSubmit={async (e) => { 
             e.preventDefault(); 
             setLoginError(null); 
             const userInput = (selectedUserId || '').trim().toUpperCase();
@@ -910,6 +950,17 @@ const App: React.FC = () => {
               setLoginError("CONTA INATIVA: Este usuário não está mais em exercício."); 
               addLog('SISTEMA', `BLOQUEIO: Usuário inativo [${user.nome}] tentou acessar o sistema.`, 'SEGURANÇA', user);
               return; 
+            }
+
+            // DUPLICATE SESSION CHECK
+            const nowTime = Date.now();
+            const lastHB = user.last_heartbeat ? new Date(user.last_heartbeat).getTime() : 0;
+            const isSessionActive = user.current_session_id && (nowTime - lastHB < 45000); // 45 seconds threshold (more strict)
+            
+            if (isSessionActive) {
+              setLoginError("CONTA EM USO: Este usuário já está conectado em outro local. Aguarde 1 minuto ou encerre a outra sessão.");
+              addLog('SISTEMA', `BLOQUEIO: Tentativa de login duplicado para o usuário [${user.nome}].`, 'SEGURANÇA', user);
+              return;
             }
 
             // Lógica de Substituição/Suplência Generalizada
@@ -947,6 +998,13 @@ const App: React.FC = () => {
               }
             }
             
+            const newSessionId = Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+            setCurrentSessionId(newSessionId);
+            localStorage.setItem('simct_session_id', newSessionId);
+            
+            // Update session in DB immediately
+            await saveUser({ id: user.id, current_session_id: newSessionId, last_heartbeat: new Date().toISOString() });
+
             setCurrentUser(sessionUser); 
             addLog('SISTEMA', `LOGIN: Autenticação realizada com sucesso.`, 'SEGURANÇA', sessionUser);
           }} className="space-y-6">

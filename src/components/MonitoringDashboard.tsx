@@ -22,7 +22,7 @@ import {
   Check
 } from 'lucide-react';
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Documento, MonitoringInfo, User as UserType, RequisicaoServico, LogType, DocumentStatus } from '../types';
+import { Documento, MonitoringInfo, User as UserType, RequisicaoServico, LogType, DocumentStatus, Oficio } from '../types';
 import { REDE_HORTOLANDIA, BAIRROS } from '../constants';
 import { formatLocalDateString, parseLocalDate } from '../lib/dateUtils';
 
@@ -156,6 +156,12 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
   const [showAddService, setShowAddService] = useState<string | null>(null);
   const [newService, setNewService] = useState({ area: '', servico: '', prazo: '05 DIAS', prazo_custom: '', servico_custom: '', observacao: '' });
   const [expiredItem, setExpiredItem] = useState<{ doc: Documento, req: RequisicaoServico } | null>(null);
+  const [showAddOficio, setShowAddOficio] = useState<string | null>(null);
+  const [newOficio, setNewOficio] = useState({ numero: '', numero_comunicado: '', numero_sipia: '', prazo: '' });
+  const [extendingOficio, setExtendingOficio] = useState<{ docId: string, oficio: Oficio } | null>(null);
+  const [expiredOficio, setExpiredOficio] = useState<{ doc: Documento, oficio: Oficio } | null>(null);
+  const [oficioToDelete, setOficioToDelete] = useState<{ docId: string, ofId: string, numero: string } | null>(null);
+  const [reqToDelete, setReqToDelete] = useState<{ docId: string, reqId: string, servico: string } | null>(null);
 
   const [showInsertManual, setShowInsertManual] = useState(false);
   const [insertType, setInsertType] = useState<'existing' | 'new'>('existing');
@@ -252,6 +258,26 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
     setExtForm({ nova_data: '' });
   };
 
+  const handleExtendOficioDeadline = () => {
+    if (!extendingOficio || !extForm.nova_data) return;
+    const doc = documents.find(d => d.id === extendingOficio.docId);
+    if (!doc || !doc.monitoramento) return;
+
+    const oficiosAtualizados = doc.monitoramento.oficios?.map(o => 
+      o.id === extendingOficio.oficio.id ? { ...o, prazo: extForm.nova_data } : o
+    );
+
+    onUpdateMonitoring(extendingOficio.docId, {
+      ...doc.monitoramento,
+      oficios: oficiosAtualizados
+    });
+
+    onAddLog(extendingOficio.docId, `MONITORAMENTO: Prazo do ofício [${extendingOficio.oficio.numero}] alterado.`, 'MONITORAMENTO');
+
+    setExtendingOficio(null);
+    setExtForm({ nova_data: '' });
+  };
+
   const handleRemoveRequisicao = (docId: string, reqId: string) => {
     const doc = documents.find(d => d.id === docId);
     if (!doc || !doc.monitoramento) return;
@@ -266,6 +292,22 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
     });
 
     onAddLog(docId, `MONITORAMENTO: Item de requisição removido.`, 'MONITORAMENTO');
+  };
+
+  const handleRemoveOficio = (docId: string, oficioId: string) => {
+    const doc = documents.find(d => d.id === docId);
+    if (!doc || !doc.monitoramento) return;
+
+    const oficiosAtualizados = doc.monitoramento.oficios?.map(o => 
+      o.id === oficioId ? { ...o, excluido: true } : o
+    );
+
+    onUpdateMonitoring(docId, {
+      ...doc.monitoramento,
+      oficios: oficiosAtualizados
+    });
+
+    onAddLog(docId, `MONITORAMENTO: Ofício removido.`, 'MONITORAMENTO');
   };
 
   const handleAddService = (docId: string) => {
@@ -305,6 +347,32 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
     onAddLog(docId, `MONITORAMENTO: Novo serviço [${newService.servico}] adicionado para acompanhamento.`, 'MONITORAMENTO');
     setShowAddService(null);
     setNewService({ area: '', servico: '', prazo: '05 DIAS', prazo_custom: '', servico_custom: '', observacao: '' });
+  };
+
+  const handleAddOficio = (docId: string) => {
+    const doc = documents.find(d => d.id === docId);
+    if (!doc || !newOficio.numero || !newOficio.prazo) return;
+
+    const of: Oficio = {
+      id: `of-${Date.now()}`,
+      numero: newOficio.numero,
+      numero_comunicado: newOficio.numero_comunicado || undefined,
+      numero_sipia: newOficio.numero_sipia || undefined,
+      prazo: newOficio.prazo,
+      data_emissao: new Date().toISOString(),
+      concluido: false
+    };
+
+    const currentMonitoring = doc.monitoramento || { concluido: false, prazoEsperado: newOficio.prazo, requisicoes: [] };
+    
+    onUpdateMonitoring(docId, {
+      ...currentMonitoring,
+      oficios: [...(currentMonitoring.oficios || []), of]
+    });
+
+    onAddLog(docId, `MONITORAMENTO: Novo ofício [${newOficio.numero}] adicionado para acompanhamento.`, 'MONITORAMENTO');
+    setShowAddOficio(null);
+    setNewOficio({ numero: '', numero_comunicado: '', numero_sipia: '', prazo: '' });
   };
 
   const [modalError, setModalError] = useState<string | null>(null);
@@ -431,16 +499,30 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
     today.setHours(0,0,0,0);
 
     for (const doc of filteredMonitoringDocs) {
-      const expired = doc.monitoramento?.requisicoes?.find(r => {
+      // Check requisitions
+      const expiredReq = doc.monitoramento?.requisicoes?.find(r => {
         if (r.excluidoDoMonitoramento || r.concluido) return false;
         const deadline = parseLocalDate(r.dataFinal);
         deadline.setHours(0,0,0,0);
         return deadline.getTime() < today.getTime();
       });
 
-      if (expired) {
-        setExpiredItem({ doc, req: expired });
+      if (expiredReq) {
+        setExpiredItem({ doc, req: expiredReq });
         break; // Show one at a time
+      }
+
+      // Check ofícios
+      const expiredOf = doc.monitoramento?.oficios?.find(o => {
+        if (o.excluido || o.concluido) return false;
+        const deadline = parseLocalDate(o.prazo);
+        deadline.setHours(0,0,0,0);
+        return deadline.getTime() < today.getTime();
+      });
+
+      if (expiredOf) {
+        setExpiredOficio({ doc, oficio: expiredOf });
+        break;
       }
     }
   }, [filteredMonitoringDocs]);
@@ -506,13 +588,19 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
               {filteredMonitoringDocs.map(doc => {
                 const monitoring = doc.monitoramento!;
                 const activeRequisicoes = (monitoring.requisicoes || []).filter(r => !r.excluidoDoMonitoramento);
+                const activeOficios = (monitoring.oficios || []).filter(o => !o.excluido);
                 const isHidden = collapsedDocs.has(doc.id);
                 
-                const closestDeadline = activeRequisicoes.length > 0 
-                  ? activeRequisicoes.reduce((min, r) => r.dataFinal < min ? r.dataFinal : min, activeRequisicoes[0].dataFinal)
+                const deadlines = [
+                  ...activeRequisicoes.map(r => r.dataFinal),
+                  ...activeOficios.map(o => o.prazo)
+                ];
+
+                const closestDeadline = deadlines.length > 0 
+                  ? deadlines.reduce((min, p) => p < min ? p : min)
                   : monitoring.prazoEsperado;
 
-                const style = getStatusStyle(closestDeadline, activeRequisicoes.length > 0);
+                const style = getStatusStyle(closestDeadline, (activeRequisicoes.length + activeOficios.length) > 0);
 
                 return (
                   <tr key={doc.id} className="hover:bg-slate-50 transition-all group">
@@ -531,27 +619,59 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
                           {isHidden ? <><Eye className="w-3.5 h-3.5" /> Ver Detalhes</> : <><EyeOff className="w-3.5 h-3.5" /> Ocultar</>}
                         </button>
                         {!isHidden && (
-                          <div className="space-y-2 animate-in fade-in slide-in-from-top-1">
-                            {activeRequisicoes.map((req) => {
-                              const reqStyle = getStatusStyle(req.dataFinal);
-                              return (
-                                <div key={req.id} className={`p-3 rounded-xl border flex flex-col gap-1 ${reqStyle.bg}`}>
-                                  <div className="flex justify-between items-start">
-                                    <div>
-                                      <div className="text-[9px] font-black uppercase opacity-60">{req.area}</div>
-                                      <div className="text-[11px] font-bold uppercase">{req.servico}</div>
+                          <div className="space-y-4 animate-in fade-in slide-in-from-top-1">
+                            {activeRequisicoes.length > 0 && (
+                              <div className="space-y-2">
+                                <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b pb-1">Requisições de Serviço</div>
+                                {activeRequisicoes.map((req) => {
+                                  const reqStyle = getStatusStyle(req.dataFinal);
+                                  return (
+                                    <div key={req.id} className={`p-3 rounded-xl border flex flex-col gap-1 ${reqStyle.bg}`}>
+                                      <div className="flex justify-between items-start">
+                                        <div>
+                                          <div className="text-[9px] font-black uppercase opacity-60">{req.area}</div>
+                                          <div className="text-[11px] font-bold uppercase">{req.servico}</div>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <button onClick={() => { setExtendingReq({ docId: doc.id, req }); setExtForm({ nova_data: req.dataFinal }); }} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg"><Timer className="w-3.5 h-3.5" /></button>
+                                          <button onClick={() => setReqToDelete({ docId: doc.id, reqId: req.id, servico: req.servico })} className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                                        </div>
+                                      </div>
+                                      <span className="text-[9px] font-black uppercase flex items-center gap-1 mt-1 border-t border-black/5 pt-1">
+                                          <Calendar className="w-2.5 h-2.5" /> Prazo: {formatLocalDateString(req.dataFinal)}
+                                      </span>
                                     </div>
-                                    <div className="flex items-center gap-1">
-                                      <button onClick={() => { setExtendingReq({ docId: doc.id, req }); setExtForm({ nova_data: req.dataFinal }); }} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg"><Timer className="w-3.5 h-3.5" /></button>
-                                      <button onClick={() => handleRemoveRequisicao(doc.id, req.id)} className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {activeOficios.length > 0 && (
+                              <div className="space-y-2">
+                                <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b pb-1">Ofícios Expedidos</div>
+                                {activeOficios.map((of) => {
+                                  const ofStyle = getStatusStyle(of.prazo);
+                                  return (
+                                    <div key={of.id} className={`p-3 rounded-xl border flex flex-col gap-1 ${ofStyle.bg}`}>
+                                      <div className="flex justify-between items-start">
+                                        <div>
+                                          <div className="text-[11px] font-bold uppercase">Ofício Nº: {of.numero}</div>
+                                          {of.numero_comunicado && <div className="text-[9px] font-black uppercase text-slate-500 mt-0.5">Com. Violação Nº: {of.numero_comunicado}</div>}
+                                          {of.numero_sipia && <div className="text-[9px] font-black uppercase text-slate-500">Proc. / SIPIA Nº: {of.numero_sipia}</div>}
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <button onClick={() => { setExtendingOficio({ docId: doc.id, oficio: of }); setExtForm({ nova_data: of.prazo }); }} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg"><Timer className="w-3.5 h-3.5" /></button>
+                                          <button onClick={() => setOficioToDelete({ docId: doc.id, ofId: of.id, numero: of.numero })} className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                                        </div>
+                                      </div>
+                                      <span className="text-[9px] font-black uppercase flex items-center gap-1 mt-1 border-t border-black/5 pt-1">
+                                          <Calendar className="w-2.5 h-2.5" /> Resposta em: {formatLocalDateString(of.prazo)}
+                                      </span>
                                     </div>
-                                  </div>
-                                  <span className="text-[9px] font-black uppercase flex items-center gap-1 mt-1 border-t border-black/5 pt-1">
-                                      <Calendar className="w-2.5 h-2.5" /> Prazo: {formatLocalDateString(req.dataFinal)}
-                                  </span>
-                                </div>
-                              );
-                            })}
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -559,12 +679,20 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
                     <td className="px-8 py-6 text-right">
                       <div className="flex items-center justify-end gap-2">
                         {!isReadOnly && (
-                          <button 
-                            onClick={() => setShowAddService(doc.id)}
-                            className="p-2.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all shadow-sm flex items-center gap-2 text-[10px] font-black uppercase"
-                          >
-                            <Plus className="w-4 h-4" /> Add Serviço
-                          </button>
+                          <div className="flex flex-col gap-1.5">
+                            <button 
+                              onClick={() => setShowAddService(doc.id)}
+                              className="p-2.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all shadow-sm flex items-center gap-2 text-[10px] font-black uppercase"
+                            >
+                              <Plus className="w-4 h-4" /> Add Serviço
+                            </button>
+                            <button 
+                              onClick={() => setShowAddOficio(doc.id)}
+                              className="p-2.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-600 hover:text-white transition-all shadow-sm flex items-center gap-2 text-[10px] font-black uppercase"
+                            >
+                              <FilePlus className="w-4 h-4" /> Add Ofício
+                            </button>
+                          </div>
                         )}
                         <button onClick={() => onSelectDoc(doc.id)} className="p-2.5 bg-[#111827] text-white rounded-lg hover:bg-[#2563EB] transition-all shadow-sm"><FileText className="w-4 h-4" /></button>
                         {!isReadOnly && <button onClick={() => setDocToConfirmDelete(doc)} className="p-2.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all shadow-sm"><CheckCircle2 className="w-4 h-4" /></button>}
@@ -582,13 +710,19 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
           {filteredMonitoringDocs.map(doc => {
             const monitoring = doc.monitoramento!;
             const activeRequisicoes = (monitoring.requisicoes || []).filter(r => !r.excluidoDoMonitoramento);
+            const activeOficios = (monitoring.oficios || []).filter(o => !o.excluido);
             const isHidden = collapsedDocs.has(doc.id);
             
-            const closestDeadline = activeRequisicoes.length > 0 
-              ? activeRequisicoes.reduce((min, r) => r.dataFinal < min ? r.dataFinal : min, activeRequisicoes[0].dataFinal)
+            const deadlines = [
+              ...activeRequisicoes.map(r => r.dataFinal),
+              ...activeOficios.map(o => o.prazo)
+            ];
+
+            const closestDeadline = deadlines.length > 0 
+              ? deadlines.reduce((min, p) => p < min ? p : min)
               : monitoring.prazoEsperado;
 
-            const style = getStatusStyle(closestDeadline, activeRequisicoes.length > 0);
+            const style = getStatusStyle(closestDeadline, (activeRequisicoes.length + activeOficios.length) > 0);
 
             return (
               <div key={doc.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-4">
@@ -604,54 +738,94 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
 
                 <div className="flex flex-col gap-3">
                   <button onClick={() => toggleVisibility(doc.id)} className="flex items-center gap-2 text-[10px] font-black text-[#2563EB] uppercase w-fit">
-                    {isHidden ? <><Eye className="w-3.5 h-3.5" /> Ver Requisições ({activeRequisicoes.length})</> : <><EyeOff className="w-3.5 h-3.5" /> Ocultar Requisições</>}
+                    {isHidden ? <><Eye className="w-3.5 h-3.5" /> Ver Detalhes ({activeRequisicoes.length + activeOficios.length})</> : <><EyeOff className="w-3.5 h-3.5" /> Ocultar Detalhes</>}
                   </button>
                   
-                  {!isHidden && activeRequisicoes.length > 0 && (
-                    <div className="space-y-2 pt-2 border-t border-slate-100">
-                      {activeRequisicoes.map((req) => {
-                        const reqStyle = getStatusStyle(req.dataFinal);
-                        return (
-                          <div key={req.id} className={`p-3 rounded-xl border flex flex-col gap-2 ${reqStyle.bg}`}>
-                            <div className="flex justify-between items-start gap-2">
-                              <div className="min-w-0 flex-1">
-                                <div className="text-[8px] font-black uppercase opacity-60 truncate">{req.area}</div>
-                                <div className="text-[10px] font-bold uppercase truncate leading-tight">{req.servico}</div>
+                  {!isHidden && (
+                    <div className="space-y-4 pt-2 border-t border-slate-100">
+                      {activeRequisicoes.length > 0 && (
+                        <div className="space-y-2">
+                           <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Serviços</div>
+                           {activeRequisicoes.map((req) => {
+                            const reqStyle = getStatusStyle(req.dataFinal);
+                            return (
+                              <div key={req.id} className={`p-3 rounded-xl border flex flex-col gap-2 ${reqStyle.bg}`}>
+                                <div className="flex justify-between items-start gap-2">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-[8px] font-black uppercase opacity-60 truncate">{req.area}</div>
+                                    <div className="text-[10px] font-bold uppercase truncate leading-tight">{req.servico}</div>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button onClick={() => { setExtendingReq({ docId: doc.id, req }); setExtForm({ nova_data: req.dataFinal }); }} className="p-2 text-blue-600 bg-white/50 rounded-lg"><Timer className="w-3.5 h-3.5" /></button>
+                                    <button onClick={() => setReqToDelete({ docId: doc.id, reqId: req.id, servico: req.servico })} className="p-2 text-red-600 bg-white/50 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                                  </div>
+                                </div>
+                                <span className="text-[8px] font-black uppercase flex items-center gap-1 mt-1 border-t border-black/5 pt-1">
+                                    <Calendar className="w-2.5 h-2.5" /> Vence em: {formatLocalDateString(req.dataFinal)}
+                                </span>
                               </div>
-                              <div className="flex items-center gap-1 shrink-0">
-                                <button onClick={() => { setExtendingReq({ docId: doc.id, req }); setExtForm({ nova_data: req.dataFinal }); }} className="p-2 text-blue-600 bg-white/50 rounded-lg"><Timer className="w-3.5 h-3.5" /></button>
-                                <button onClick={() => handleRemoveRequisicao(doc.id, req.id)} className="p-2 text-red-600 bg-white/50 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                            );
+                           })}
+                        </div>
+                      )}
+
+                      {activeOficios.length > 0 && (
+                        <div className="space-y-2">
+                           <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Ofícios</div>
+                           {activeOficios.map((of) => {
+                            const ofStyle = getStatusStyle(of.prazo);
+                            return (
+                              <div key={of.id} className={`p-3 rounded-xl border flex flex-col gap-2 ${ofStyle.bg}`}>
+                                <div className="flex justify-between items-start gap-2">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-[10px] font-bold uppercase truncate leading-tight">Nº {of.numero}</div>
+                                    {of.numero_comunicado && <div className="text-[8px] font-black uppercase text-slate-500 mt-0.5 truncate">Com. Nº: {of.numero_comunicado}</div>}
+                                    {of.numero_sipia && <div className="text-[8px] font-black uppercase text-slate-500 truncate">SIPIA: {of.numero_sipia}</div>}
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button onClick={() => { setExtendingOficio({ docId: doc.id, oficio: of }); setExtForm({ nova_data: of.prazo }); }} className="p-2 text-blue-600 bg-white/50 rounded-lg"><Timer className="w-3.5 h-3.5" /></button>
+                                    <button onClick={() => setOficioToDelete({ docId: doc.id, ofId: of.id, numero: of.numero })} className="p-2 text-red-600 bg-white/50 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                                  </div>
+                                </div>
+                                <span className="text-[8px] font-black uppercase flex items-center gap-1 mt-1 border-t border-black/5 pt-1">
+                                    <Calendar className="w-2.5 h-2.5" /> Resposta: {formatLocalDateString(of.prazo)}
+                                </span>
                               </div>
-                            </div>
-                            <span className="text-[8px] font-black uppercase flex items-center gap-1 mt-1 border-t border-black/5 pt-1">
-                                <Calendar className="w-2.5 h-2.5" /> Vence em: {formatLocalDateString(req.dataFinal)}
-                            </span>
-                          </div>
-                        );
-                      })}
+                            );
+                           })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-slate-100">
-                  <div className="grid grid-cols-2 gap-2 flex-1">
-                    {!isReadOnly && (
+                <div className="flex flex-col gap-2 pt-2 border-t border-slate-100">
+                  {!isReadOnly && (
+                    <div className="grid grid-cols-2 gap-2">
                       <button 
                         onClick={() => setShowAddService(doc.id)}
                         className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm flex items-center justify-center gap-2 text-[9px] font-black uppercase"
                       >
                         <Plus className="w-3.5 h-3.5" /> Serviço
                       </button>
-                    )}
+                      <button 
+                        onClick={() => setShowAddOficio(doc.id)}
+                        className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm flex items-center justify-center gap-2 text-[9px] font-black uppercase"
+                      >
+                        <FilePlus className="w-3.5 h-3.5" /> Ofício
+                      </button>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
                     <button onClick={() => onSelectDoc(doc.id)} className="p-3 bg-slate-900 text-white rounded-xl flex items-center justify-center gap-2 text-[9px] font-black uppercase">
                       <FileText className="w-3.5 h-3.5" /> Prontuário
                     </button>
+                    {!isReadOnly && (
+                      <button onClick={() => setDocToConfirmDelete(doc)} className="p-3 bg-red-50 text-red-600 rounded-xl flex items-center justify-center gap-2 text-[9px] font-black uppercase">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Concluir
+                      </button>
+                    )}
                   </div>
-                  {!isReadOnly && (
-                    <button onClick={() => setDocToConfirmDelete(doc)} className="w-full p-3 bg-red-50 text-red-600 rounded-xl flex items-center justify-center gap-2 text-[9px] font-black uppercase">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Concluir
-                    </button>
-                  )}
                 </div>
               </div>
             );
@@ -660,8 +834,8 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
       </section>
 
       {docToConfirmDelete && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 backdrop-blur-md bg-slate-900/60 animate-in fade-in">
-           <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-lg w-full p-10 border border-[#E5E7EB] animate-in zoom-in-95">
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/60 overflow-y-auto animate-in fade-in">
+           <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-lg w-full p-8 md:p-10 border border-[#E5E7EB] animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
               <div className="text-center space-y-6">
                  <AlertTriangle className="w-16 h-16 text-red-600 mx-auto" />
                  <h3 className="text-[20px] font-bold text-[#111827] uppercase">Encerrar Monitoramento?</h3>
@@ -675,11 +849,53 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
         </div>
       )}
 
+      {oficioToDelete && (
+        <div id="delete-oficio-modal" className="fixed inset-0 z-[300] flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/60 overflow-y-auto animate-in fade-in">
+           <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-lg w-full p-8 md:p-10 border border-[#E5E7EB] animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+              <div className="text-center space-y-6">
+                 <AlertTriangle className="w-16 h-16 text-red-600 mx-auto" />
+                 <h3 className="text-[20px] font-bold text-[#111827] uppercase">Excluir Ofício / Documento?</h3>
+                 <p className="text-[12px] text-[#4B5563] font-medium uppercase leading-relaxed">
+                   Você tem certeza que deseja excluir o ofício número <span className="font-bold text-red-600">[{oficioToDelete.numero}]</span>? Esta ação não pode ser desfeita.
+                 </p>
+                 <div className="grid grid-cols-2 gap-4">
+                    <button onClick={() => setOficioToDelete(null)} className="py-4 bg-slate-100 text-[#4B5563] rounded-2xl font-black uppercase text-[11px]">Cancelar</button>
+                    <button onClick={() => {
+                      handleRemoveOficio(oficioToDelete.docId, oficioToDelete.ofId);
+                      setOficioToDelete(null);
+                    }} className="py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-[11px]">Confirmar Exclusão</button>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {reqToDelete && (
+        <div id="delete-requisicao-modal" className="fixed inset-0 z-[300] flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/60 overflow-y-auto animate-in fade-in">
+           <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-lg w-full p-8 md:p-10 border border-[#E5E7EB] animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+              <div className="text-center space-y-6">
+                 <AlertTriangle className="w-16 h-16 text-red-600 mx-auto" />
+                 <h3 className="text-[20px] font-bold text-[#111827] uppercase">Excluir Item de Requisição?</h3>
+                 <p className="text-[12px] text-[#4B5563] font-medium uppercase leading-relaxed">
+                   Você tem certeza que deseja excluir o serviço <span className="font-bold text-red-600">[{reqToDelete.servico}]</span> do monitoramento? Esta ação não pode ser desfeita.
+                 </p>
+                 <div className="grid grid-cols-2 gap-4">
+                    <button onClick={() => setReqToDelete(null)} className="py-4 bg-slate-100 text-[#4B5563] rounded-2xl font-black uppercase text-[11px]">Cancelar</button>
+                    <button onClick={() => {
+                      handleRemoveRequisicao(reqToDelete.docId, reqToDelete.reqId);
+                      setReqToDelete(null);
+                    }} className="py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-[11px]">Confirmar Exclusão</button>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+
       {extendingReq && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 backdrop-blur-md bg-slate-900/40 animate-in fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-10 border border-[#E5E7EB] animate-in zoom-in-95 space-y-8 relative">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/40 overflow-y-auto animate-in fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-8 md:p-10 border border-[#E5E7EB] animate-in zoom-in-95 space-y-6 relative max-h-[90vh] overflow-y-auto">
             <button onClick={() => setExtendingReq(null)} className="absolute top-6 right-6 p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-all"><X className="w-6 h-6" /></button>
-            <h3 className="text-[20px] font-bold text-[#111827] uppercase">Alterar Prazo</h3>
+            <h3 className="text-[20px] font-bold text-[#111827] uppercase">Alterar Prazo de Requisição</h3>
             <div className="space-y-6">
                <div className="space-y-2">
                   <label className="text-[11px] font-black text-[#4B5563] uppercase">Nova Data Limite</label>
@@ -691,9 +907,25 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
         </div>
       )}
 
+      {extendingOficio && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/40 overflow-y-auto animate-in fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-8 md:p-10 border border-[#E5E7EB] animate-in zoom-in-95 space-y-6 relative max-h-[90vh] overflow-y-auto">
+            <button onClick={() => setExtendingOficio(null)} className="absolute top-6 right-6 p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-all"><X className="w-6 h-6" /></button>
+            <h3 className="text-[20px] font-bold text-[#111827] uppercase">Prorrogar Prazo do Ofício</h3>
+            <div className="space-y-6">
+               <div className="space-y-2">
+                  <label className="text-[11px] font-black text-[#4B5563] uppercase">Nova Data de Resposta Esperada</label>
+                  <input type="date" className="w-full p-4 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl outline-none font-bold" value={extForm.nova_data} onChange={e => setExtForm({ nova_data: e.target.value })} />
+               </div>
+            </div>
+            <button onClick={handleExtendOficioDeadline} className="w-full py-5 bg-[#111827] text-white rounded-2xl font-black uppercase text-[13px] hover:bg-[#2563EB] transition-all">Prorrogar Prazo</button>
+          </div>
+        </div>
+      )}
+
       {showAddService && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 backdrop-blur-md bg-slate-900/40 animate-in fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-10 border border-[#E5E7EB] animate-in zoom-in-95 space-y-8 relative">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-6 backdrop-blur-md bg-slate-900/40 overflow-y-auto animate-in fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 md:p-10 border border-[#E5E7EB] animate-in zoom-in-95 relative max-h-[90vh] overflow-y-auto space-y-6">
             <button onClick={() => setShowAddService(null)} className="absolute top-6 right-6 p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-all"><X className="w-6 h-6" /></button>
             <h3 className="text-[20px] font-bold text-[#111827] uppercase">Adicionar Novo Serviço</h3>
             <div className="space-y-6">
@@ -767,15 +999,70 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
                   />
                </div>
             </div>
-            <button onClick={() => handleAddService(showAddService)} className="w-full py-5 bg-[#111827] text-white rounded-2xl font-black uppercase text-[13px] hover:bg-[#2563EB] transition-all">Adicionar ao Monitoramento</button>
+            <button onClick={() => handleAddService(showAddService)} className="w-full py-5 bg-[#111827] text-white rounded-2xl font-black uppercase text-[13px] hover:bg-[#2563EB] transition-all shrink-0">Adicionar ao Monitoramento</button>
+          </div>
+        </div>
+      )}
+
+      {showAddOficio && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-6 backdrop-blur-md bg-slate-900/40 overflow-y-auto animate-in fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full p-6 md:p-10 border border-[#E5E7EB] animate-in zoom-in-95 relative max-h-[90vh] overflow-y-auto space-y-6">
+            <button onClick={() => setShowAddOficio(null)} className="absolute top-6 right-6 p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-all"><X className="w-6 h-6" /></button>
+            <h3 className="text-[20px] font-bold text-[#111827] uppercase">Expedir Novo Ofício</h3>
+            <div className="space-y-6">
+               <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-black text-[#4B5563] uppercase">Nº Ofício / Documento</label>
+                      <input 
+                        type="text"
+                        placeholder="Nº OFÍCIO / DOCUMENTO"
+                        className="w-full p-4 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase"
+                        value={newOficio.numero}
+                        onChange={(e) => setNewOficio(prev => ({ ...prev, numero: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-black text-[#4B5563] uppercase">Nº Com. de Violação</label>
+                      <input 
+                        type="text"
+                        placeholder="Nº COMUNICADO"
+                        className="w-full p-4 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase"
+                        value={newOficio.numero_comunicado || ''}
+                        onChange={(e) => setNewOficio(prev => ({ ...prev, numero_comunicado: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-black text-[#4B5563] uppercase">Nº Procedimento / SIPIA</label>
+                      <input 
+                        type="text"
+                        placeholder="Nº SIPIA"
+                        className="w-full p-4 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase"
+                        value={newOficio.numero_sipia || ''}
+                        onChange={(e) => setNewOficio(prev => ({ ...prev, numero_sipia: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-black text-[#4B5563] uppercase">Prazo de Resposta</label>
+                    <input 
+                      type="date"
+                      className="w-full p-4 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl outline-none font-bold"
+                      value={newOficio.prazo}
+                      onChange={(e) => setNewOficio(prev => ({ ...prev, prazo: e.target.value }))}
+                    />
+                  </div>
+               </div>
+            </div>
+            <button onClick={() => handleAddOficio(showAddOficio)} className="w-full py-5 bg-[#111827] text-white rounded-2xl font-black uppercase text-[13px] hover:bg-[#2563EB] transition-all shrink-0">Registrar Ofício</button>
           </div>
         </div>
       )}
 
       {/* MODAL DE ALERTA DE PRAZO VENCIDO OBRIGATÓRIO */}
       {expiredItem && (
-        <div className="fixed inset-0 z-[500] flex items-center justify-center p-6 backdrop-blur-xl bg-red-900/40 animate-in fade-in">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-xl w-full p-12 border-4 border-red-600 animate-in zoom-in-95 space-y-8 text-center">
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 backdrop-blur-xl bg-red-900/40 overflow-y-auto animate-in fade-in">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-xl w-full p-8 md:p-12 border-4 border-red-600 animate-in zoom-in-95 space-y-6 text-center max-h-[90vh] overflow-y-auto">
             <div className="mx-auto w-24 h-24 bg-red-100 rounded-full flex items-center justify-center animate-bounce">
               <AlertTriangle className="w-12 h-12 text-red-600" />
             </div>
@@ -800,6 +1087,46 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
                 className="py-5 bg-red-600 text-white rounded-2xl font-black uppercase text-[12px] hover:bg-red-700 transition-all shadow-lg flex items-center justify-center gap-2"
               >
                 <Trash2 className="w-5 h-5" /> Encerrar Monitoramento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {expiredOficio && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 backdrop-blur-xl bg-red-900/40 overflow-y-auto animate-in fade-in">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-xl w-full p-8 md:p-12 border-4 border-red-600 animate-in zoom-in-95 space-y-6 text-center max-h-[90vh] overflow-y-auto">
+            <div className="mx-auto w-24 h-24 bg-red-100 rounded-full flex items-center justify-center animate-bounce">
+              <AlertTriangle className="w-12 h-12 text-red-600" />
+            </div>
+            <div className="space-y-4">
+              <h3 className="text-[24px] font-black text-red-600 uppercase tracking-tighter">Resposta de Ofício Vencida!</h3>
+              <p className="text-[14px] text-slate-600 font-bold uppercase leading-relaxed">
+                O prazo para resposta do Ofício <span className="text-red-600">[{expiredOficio.oficio.numero}]</span> para a criança <span className="text-red-600">[{expiredOficio.doc.crianca_nome}]</span> venceu em {formatLocalDateString(expiredOficio.oficio.prazo)}.
+              </p>
+              <p className="text-[12px] text-slate-400 font-bold uppercase">
+                Você deve prorrogar o prazo ou excluir este ofício do monitoramento para prosseguir.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+              <button 
+                onClick={() => { setExtendingOficio({ docId: expiredOficio.doc.id, oficio: expiredOficio.oficio }); setExtForm({ nova_data: expiredOficio.oficio.prazo }); setExpiredOficio(null); }}
+                className="py-5 bg-blue-600 text-white rounded-2xl font-black uppercase text-[12px] hover:bg-blue-700 transition-all shadow-lg flex items-center justify-center gap-2"
+              >
+                <Timer className="w-5 h-5" /> Prorrogar Prazo
+              </button>
+              <button 
+                onClick={() => { 
+                  setOficioToDelete({ 
+                    docId: expiredOficio.doc.id, 
+                    ofId: expiredOficio.oficio.id, 
+                    numero: expiredOficio.oficio.numero 
+                  }); 
+                  setExpiredOficio(null); 
+                }}
+                className="py-5 bg-red-600 text-white rounded-2xl font-black uppercase text-[12px] hover:bg-red-700 transition-all shadow-lg flex items-center justify-center gap-2"
+              >
+                <Trash2 className="w-5 h-5" /> Excluir Ofício
               </button>
             </div>
           </div>
