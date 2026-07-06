@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, ArrowLeft, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart, Timer, Save, Eye, EyeOff } from 'lucide-react';
+import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, ArrowLeft, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart, Timer, Save, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada } from './types';
 import { INITIAL_USERS, UserWithPassword, INITIAL_AGENDA } from './constants';
 import { db, ensureAuthenticated } from './lib/firebase';
@@ -71,7 +71,26 @@ const NavItem: React.FC<{ icon: React.ReactNode; label: string; active: boolean;
 
 const App: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem('simct_current_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (currentUser) {
+        localStorage.setItem('simct_current_user', JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem('simct_current_user');
+      }
+    } catch (err) {
+      console.error('Failed to persist user session:', err);
+    }
+  }, [currentUser]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'register' | 'my-docs' | 'monitoring' | 'logs' | 'search' | 'settings' | 'agenda' | 'statistics' | 'edit' | 'user-management' | 'plantao' | 'global-statistics' | 'distribution-test'>('dashboard');
   const [users, setUsers] = useState<UserWithPassword[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
@@ -1081,7 +1100,8 @@ const App: React.FC = () => {
           <NavItem icon={<Activity className="w-5 h-5" />} label="Diagnóstico de Distribuição" active={activeTab === 'distribution-test'} onClick={() => { handleNavigate('distribution-test'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
           {isSuperAdmin && <NavItem icon={<PieChart className="w-5 h-5" />} label="Relatórios das Unidades" active={activeTab === 'global-statistics'} onClick={() => { handleNavigate('global-statistics'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />}
         </nav>
-        <div className="p-4 border-t border-white/5">
+        <div className="p-4 border-t border-white/5 space-y-2">
+          <NavItem icon={<RefreshCw className="w-5 h-5 animate-pulse" />} label="Atualizar" active={false} onClick={() => window.location.reload()} collapsed={!isSidebarOpen && windowWidth >= 1024} />
           <NavItem icon={<LogOut className="w-5 h-5" />} label="Sair" active={false} onClick={handleLogout} collapsed={!isSidebarOpen && windowWidth >= 1024} danger />
         </div>
       </aside>
@@ -1107,13 +1127,23 @@ const App: React.FC = () => {
                 </div>
               </div>
             </div>
-            <button 
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
-              className="p-3 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm hover:bg-slate-50 transition-all shrink-0"
-              title={isSidebarOpen ? "Fechar Menu" : "Abrir Menu"}
-            >
-              {isSidebarOpen ? <X className="w-5 h-5 text-slate-600" /> : <LayoutDashboard className="w-5 h-5 text-blue-600" />}
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button 
+                onClick={() => window.location.reload()} 
+                className="flex items-center gap-2 p-3 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm hover:bg-slate-50 text-[#2563EB] font-bold text-[12px] uppercase shrink-0 transition-all hover:border-[#2563EB]/40 active:scale-95"
+                title="Atualizar Página"
+              >
+                <RefreshCw className="w-5 h-5 text-[#2563EB] transition-transform duration-500 hover:rotate-180" />
+                <span className="hidden sm:inline text-slate-700">Atualizar</span>
+              </button>
+              <button 
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
+                className="p-3 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm hover:bg-slate-50 transition-all shrink-0"
+                title={isSidebarOpen ? "Fechar Menu" : "Abrir Menu"}
+              >
+                {isSidebarOpen ? <X className="w-5 h-5 text-slate-600" /> : <LayoutDashboard className="w-5 h-5 text-blue-600" />}
+              </button>
+            </div>
           </header>
           {renderContent()}
         </div>
