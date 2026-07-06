@@ -750,7 +750,7 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                     <div className="w-full space-y-4">
                       <button 
                         onClick={() => {
-                          if (setActiveTab) setActiveTab('documentos');
+                          if (setActiveTab) setActiveTab('dashboard');
                           setPermanentReplaceId(null);
                           setReplaceSuccess(null);
                         }}

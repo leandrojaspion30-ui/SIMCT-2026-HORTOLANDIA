@@ -93,9 +93,33 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     setNumeroSipia(doc.numero_sipia || '');
   }, [doc.id, doc.informacoes_documento, doc.numero_comunicado_violacao, doc.numero_sipia]);
 
-  const isResponsible = doc.conselheiro_providencia_id === currentUser.id || 
-    doc.conselheiro_referencia_id === currentUser.id;
-  const isImediata = doc.conselheiro_providencia_id === currentUser.id;
+  const isUserInTrio = (nome: string) => {
+    if (!nome) return false;
+    const upperNome = nome.toUpperCase();
+    if (upperNome === currentUser.nome.toUpperCase()) return true;
+    if (currentUser.is_suplente_active && currentUser.substituted_name && upperNome === currentUser.substituted_name.toUpperCase()) return true;
+    return false;
+  };
+
+  const isResponsible = 
+    doc.conselheiro_providencia_id === currentUser.id || 
+    doc.conselheiro_referencia_id === currentUser.id ||
+    (currentUser.is_suplente_active && (
+      doc.conselheiro_providencia_id === currentUser.real_user_id ||
+      doc.conselheiro_referencia_id === currentUser.real_user_id
+    )) ||
+    (doc.conselheiro_providencia_nome && isUserInTrio(doc.conselheiro_providencia_nome)) ||
+    (doc.conselheiro_referencia_nome && isUserInTrio(doc.conselheiro_referencia_nome)) ||
+    doc.conselheiros_providencia_nomes?.some(nome => isUserInTrio(nome)) ||
+    false;
+
+  const isImediata = 
+    doc.conselheiro_providencia_id === currentUser.id || 
+    (currentUser.is_suplente_active && doc.conselheiro_providencia_id === currentUser.real_user_id) ||
+    (doc.conselheiro_providencia_nome && isUserInTrio(doc.conselheiro_providencia_nome)) ||
+    doc.conselheiros_providencia_nomes?.some(nome => isUserInTrio(nome)) ||
+    false;
+
   const isADM = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
   const isConselheiro = currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE';
   const canEditTechnicalFields = isImediata && !isADM;
@@ -278,14 +302,14 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       // REFORÇO: Se houver mudança técnica, invalidamos assinaturas anteriores e notificamos o trio
       confirmacoes = confirmacoes.filter(c => c.usuario_id === currentUser.id);
       const escala = getEffectiveEscala(doc.data_aporte, doc.hora_aporte, currentUser.unidade_id, nameMap);
-      notificacoesTrio = escala.filter(nome => nome !== currentUser.nome.toUpperCase());
+      notificacoesTrio = escala.filter(nome => !isUserInTrio(nome));
     }
     
     const mySignature = { usuario_id: currentUser.id, usuario_nome: `${currentUser.nome} - ${formattedDate}`, data_hora: now.toISOString() };
     if (!confirmacoes.some(c => c.usuario_id === currentUser.id)) {
       confirmacoes.push(mySignature);
       // Ao assinar, remove o próprio nome das notificações pendentes
-      notificacoesTrio = notificacoesTrio.filter(nome => nome.toUpperCase() !== currentUser.nome.toUpperCase());
+      notificacoesTrio = notificacoesTrio.filter(nome => !isUserInTrio(nome));
     }
 
     let combinedMedidas: MedidaAplicada[] = [
@@ -381,7 +405,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
 
         // Notificar automaticamente os outros membros do trio de imediata
         const escala = getEffectiveEscala(doc.data_aporte, doc.hora_aporte, currentUser.unidade_id, nameMap);
-        const outrosDoTrio = escala.filter(nome => nome !== currentUser.nome.toUpperCase());
+        const outrosDoTrio = escala.filter(nome => !isUserInTrio(nome));
         
         const novasNotificacoes = [...notificacoesTrio];
         outrosDoTrio.forEach(nome => {
@@ -441,7 +465,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     }
     
     // Remove o próprio nome das notificações ao validar
-    const nextNotificacoes = (doc.notificacoes_trio || []).filter(nome => nome.toUpperCase() !== currentUser.nome.toUpperCase());
+    const nextNotificacoes = (doc.notificacoes_trio || []).filter(nome => !isUserInTrio(nome));
 
     onUpdateDocument(doc.id, { 
       medidas_detalhadas: updated, 
@@ -508,7 +532,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
         </div>
 
         {/* ALERTA DE REVALIDAÇÃO OBRIGATÓRIA */}
-        {(doc.notificacoes_trio || []).some(n => n.toUpperCase() === currentUser.nome.toUpperCase() || (nameMap && nameMap[n.toUpperCase()] === currentUser.nome.toUpperCase())) && (
+        {(doc.notificacoes_trio || []).some(n => isUserInTrio(n) || (nameMap && isUserInTrio(nameMap[n.toUpperCase()]))) && (
           <div className="bg-red-600 p-6 flex items-center justify-between animate-pulse">
             <div className="flex items-center gap-4 text-white">
               <ShieldAlert className="w-8 h-8" />
@@ -964,7 +988,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
 
                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {validationTracker.map((status, idx) => {
-                    const isMe = status.name.toUpperCase() === currentUser.nome.toUpperCase();
+                    const isMe = isUserInTrio(status.name);
                     return (
                       <div key={idx} className={`p-6 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${status.validated ? 'bg-white border-emerald-500 shadow-md' : status.needsRevalidation ? 'bg-red-50 border-red-300 animate-pulse' : 'bg-slate-100 border-slate-200 opacity-60'}`}>
                          <span className="text-[12px] font-black uppercase text-slate-700">{status.name}</span>

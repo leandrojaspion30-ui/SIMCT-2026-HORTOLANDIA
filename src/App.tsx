@@ -305,9 +305,7 @@ const App: React.FC = () => {
         currentUser.perfil === 'CONSELHEIRO' &&
         !currentUser.is_suplente_active &&
         !currentUser.substituicao_ativa &&
-        freshUser.substituicao_ativa &&
-        now >= (freshUser.data_inicio_substituicao || '') && 
-        now <= (freshUser.data_fim_prevista || '');
+        freshUser.substituicao_ativa;
         
       if (shouldDeactivateSubstitutedAccess) {
         // O conselheiro titular volta a ter acesso completo automaticamente!
@@ -884,8 +882,24 @@ const App: React.FC = () => {
       
       case 'my-docs':
         const myReferencedDocs = documents.filter(d => {
-          const isFixedRef = d.conselheiro_referencia_id === currentUser.id;
-          const isImediata = d.conselheiro_providencia_id === currentUser.id || d.conselheiros_providencia_nomes?.includes(currentUser.nome.toUpperCase());
+          const matchesUserOrSubstitutedId = (id: string | undefined | null) => {
+            if (!id) return false;
+            if (id === currentUser.id) return true;
+            if (currentUser.is_suplente_active && id === currentUser.real_user_id) return true;
+            return false;
+          };
+
+          const matchesUserOrSubstitutedName = (name: string | undefined | null) => {
+            if (!name) return false;
+            const upper = name.toUpperCase();
+            if (upper === currentUser.nome.toUpperCase()) return true;
+            if (currentUser.is_suplente_active && currentUser.substituted_name && upper === currentUser.substituted_name.toUpperCase()) return true;
+            return false;
+          };
+
+          const isFixedRef = matchesUserOrSubstitutedId(d.conselheiro_referencia_id);
+          const isImediata = matchesUserOrSubstitutedId(d.conselheiro_providencia_id) || 
+            d.conselheiros_providencia_nomes?.some(name => matchesUserOrSubstitutedName(name));
           return isFixedRef || isImediata;
         });
         return <DocumentList documents={myReferencedDocs} users={users} currentUser={currentUser} isReadOnly={false} onSelectDoc={(id) => handleOpenDocument(id, true)} onEditDoc={(id) => navigateTo('edit', { editId: id })} onDeleteDoc={async (id) => {
@@ -983,13 +997,10 @@ const App: React.FC = () => {
             }
 
             // Lógica de Substituição/Suplência Generalizada
-            const now = new Date().toISOString().split('T')[0];
             if (user.perfil === 'CONSELHEIRO' && user.substituicao_ativa) {
-              if (now >= (user.data_inicio_substituicao || '') && now <= (user.data_fim_prevista || '')) {
-                setLoginError("ACESSO NEGADO: VOCÊ ESTÁ SENDO SUBSTITUÍDO PELA SUPLENTE.");
-                addLog('SISTEMA', `ACESSO NEGADO: Conselheiro [${user.nome}] tentou acessar enquanto está em suplência ativa.`, 'SEGURANÇA', user);
-                return;
-              }
+              setLoginError("ACESSO NEGADO: VOCÊ ESTÁ SENDO SUBSTITUÍDO PELA SUPLENTE.");
+              addLog('SISTEMA', `ACESSO NEGADO: Conselheiro [${user.nome}] tentou acessar enquanto está em suplência ativa.`, 'SEGURANÇA', user);
+              return;
             }
             
             // Se for um Suplente em substituição ativa, assume a identidade mas mantém rastro
@@ -997,23 +1008,21 @@ const App: React.FC = () => {
             if (user.perfil === 'SUPLENTE' && user.substituicao_ativa && user.substituindo_id) {
               const substituted = users.find(u => u.id === user.substituindo_id);
               if (substituted) {
-                // Força o acesso APENAS à unidade do conselheiro substituído
-                sessionUser.unidade_id = substituted.unidade_id;
-                if (now >= (user.data_inicio_substituicao || '') && now <= (user.data_fim_prevista || '')) {
-                  sessionUser = {
-                    ...substituted,
-                    id: substituted.id, // Assume o ID para ver os documentos dele
-                    nome: `${user.nome} (Subst. ${substituted.nome})`,
-                    perfil: 'CONSELHEIRO',
-                    cargo: `Suplente de ${substituted.nome}`,
-                    unidade_id: substituted.unidade_id,
-                    is_suplente_active: true,
-                    real_user_id: user.id,
-                    substituted_name: substituted.nome
-                  };
-                } else {
-                  sessionUser.cargo = `Suplente de ${substituted.nome}`;
-                }
+                // Força o acesso e assume a identidade de forma incondicional se a substituição estiver ativa
+                sessionUser = {
+                  ...substituted,
+                  id: substituted.id, // Assume o ID para ver os documentos dele
+                  nome: `${user.nome} (Subst. ${substituted.nome})`,
+                  perfil: 'CONSELHEIRO',
+                  cargo: `Suplente de ${substituted.nome}`,
+                  unidade_id: substituted.unidade_id,
+                  is_suplente_active: true,
+                  real_user_id: user.id,
+                  substituted_name: substituted.nome,
+                  data_inicio_substituicao: user.data_inicio_substituicao,
+                  data_fim_prevista: user.data_fim_prevista,
+                  substituicao_ativa: true
+                };
               }
             }
             
@@ -1101,7 +1110,6 @@ const App: React.FC = () => {
           {isSuperAdmin && <NavItem icon={<PieChart className="w-5 h-5" />} label="Relatórios das Unidades" active={activeTab === 'global-statistics'} onClick={() => { handleNavigate('global-statistics'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />}
         </nav>
         <div className="p-4 border-t border-white/5 space-y-2">
-          <NavItem icon={<RefreshCw className="w-5 h-5 animate-pulse" />} label="Atualizar" active={false} onClick={() => window.location.reload()} collapsed={!isSidebarOpen && windowWidth >= 1024} />
           <NavItem icon={<LogOut className="w-5 h-5" />} label="Sair" active={false} onClick={handleLogout} collapsed={!isSidebarOpen && windowWidth >= 1024} danger />
         </div>
       </aside>
@@ -1109,7 +1117,7 @@ const App: React.FC = () => {
         <div className="p-3 sm:p-6 lg:p-8 print:p-0">
           <header className="flex items-center justify-between mb-6 lg:mb-12 print:hidden gap-4">
             <div className="flex items-center gap-4 flex-1 min-w-0">
-              {navHistory.length > 0 && (
+              {(navHistory.length > 0 || activeTab !== 'dashboard' || selectedDocId !== null || editingDocId !== null) && (
                 <button 
                   onClick={goBack} 
                   className="flex items-center gap-2 p-3 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm hover:bg-slate-50 text-slate-700 font-bold text-[12px] uppercase shrink-0 transition-all hover:border-[#2563EB]/40 active:scale-95"

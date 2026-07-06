@@ -52,11 +52,26 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUs
     return documents
       .filter(doc => {
         // Regra: Se for modo "Minha Referência", filtra. Se for "Painel Geral", vê tudo.
-        if (myViewMode === 'REF' && doc.conselheiro_referencia_id !== currentUser.id) return false;
-        if (myViewMode === 'IMED' && doc.conselheiro_providencia_id !== currentUser.id) return false;
+        const matchesUserOrSubstitutedId = (id: string | undefined | null) => {
+          if (!id) return false;
+          if (id === currentUser.id) return true;
+          if (currentUser.is_suplente_active && id === currentUser.real_user_id) return true;
+          return false;
+        };
+
+        const matchesUserOrSubstitutedName = (name: string | undefined | null) => {
+          if (!name) return false;
+          const upper = name.toUpperCase();
+          if (upper === currentUser.nome.toUpperCase()) return true;
+          if (currentUser.is_suplente_active && currentUser.substituted_name && upper === currentUser.substituted_name.toUpperCase()) return true;
+          return false;
+        };
+
+        if (myViewMode === 'REF' && !matchesUserOrSubstitutedId(doc.conselheiro_referencia_id)) return false;
+        if (myViewMode === 'IMED' && !matchesUserOrSubstitutedId(doc.conselheiro_providencia_id)) return false;
         if (myViewMode === 'VALID') {
-          const isRef = doc.conselheiro_referencia_id === currentUser.id;
-          const isInTrio = doc.conselheiros_providencia_nomes?.some(name => name.toUpperCase() === currentUser.nome.toUpperCase());
+          const isRef = matchesUserOrSubstitutedId(doc.conselheiro_referencia_id);
+          const isInTrio = doc.conselheiros_providencia_nomes?.some(name => matchesUserOrSubstitutedName(name));
           const isPending = doc.status.includes('AGUARDANDO_VALIDACAO');
           if (!isPending || (!isRef && !isInTrio)) return false;
         }
