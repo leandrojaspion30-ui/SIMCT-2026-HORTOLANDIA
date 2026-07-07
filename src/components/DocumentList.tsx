@@ -40,13 +40,48 @@ interface DocumentListProps {
   onUpdateStatus: (id: string, status: DocumentStatus[]) => void;
   isReadOnly?: boolean;
   isMyReferenceView?: boolean;
+  viewMode?: 'ALL' | 'REF' | 'IMED' | 'VALID';
+  onViewModeChange?: (mode: 'ALL' | 'REF' | 'IMED' | 'VALID') => void;
+  filters?: { term: string; bairro: string; status: string; conselheiro_ref_id: string; data_registro: string };
+  onFiltersChange?: (filters: { term: string; bairro: string; status: string; conselheiro_ref_id: string; data_registro: string }) => void;
 }
 
-const DocumentList: React.FC<DocumentListProps> = ({ documents, users, currentUser, onSelectDoc, onEditDoc, onDeleteDoc, isReadOnly, isMyReferenceView }) => {
+const DocumentList: React.FC<DocumentListProps> = ({ 
+  documents, 
+  users, 
+  currentUser, 
+  onSelectDoc, 
+  onEditDoc, 
+  onDeleteDoc, 
+  isReadOnly, 
+  isMyReferenceView,
+  viewMode: propViewMode,
+  onViewModeChange,
+  filters: propFilters,
+  onFiltersChange
+}) => {
   const [docToDelete, setDocToDelete] = useState<string | null>(null);
-  const [myViewMode, setMyViewMode] = useState<'ALL' | 'REF' | 'IMED' | 'VALID'>(isMyReferenceView ? 'REF' : 'ALL');
+  
+  const [localViewMode, setLocalViewMode] = useState<'ALL' | 'REF' | 'IMED' | 'VALID'>(isMyReferenceView ? 'REF' : 'ALL');
+  const myViewMode = propViewMode !== undefined ? propViewMode : localViewMode;
+  const setMyViewMode = (mode: 'ALL' | 'REF' | 'IMED' | 'VALID') => {
+    if (onViewModeChange) {
+      onViewModeChange(mode);
+    } else {
+      setLocalViewMode(mode);
+    }
+  };
+
   const initialFilters = { term: '', bairro: '', status: '', conselheiro_ref_id: '', data_registro: '' };
-  const [filters, setFilters] = useState(initialFilters);
+  const [localFilters, setLocalFilters] = useState(initialFilters);
+  const filters = propFilters !== undefined ? propFilters : localFilters;
+  const setFilters = (newFilters: typeof initialFilters) => {
+    if (onFiltersChange) {
+      onFiltersChange(newFilters);
+    } else {
+      setLocalFilters(newFilters);
+    }
+  };
 
   const filteredDocs = useMemo(() => {
     return documents

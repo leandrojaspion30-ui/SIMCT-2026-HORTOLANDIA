@@ -92,6 +92,8 @@ const App: React.FC = () => {
     }
   }, [currentUser]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'register' | 'my-docs' | 'monitoring' | 'logs' | 'search' | 'settings' | 'agenda' | 'statistics' | 'edit' | 'user-management' | 'plantao' | 'global-statistics' | 'distribution-test'>('dashboard');
+  const [dashboardViewMode, setDashboardViewMode] = useState<'ALL' | 'REF' | 'IMED' | 'VALID'>('ALL');
+  const [dashboardFilters, setDashboardFilters] = useState({ term: '', bairro: '', status: '', conselheiro_ref_id: '', data_registro: '' });
   const [users, setUsers] = useState<UserWithPassword[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
@@ -541,20 +543,29 @@ const App: React.FC = () => {
   }, [activeTab, selectedDocId, editingDocId, forceDirectEdit, pushStateToHistory]);
 
   const goBack = useCallback(() => {
-    if (navHistory.length === 0) {
-      setSelectedDocId(null);
-      setEditingDocId(null);
-      setForceDirectEdit(false);
-      setActiveTab('dashboard');
-      return;
+    if (navHistory.length > 0) {
+      const previous = navHistory[navHistory.length - 1];
+      setNavHistory(prev => prev.slice(0, -1));
+      setActiveTab(previous.activeTab);
+      setSelectedDocId(previous.selectedDocId);
+      setEditingDocId(previous.editingDocId);
+      setForceDirectEdit(previous.forceDirectEdit);
+    } else {
+      // Fallback hierárquico seguro caso não haja histórico na pilha (ex: recarregamento de página)
+      if (editingDocId !== null) {
+        setSelectedDocId(editingDocId);
+        setEditingDocId(null);
+        setForceDirectEdit(false);
+      } else if (selectedDocId !== null) {
+        setSelectedDocId(null);
+        setForceDirectEdit(false);
+      } else if (activeTab === 'edit' || activeTab === 'register' || activeTab === 'plantao') {
+        setActiveTab('dashboard');
+      } else if (activeTab !== 'dashboard') {
+        setActiveTab('dashboard');
+      }
     }
-    const previous = navHistory[navHistory.length - 1];
-    setNavHistory(prev => prev.slice(0, -1));
-    setActiveTab(previous.activeTab);
-    setSelectedDocId(previous.selectedDocId);
-    setEditingDocId(previous.editingDocId);
-    setForceDirectEdit(previous.forceDirectEdit);
-  }, [navHistory]);
+  }, [navHistory, editingDocId, selectedDocId, activeTab]);
 
   const handleOpenDocument = useCallback((id: string, isFromReference: boolean = false) => {
     navigateTo(activeTab, { docId: id, forceEdit: isFromReference });
@@ -873,10 +884,24 @@ const App: React.FC = () => {
                  </div>
               </div>
             )}
-            <DocumentList documents={documents} users={users} currentUser={currentUser} isReadOnly={false} onSelectDoc={handleOpenDocument} onEditDoc={(id) => navigateTo('edit', { editId: id })} onDeleteDoc={async (id) => {
+            <DocumentList 
+              documents={documents} 
+              users={users} 
+              currentUser={currentUser} 
+              isReadOnly={false} 
+              onSelectDoc={handleOpenDocument} 
+              onEditDoc={(id) => navigateTo('edit', { editId: id })} 
+              onDeleteDoc={async (id) => {
                 addLog(id, `EXCLUSÃO: Documento removido permanentemente via Painel Geral.`, 'DOCUMENTO');
                 await deleteDocument(id);
-            }} onScience={() => {}} onUpdateStatus={() => {}} />
+              }} 
+              onScience={() => {}} 
+              onUpdateStatus={() => {}} 
+              viewMode={dashboardViewMode}
+              onViewModeChange={setDashboardViewMode}
+              filters={dashboardFilters}
+              onFiltersChange={setDashboardFilters}
+            />
           </div>
         );
       
