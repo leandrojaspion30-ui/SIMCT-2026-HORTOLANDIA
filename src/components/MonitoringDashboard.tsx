@@ -25,6 +25,7 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Documento, MonitoringInfo, User as UserType, RequisicaoServico, LogType, DocumentStatus, Oficio } from '../types';
 import { REDE_HORTOLANDIA, BAIRROS } from '../constants';
 import { formatLocalDateString, parseLocalDate } from '../lib/dateUtils';
+import { SearchableServiceSelect } from './SearchableServiceSelect';
 
 interface SearchableSelectProps {
   options: string[];
@@ -932,23 +933,15 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-[11px] font-black text-[#4B5563] uppercase">Área / Serviço</label>
-                    <select 
-                      className="w-full p-4 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase"
-                      onChange={(e) => {
-                        const [area, servico] = e.target.value.split('|');
+                    <SearchableServiceSelect
+                      className="w-full p-4 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase focus-within:border-blue-500"
+                      value={newService.area && newService.servico ? `${newService.area}|${newService.servico}` : ''}
+                      onChange={(val) => {
+                        if (!val) return;
+                        const [area, servico] = val.split('|');
                         setNewService(prev => ({ ...prev, area, servico }));
                       }}
-                    >
-                      <option value="">SELECIONAR...</option>
-                      <optgroup label="OUTROS">
-                        <option value="OUTROS|OUTROS SERVIÇOS / FORA DA REDE">OUTROS SERVIÇOS / FORA DA REDE</option>
-                      </optgroup>
-                      {Object.entries(REDE_HORTOLANDIA).map(([area, servicos]) => (
-                        <optgroup key={area} label={area}>
-                          {servicos.map(s => <option key={s} value={`${area}|${s}`}>{s}</option>)}
-                        </optgroup>
-                      ))}
-                    </select>
+                    />
                   </div>
                   {newService.servico === 'OUTROS SERVIÇOS / FORA DA REDE' && (
                     <div className="space-y-2">
@@ -1309,11 +1302,10 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-[#4B5563] uppercase tracking-wider">Área / Serviço Público</label>
-                    <select
-                      className="w-full p-4 bg-white border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase focus:border-blue-500"
+                    <SearchableServiceSelect
+                      className="w-full p-4 bg-white border border-[#E5E7EB] rounded-2xl outline-none font-bold text-[11px] uppercase focus-within:border-blue-500"
                       value={manualService.area ? `${manualService.area}|${manualService.servico}` : ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
+                      onChange={(val) => {
                         if (!val) {
                           setManualService(prev => ({ ...prev, area: '', servico: '' }));
                           return;
@@ -1322,19 +1314,7 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
                         setManualService(prev => ({ ...prev, area, servico }));
                         setModalError(null);
                       }}
-                    >
-                      <option value="">SELECIONAR ÁREA E SERVIÇO...</option>
-                      <optgroup label="OUTROS">
-                        <option value="OUTROS|OUTROS SERVIÇOS / FORA DA REDE">OUTROS SERVIÇOS / FORA DA REDE</option>
-                      </optgroup>
-                      {Object.entries(REDE_HORTOLANDIA).map(([area, servicos]) => (
-                        <optgroup key={area} label={area}>
-                          {servicos.map(s => (
-                            <option key={s} value={`${area}|${s}`}>{s}</option>
-                          ))}
-                        </optgroup>
-                      ))}
-                    </select>
+                    />
                   </div>
 
                   {manualService.servico === 'OUTROS SERVIÇOS / FORA DA REDE' && (

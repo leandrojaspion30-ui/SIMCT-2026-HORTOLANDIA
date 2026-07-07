@@ -20,6 +20,7 @@ import {
 } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
 import { formatLocalDateString } from '../lib/dateUtils';
+import { SearchableServiceSelect } from './SearchableServiceSelect';
 
 interface DocumentViewProps {
   document: Documento;
@@ -822,25 +823,16 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className="space-y-1">
                                           <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Área / Serviço</label>
-                                          <select 
-                                            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-purple-500 disabled:opacity-50"
-                                            value={`${ad.servicos?.[0]?.area}|${ad.servicos?.[0]?.servico}`}
+                                          <SearchableServiceSelect
+                                            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-bold uppercase outline-none focus-within:border-purple-500"
+                                            value={ad.servicos?.[0] ? `${ad.servicos[0].area}|${ad.servicos[0].servico}` : ''}
                                             disabled={!canEditTechnicalFields}
-                                            onChange={(e) => {
-                                              const [area, servico] = e.target.value.split('|');
+                                            onChange={(val) => {
+                                              if (!val) return;
+                                              const [area, servico] = val.split('|');
                                               setAtribuicoesDetalhadas(prev => prev.map(p => p.id === ad.id ? { ...p, servicos: [{ area, servico, prazo: p.servicos?.[0]?.prazo || '48H', observacao: p.servicos?.[0]?.observacao || '', servico_custom: p.servicos?.[0]?.servico_custom || '' }] } : p));
                                             }}
-                                          >
-                                            <option value="">SELECIONAR...</option>
-                                            <optgroup label="OUTROS">
-                                              <option value="OUTROS|OUTROS SERVIÇOS / FORA DA REDE">OUTROS SERVIÇOS / FORA DA REDE</option>
-                                            </optgroup>
-                                            {Object.entries(REDE_HORTOLANDIA).map(([area, servicos]) => (
-                                              <optgroup key={area} label={area}>
-                                                {servicos.map(s => <option key={s} value={`${area}|${s}`}>{s}</option>)}
-                                              </optgroup>
-                                            ))}
-                                          </select>
+                                          />
                                         </div>
                                         {ad.servicos?.[0]?.servico === 'OUTROS SERVIÇOS / FORA DA REDE' && (
                                           <div className="space-y-1 md:col-span-2">
