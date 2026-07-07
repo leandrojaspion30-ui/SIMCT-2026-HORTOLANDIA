@@ -39,8 +39,7 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, users, setAgenda, allDo
   const councilors = users.filter(u => {
     if (u.status === 'EXCLUIDO') return false;
     if (u.perfil !== 'CONSELHEIRO' && u.perfil !== 'SUPLENTE') return false;
-    // Se for ADM, vê apenas os da sua unidade
-    if (isAdmin) return u.unidade_id === currentUser.unidade_id;
+    if (currentUser.unidade_id && u.unidade_id !== currentUser.unidade_id) return false;
     return true;
   });
   
