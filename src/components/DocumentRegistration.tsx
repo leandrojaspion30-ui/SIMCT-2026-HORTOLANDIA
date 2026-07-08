@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check } from 'lucide-react';
 import { Documento, User, ChildData, DocumentStatus, AgendaEntry } from '../types';
-import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, CANAIS_COMUNICADO_LIST, getEffectiveEscala, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade } from '../constants';
+import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, CANAIS_COMUNICADO_LIST, getEffectiveEscala, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade, getUnidadeByBairro } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
 
 interface SearchableSelectProps {
@@ -710,7 +710,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
             )}
 
             {/* CAMPO ADICIONAL: Nº OFÍCIO E NOVOS CAMPOS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 pt-2">
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nº Ofício / Documento</label>
                 <input 
@@ -769,29 +769,6 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                     ))}
                 </select>
               </div>
-
-              <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Providência Imediata MANUAL</label>
-                <select 
-                  className="w-full p-3 sm:p-4 bg-white border border-slate-100 rounded-xl font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm cursor-pointer"
-                  value={formData.providencia_imediata_manual}
-                  onChange={e => setFormData({...formData, providencia_imediata_manual: e.target.value})}
-                >
-                  <option value="">AUTOMÁTICA / ESCALA...</option>
-                  {allUsers
-                    .filter(u => {
-                      if (u.unidade_id !== formData.unidade_id) return false;
-                      if (u.status !== 'ATIVO') return false;
-                      if (u.perfil !== 'CONSELHEIRO' && u.perfil !== 'SUPLENTE') return false;
-                      if (u.perfil === 'CONSELHEIRO' && u.substituicao_ativa) return false;
-                      return true;
-                    })
-                    .sort((a, b) => a.nome.localeCompare(b.nome))
-                    .map(u => (
-                      <option key={u.id} value={u.id}>{u.nome.toUpperCase()}</option>
-                    ))}
-                </select>
-              </div>
             </div>
           </section>
 
@@ -840,9 +817,16 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   disabled={isReadOnly}
                   className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold uppercase text-[11px]"
                   placeholder="SELECIONE O BAIRRO..."
-                  options={getBairrosByUnidade(formData.unidade_id)}
+                  options={BAIRROS}
                   value={formData.bairro}
-                  onChange={val => setFormData({...formData, bairro: val})}
+                  onChange={val => {
+                    const resolvedUnit = getUnidadeByBairro(val);
+                    setFormData({
+                      ...formData,
+                      bairro: val,
+                      unidade_id: resolvedUnit
+                    });
+                  }}
                 />
               </div>
             </div>

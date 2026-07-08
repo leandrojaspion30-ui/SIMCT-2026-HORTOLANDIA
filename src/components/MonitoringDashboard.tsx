@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Documento, MonitoringInfo, User as UserType, RequisicaoServico, LogType, DocumentStatus, Oficio } from '../types';
-import { REDE_HORTOLANDIA, BAIRROS } from '../constants';
+import { REDE_HORTOLANDIA, BAIRROS, getUnidadeByBairro } from '../constants';
 import { formatLocalDateString, parseLocalDate } from '../lib/dateUtils';
 import { SearchableServiceSelect } from './SearchableServiceSelect';
 
@@ -452,7 +452,7 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
       const tempId = `doc-${Math.random().toString(36).substr(2, 9)}`;
       const manualDoc: Partial<Documento> = {
         id: tempId,
-        unidade_id: currentUser.unidade_id || 1,
+        unidade_id: getUnidadeByBairro(newDocData.bairro),
         origem: 'MONITORAMENTO MANUAL',
         canal_comunicado: 'ATENDIMENTO PRESENCIAL',
         data_recebimento: new Date().toISOString().split('T')[0],

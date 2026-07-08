@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, ArrowLeft, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart, Timer, Save, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada } from './types';
-import { INITIAL_USERS, UserWithPassword, INITIAL_AGENDA } from './constants';
+import { INITIAL_USERS, UserWithPassword, INITIAL_AGENDA, getUnidadeByBairro } from './constants';
 import { db, ensureAuthenticated } from './lib/firebase';
 import { syncCollection, saveDocument, saveLog, saveAgenda, deleteDocument, deleteAgenda, saveUser, deleteUser, deleteAllDocuments } from './lib/db';
 import ConfidentialityTermModal from './components/ConfidentialityTermModal';
@@ -133,14 +133,24 @@ const App: React.FC = () => {
     forceDirectEdit: boolean;
   }[]>([]);
 
-  const isLud = useMemo(() => currentUser?.nome === 'LUDIMILA' || currentUser?.nome === 'LEANDRO', [currentUser]);
+  const isLud = useMemo(() => currentUser?.nome === 'LUDIMILA', [currentUser]);
   const isSuperAdmin = useMemo(() => currentUser?.nome === 'LUDIMILA' || currentUser?.nome === 'LEANDRO', [currentUser]);
   const isAdministrative = useMemo(() => currentUser?.perfil === 'ADMIN' || currentUser?.perfil === 'ADMINISTRATIVO' || currentUser?.nome === 'LEANDRO', [currentUser]);
 
+  const normalizedDocuments = useMemo(() => {
+    return allDocuments.map(d => {
+      const realUnit = d.bairro ? getUnidadeByBairro(d.bairro) : (d.unidade_id || 1);
+      if (d.unidade_id !== realUnit) {
+        return { ...d, unidade_id: realUnit };
+      }
+      return d;
+    });
+  }, [allDocuments]);
+
   const documents = useMemo(() => {
-    if (isLud) return allDocuments;
-    return allDocuments.filter(d => (d.unidade_id || 1) === currentUser?.unidade_id);
-  }, [allDocuments, currentUser, isLud]);
+    if (isLud) return normalizedDocuments;
+    return normalizedDocuments.filter(d => d.unidade_id === currentUser?.unidade_id);
+  }, [normalizedDocuments, currentUser, isLud]);
 
   const logs = useMemo(() => {
     if (isSuperAdmin) return allLogs;
@@ -982,8 +992,8 @@ const App: React.FC = () => {
           return true; 
       }} />;
       case 'statistics': return <StatisticsView documents={documents} agenda={agenda} users={users} currentUser={currentUser} />;
-      case 'global-statistics': return <StatisticsView documents={allDocuments} agenda={allAgenda} users={users} currentUser={currentUser} isGlobal />;
-      case 'distribution-test': return <DistributionSimulator documents={allDocuments} users={users} currentUser={currentUser} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} nameMap={userNameMap} />;
+      case 'global-statistics': return <StatisticsView documents={normalizedDocuments} agenda={allAgenda} users={users} currentUser={currentUser} isGlobal />;
+      case 'distribution-test': return <DistributionSimulator documents={normalizedDocuments} users={users} currentUser={currentUser} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} nameMap={userNameMap} />;
       default: return null;
     }
   };
