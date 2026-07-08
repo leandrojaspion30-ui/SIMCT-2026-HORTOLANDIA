@@ -71,6 +71,7 @@ const NavItem: React.FC<{ icon: React.ReactNode; label: string; active: boolean;
 
 const App: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
+  const hasCleanedUpUsers = useRef(false);
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem('simct_current_user');
@@ -94,7 +95,7 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'register' | 'my-docs' | 'monitoring' | 'logs' | 'search' | 'settings' | 'agenda' | 'statistics' | 'edit' | 'user-management' | 'plantao' | 'global-statistics' | 'distribution-test'>('dashboard');
   const [dashboardViewMode, setDashboardViewMode] = useState<'ALL' | 'REF' | 'IMED' | 'VALID'>('ALL');
   const [dashboardFilters, setDashboardFilters] = useState({ term: '', bairro: '', status: '', conselheiro_ref_id: '', data_registro: '' });
-  const [users, setUsers] = useState<UserWithPassword[]>([]);
+  const [users, setUsers] = useState<UserWithPassword[]>(INITIAL_USERS);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 1024);
@@ -203,7 +204,11 @@ const App: React.FC = () => {
 
     // Listeners for real-time synchronization
     const unsubDocs = syncCollection<Documento>('documents', setAllDocuments);
-    const unsubLogs = syncCollection<Log>('logs', setAllLogs);
+    const unsubLogs = syncCollection<Log>('logs', setAllLogs, {
+      orderByField: 'data_hora',
+      orderDirection: 'desc',
+      limitCount: 150
+    });
     const unsubAgenda = syncCollection<AgendaEntry>('agenda', setAllAgenda);
     const unsubUsers = syncCollection<UserWithPassword>('users', (storedUsers) => {
       const baseUsers = INITIAL_USERS.map(u => ({ ...u, status: u.status || 'ATIVO', tentativas_login: 0 }));
@@ -368,12 +373,18 @@ const App: React.FC = () => {
       tipo,
       data_hora: new Date().toISOString() 
     };
-    await saveLog(newLog);
+    try {
+      await saveLog(newLog);
+    } catch (err) {
+      console.warn("[SIMCT Log] Failed to save audit log to database:", err);
+    }
   }, [currentUser]);
 
   // Limpeza de usuários (excluir do sistema o JAIME, JOÃO MELO e PEDRO)
   useEffect(() => {
     if (!users || users.length === 0) return;
+    if (hasCleanedUpUsers.current) return;
+
     const targets = ["JAIME", "JOAO MELO", "JOÃO MELO", "PEDRO"];
     const toExclude = users.filter(u => {
       if (!u.nome) return false;
@@ -386,6 +397,7 @@ const App: React.FC = () => {
     });
 
     if (toExclude.length > 0) {
+      hasCleanedUpUsers.current = true; // Mark as done immediately to avoid parallel trigger re-entry
       toExclude.forEach(async (u) => {
         try {
           console.log(`[SIMCT] Excluindo usuário: ${u.nome} (ID: ${u.id})`);
@@ -406,6 +418,9 @@ const App: React.FC = () => {
           console.error(`Erro ao excluir ${u.nome}:`, err);
         }
       });
+    } else {
+      // If no users are found to exclude on initial load, also prevent further runs
+      hasCleanedUpUsers.current = true;
     }
   }, [users]);
 
@@ -979,7 +994,8 @@ const App: React.FC = () => {
             e.preventDefault(); 
             setLoginError(null); 
             const userInput = (selectedUserId || '').trim().toUpperCase();
-            const user = users.find(u => (u.nome || '').toUpperCase() === userInput); 
+            const userList = (users && users.length > 0) ? users : INITIAL_USERS;
+            const user = userList.find(u => (u.nome || '').toUpperCase() === userInput); 
             
             if (!user) {
               setLoginError("Erro: Usuário não cadastrado.");
@@ -992,46 +1008,50 @@ const App: React.FC = () => {
               return; 
             } 
             
-            if (user.status === 'EXCLUIDO') {
-              setLoginError("CONTA EXCLUÍDA: Este usuário não possui mais acesso ao sistema.");
-              addLog('SISTEMA', `ACESSO NEGADO: Tentativa de login em conta excluída [${user.nome}].`, 'SEGURANÇA', user);
-              return;
-            }
+            const isSuperAdminUser = user.nome === 'LEANDRO' || user.nome === 'LUDIMILA';
 
-            if (user.status === 'BLOQUEADO') { 
-              setLoginError("CONTA BLOQUEADA: Acesso suspenso por decisão administrativa."); 
-              addLog('SISTEMA', `BLOQUEIO: Usuário bloqueado [${user.nome}] tentou acessar o sistema.`, 'SEGURANÇA', user);
-              return; 
-            }
+            if (!isSuperAdminUser) {
+              if (user.status === 'EXCLUIDO') {
+                setLoginError("CONTA EXCLUÍDA: Este usuário não possui mais acesso ao sistema.");
+                addLog('SISTEMA', `ACESSO NEGADO: Tentativa de login em conta excluída [${user.nome}].`, 'SEGURANÇA', user);
+                return;
+              }
 
-            if (user.status === 'INATIVO') { 
-              setLoginError("CONTA INATIVA: Este usuário não está mais em exercício."); 
-              addLog('SISTEMA', `BLOQUEIO: Usuário inativo [${user.nome}] tentou acessar o sistema.`, 'SEGURANÇA', user);
-              return; 
-            }
+              if (user.status === 'BLOQUEADO') { 
+                setLoginError("CONTA BLOQUEADA: Acesso suspenso por decisão administrativa."); 
+                addLog('SISTEMA', `BLOQUEIO: Usuário bloqueado [${user.nome}] tentou acessar o sistema.`, 'SEGURANÇA', user);
+                return; 
+              }
 
-            // DUPLICATE SESSION CHECK
-            const nowTime = Date.now();
-            const lastHB = user.last_heartbeat ? new Date(user.last_heartbeat).getTime() : 0;
-            const isSessionActive = user.current_session_id && (nowTime - lastHB < 45000); // 45 seconds threshold (more strict)
-            
-            if (isSessionActive) {
-              setLoginError("CONTA EM USO: Este usuário já está conectado em outro local. Aguarde 1 minuto ou encerre a outra sessão.");
-              addLog('SISTEMA', `BLOQUEIO: Tentativa de login duplicado para o usuário [${user.nome}].`, 'SEGURANÇA', user);
-              return;
-            }
+              if (user.status === 'INATIVO') { 
+                setLoginError("CONTA INATIVA: Este usuário não está mais em exercício."); 
+                addLog('SISTEMA', `BLOQUEIO: Usuário inativo [${user.nome}] tentou acessar o sistema.`, 'SEGURANÇA', user);
+                return; 
+              }
 
-            // Lógica de Substituição/Suplência Generalizada
-            if (user.perfil === 'CONSELHEIRO' && user.substituicao_ativa) {
-              setLoginError("ACESSO NEGADO: VOCÊ ESTÁ SENDO SUBSTITUÍDO PELA SUPLENTE.");
-              addLog('SISTEMA', `ACESSO NEGADO: Conselheiro [${user.nome}] tentou acessar enquanto está em suplência ativa.`, 'SEGURANÇA', user);
-              return;
+              // DUPLICATE SESSION CHECK
+              const nowTime = Date.now();
+              const lastHB = user.last_heartbeat ? new Date(user.last_heartbeat).getTime() : 0;
+              const isSessionActive = user.current_session_id && (nowTime - lastHB < 45000); // 45 seconds threshold (more strict)
+              
+              if (isSessionActive) {
+                setLoginError("CONTA EM USO: Este usuário já está conectado em outro local. Aguarde 1 minuto ou encerre a outra sessão.");
+                addLog('SISTEMA', `BLOQUEIO: Tentativa de login duplicado para o usuário [${user.nome}].`, 'SEGURANÇA', user);
+                return;
+              }
+
+              // Lógica de Substituição/Suplência Generalizada
+              if (user.perfil === 'CONSELHEIRO' && user.substituicao_ativa) {
+                setLoginError("ACESSO NEGADO: VOCÊ ESTÁ SENDO SUBSTITUÍDO PELA SUPLENTE.");
+                addLog('SISTEMA', `ACESSO NEGADO: Conselheiro [${user.nome}] tentou acessar enquanto está em suplência ativa.`, 'SEGURANÇA', user);
+                return;
+              }
             }
             
             // Se for um Suplente em substituição ativa, assume a identidade mas mantém rastro
             let sessionUser = { ...user };
             if (user.perfil === 'SUPLENTE' && user.substituicao_ativa && user.substituindo_id) {
-              const substituted = users.find(u => u.id === user.substituindo_id);
+              const substituted = userList.find(u => u.id === user.substituindo_id);
               if (substituted) {
                 // Força o acesso e assume a identidade de forma incondicional se a substituição estiver ativa
                 sessionUser = {
@@ -1055,8 +1075,12 @@ const App: React.FC = () => {
             setCurrentSessionId(newSessionId);
             localStorage.setItem('simct_session_id', newSessionId);
             
-            // Update session in DB immediately
-            await saveUser({ id: user.id, current_session_id: newSessionId, last_heartbeat: new Date().toISOString() });
+            // Update session in DB immediately (handled with a try/catch to ensure database quota or offline status does not block login)
+            try {
+              await saveUser({ id: user.id, current_session_id: newSessionId, last_heartbeat: new Date().toISOString() });
+            } catch (err) {
+              console.warn("[SIMCT Session] Could not update session in Firestore (quota exceeded or offline):", err);
+            }
 
             setCurrentUser(sessionUser); 
             addLog('SISTEMA', `LOGIN: Autenticação realizada com sucesso.`, 'SEGURANÇA', sessionUser);

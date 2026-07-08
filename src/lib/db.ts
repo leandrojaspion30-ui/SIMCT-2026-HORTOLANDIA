@@ -5,6 +5,7 @@ import {
   onSnapshot, 
   query, 
   orderBy, 
+  limit,
   addDoc, 
   updateDoc, 
   deleteDoc,
@@ -17,16 +18,35 @@ import { Documento, Log, AgendaEntry, User } from '../types';
 
 export const syncCollection = <T extends { id: string }>(
   collectionName: string, 
-  callback: (data: T[]) => void
+  callback: (data: T[]) => void,
+  options?: { limitCount?: number; orderByField?: string; orderDirection?: 'asc' | 'desc' }
 ) => {
-  const q = query(collection(db, collectionName));
-  return onSnapshot(q, (snapshot) => {
-    const items = snapshot.docs.map(doc => ({
-      ...doc.data(),
-      id: doc.id
-    } as T));
-    callback(items);
-  });
+  let q;
+  if (options && options.orderByField) {
+    const constraints: any[] = [orderBy(options.orderByField, options.orderDirection || 'desc')];
+    if (options.limitCount) {
+      constraints.push(limit(options.limitCount));
+    }
+    q = query(collection(db, collectionName), ...constraints);
+  } else if (options && options.limitCount) {
+    q = query(collection(db, collectionName), limit(options.limitCount));
+  } else {
+    q = query(collection(db, collectionName));
+  }
+
+  return onSnapshot(
+    q, 
+    (snapshot) => {
+      const items = snapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id
+      } as T));
+      callback(items);
+    },
+    (error) => {
+      console.warn(`[SIMCT Firestore] Error syncing collection "${collectionName}":`, error.message || error);
+    }
+  );
 };
 
 const cleanData = (obj: any): any => {
