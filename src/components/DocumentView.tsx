@@ -308,7 +308,9 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     if (isTechnicalChange && isActualProvidenciaImediata) {
       // REFORÇO: Se houver mudança técnica, invalidamos assinaturas anteriores e notificamos o trio
       confirmacoes = confirmacoes.filter(c => c.usuario_id === currentUser.id);
-      const escala = getEffectiveEscala(doc.data_aporte, doc.hora_aporte, currentUser.unidade_id, nameMap);
+      const escala = (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.length > 0)
+        ? doc.conselheiros_providencia_nomes
+        : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap);
       notificacoesTrio = escala.filter(nome => !isUserInTrio(nome));
     }
     
@@ -411,7 +413,9 @@ const DocumentView: React.FC<DocumentViewProps> = ({
         }
 
         // Notificar automaticamente os outros membros do trio de imediata
-        const escala = getEffectiveEscala(doc.data_aporte, doc.hora_aporte, currentUser.unidade_id, nameMap);
+        const escala = (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.length > 0)
+          ? doc.conselheiros_providencia_nomes
+          : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap);
         const outrosDoTrio = escala.filter(nome => !isUserInTrio(nome));
         
         const novasNotificacoes = [...notificacoesTrio];
