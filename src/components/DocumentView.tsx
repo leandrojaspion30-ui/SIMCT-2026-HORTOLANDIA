@@ -114,16 +114,20 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     doc.conselheiros_providencia_nomes?.some(nome => isUserInTrio(nome)) ||
     false;
 
-  const isImediata = 
+  const isActualProvidenciaImediata = 
     doc.conselheiro_providencia_id === currentUser.id || 
     (currentUser.is_suplente_active && doc.conselheiro_providencia_id === currentUser.real_user_id) ||
     (doc.conselheiro_providencia_nome && isUserInTrio(doc.conselheiro_providencia_nome)) ||
+    false;
+
+  const isImediata = 
+    isActualProvidenciaImediata ||
     doc.conselheiros_providencia_nomes?.some(nome => isUserInTrio(nome)) ||
     false;
 
   const isADM = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
   const isConselheiro = currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE';
-  const canEditTechnicalFields = isImediata && !isADM;
+  const canEditTechnicalFields = isActualProvidenciaImediata && !isADM;
   const canEditIdentifiers = isResponsible || isADM;
 
   // INTELIGÊNCIA SIMCT: Dossiê Familiar Cruzado
@@ -299,7 +303,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     let confirmacoes = doc.medidas_detalhadas?.[0]?.confirmacoes || [];
     let notificacoesTrio = doc.notificacoes_trio || [];
 
-    if (isTechnicalChange && isImediata) {
+    if (isTechnicalChange && isActualProvidenciaImediata) {
       // REFORÇO: Se houver mudança técnica, invalidamos assinaturas anteriores e notificamos o trio
       confirmacoes = confirmacoes.filter(c => c.usuario_id === currentUser.id);
       const escala = getEffectiveEscala(doc.data_aporte, doc.hora_aporte, currentUser.unidade_id, nameMap);
@@ -661,6 +665,15 @@ const DocumentView: React.FC<DocumentViewProps> = ({
             </div>
           </section>
 
+          {isImediata && !isActualProvidenciaImediata && (
+            <div id="visualizacao-plantao-alerta" className="p-6 bg-blue-50 border border-blue-100 rounded-[2rem] flex items-center gap-4 text-blue-800 mb-4 shadow-sm animate-in fade-in duration-300">
+              <Users className="w-6 h-6 flex-shrink-0 text-blue-600" />
+              <div className="text-[11px] font-bold uppercase">
+                Modo de Visualização (Colega de Plantão): Apenas o Conselheiro de Providência Imediata (<span className="text-blue-900 font-black">{doc.conselheiro_providencia_nome || 'designado'}</span>) possui autonomia para alterar as medidas. Seu papel é analisar e validar/assinar no final da página.
+              </div>
+            </div>
+          )}
+
           {/* ACORDEÕES TÉCNICOS */}
           <div className="space-y-4">
             <div 
@@ -914,11 +927,20 @@ const DocumentView: React.FC<DocumentViewProps> = ({
             )}
           </div>
 
-          {(isImediata || isADM) && (
+          {(isActualProvidenciaImediata || isADM) ? (
             <div className="grid grid-cols-2 gap-6 pt-6">
-              <button onClick={() => handleSave(false)} className="py-6 bg-slate-600 text-white rounded-3xl font-black uppercase text-[12px] shadow-xl hover:bg-slate-700 transition-all flex items-center justify-center gap-3"><Save className="w-5 h-5" /> [Salvar Rascunho]</button>
-              <button onClick={() => handleSave(true)} className="py-6 bg-emerald-600 text-white rounded-3xl font-black uppercase text-[12px] shadow-xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-3"><CheckCircle2 className="w-5 h-5" /> [Concluir Prontuário]</button>
+              <button id="btn-save-draft" onClick={() => handleSave(false)} className="py-6 bg-slate-600 text-white rounded-3xl font-black uppercase text-[12px] shadow-xl hover:bg-slate-700 transition-all flex items-center justify-center gap-3"><Save className="w-5 h-5" /> [Salvar Rascunho]</button>
+              <button id="btn-finalize-doc" onClick={() => handleSave(true)} className="py-6 bg-emerald-600 text-white rounded-3xl font-black uppercase text-[12px] shadow-xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-3"><CheckCircle2 className="w-5 h-5" /> [Concluir Prontuário]</button>
             </div>
+          ) : (
+            isImediata && (
+              <div id="plantao-colaborador-banner" className="p-6 bg-amber-50 border border-amber-200 rounded-3xl flex items-center gap-4 text-amber-800 pt-6 mt-6">
+                <ShieldAlert className="w-6 h-6 flex-shrink-0 text-amber-600" />
+                <div className="text-[11px] font-bold uppercase">
+                  Apenas o conselheiro de providência imediata ({doc.conselheiro_providencia_nome || 'responsável'}) pode salvar ou concluir as alterações nas medidas técnico-colegiadas deste prontuário. Como colega de plantão, você pode revisar as informações e realizar a validação colegiada abaixo.
+                </div>
+              </div>
+            )
           )}
           {(doc.status.includes('AGUARDANDO_VALIDACAO') || doc.status.includes('MEDIDA_APLICADA')) && 
            (!informativeStatusOptions.includes(doc.status[doc.status.length - 1]) || (doc.notificacoes_trio || []).length > 0) && (
