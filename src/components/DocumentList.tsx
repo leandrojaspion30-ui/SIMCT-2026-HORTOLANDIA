@@ -98,6 +98,8 @@ const DocumentList: React.FC<DocumentListProps> = ({
           if (!name) return false;
           const upper = name.toUpperCase();
           if (upper === currentUser.nome.toUpperCase()) return true;
+          const cleanCurrentUserName = currentUser.nome.toUpperCase().split('(')[0].trim();
+          if (upper === cleanCurrentUserName) return true;
           if (currentUser.is_suplente_active && currentUser.substituted_name && upper === currentUser.substituted_name.toUpperCase()) return true;
           return false;
         };
@@ -271,7 +273,15 @@ const DocumentList: React.FC<DocumentListProps> = ({
           const provCouncilor = users.find(u => u.id === doc.conselheiro_providencia_id);
           const confirmacoes = doc.medidas_detalhadas?.[0]?.confirmacoes || [];
           const iValidated = confirmacoes.some(c => c.usuario_id === currentUser.id);
-          const isInTrio = doc.conselheiros_providencia_nomes?.includes(currentUser.nome.toUpperCase());
+          const isInTrio = doc.conselheiros_providencia_nomes?.some(name => {
+            if (!name) return false;
+            const upper = name.toUpperCase();
+            if (upper === currentUser.nome.toUpperCase()) return true;
+            const cleanCurrentUserName = currentUser.nome.toUpperCase().split('(')[0].trim();
+            if (upper === cleanCurrentUserName) return true;
+            if (currentUser.is_suplente_active && currentUser.substituted_name && upper === currentUser.substituted_name.toUpperCase()) return true;
+            return false;
+          }) || false;
 
           let validationState: 'PENDING_SELF' | 'PENDING_OTHERS' | 'COMPLETED' | 'ADMIN_CONCLUDED' | undefined;
           let dynamicLabel = STATUS_LABELS[mainStatus];
@@ -326,7 +336,15 @@ const DocumentList: React.FC<DocumentListProps> = ({
                               <ShieldAlert className="w-3 h-3" /> Aguardando Validação do Colegiado
                            </span>
                         )}
-                        {(doc.notificacoes_trio || []).includes(currentUser.nome.toUpperCase()) && (!lastDispatch || lastDispatch === 'NENHUMA') && (
+                        {(doc.notificacoes_trio || []).some(n => {
+                          if (!n) return false;
+                          const upper = n.toUpperCase();
+                          if (upper === currentUser.nome.toUpperCase()) return true;
+                          const cleanCurrentUserName = currentUser.nome.toUpperCase().split('(')[0].trim();
+                          if (upper === cleanCurrentUserName) return true;
+                          if (currentUser.is_suplente_active && currentUser.substituted_name && upper === currentUser.substituted_name.toUpperCase()) return true;
+                          return false;
+                        }) && (!lastDispatch || lastDispatch === 'NENHUMA') && (
                            <span className="flex items-center gap-2 px-3 py-1 rounded-lg bg-red-100 text-red-600 text-[10px] font-black uppercase tracking-widest border border-red-200 animate-bounce">
                               <Zap className="w-3 h-3" /> Revalidação Obrigatória
                            </span>

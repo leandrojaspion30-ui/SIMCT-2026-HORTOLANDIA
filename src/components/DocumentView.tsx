@@ -98,6 +98,8 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     if (!nome) return false;
     const upperNome = nome.toUpperCase();
     if (upperNome === currentUser.nome.toUpperCase()) return true;
+    const cleanCurrentUserName = currentUser.nome.toUpperCase().split('(')[0].trim();
+    if (upperNome === cleanCurrentUserName) return true;
     if (currentUser.is_suplente_active && currentUser.substituted_name && upperNome === currentUser.substituted_name.toUpperCase()) return true;
     return false;
   };

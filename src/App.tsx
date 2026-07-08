@@ -461,8 +461,15 @@ const App: React.FC = () => {
     if (!currentUser || (currentUser.perfil !== 'CONSELHEIRO' && currentUser.perfil !== 'SUPLENTE')) return [];
     return documents.filter(d => {
        const isAwaiting = d.status.includes('AGUARDANDO_VALIDACAO');
-       const inTrio = d.conselheiros_providencia_nomes?.includes(currentUser.nome.toUpperCase()) || 
-                      (currentUser.is_suplente_active && currentUser.substituted_name && d.conselheiros_providencia_nomes?.includes(currentUser.substituted_name.toUpperCase()));
+       const inTrio = d.conselheiros_providencia_nomes?.some(name => {
+         if (!name) return false;
+         const upper = name.toUpperCase();
+         if (upper === currentUser.nome.toUpperCase()) return true;
+         const cleanCurrentUserName = currentUser.nome.toUpperCase().split('(')[0].trim();
+         if (upper === cleanCurrentUserName) return true;
+         if (currentUser.is_suplente_active && currentUser.substituted_name && upper === currentUser.substituted_name.toUpperCase()) return true;
+         return false;
+       }) || false;
        const alreadyValidated = d.medidas_detalhadas?.some(m => 
          m.confirmacoes?.some(c => c.usuario_id === currentUser.id || c.usuario_id === currentUser.real_user_id)
        );
@@ -933,6 +940,8 @@ const App: React.FC = () => {
             if (!name) return false;
             const upper = name.toUpperCase();
             if (upper === currentUser.nome.toUpperCase()) return true;
+            const cleanCurrentUserName = currentUser.nome.toUpperCase().split('(')[0].trim();
+            if (upper === cleanCurrentUserName) return true;
             if (currentUser.is_suplente_active && currentUser.substituted_name && upper === currentUser.substituted_name.toUpperCase()) return true;
             return false;
           };
