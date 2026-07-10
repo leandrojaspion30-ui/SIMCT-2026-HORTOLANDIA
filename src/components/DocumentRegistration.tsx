@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check } from 'lucide-react';
 import { Documento, User, ChildData, DocumentStatus, AgendaEntry } from '../types';
-import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, CANAIS_COMUNICADO_LIST, getEffectiveEscala, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade, getUnidadeByBairro } from '../constants';
+import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, CANAIS_COMUNICADO_LIST, getEffectiveEscala, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade, getUnidadeByBairro, LOCAL_OCORRENCIA_OPTIONS } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
 
 interface SearchableSelectProps {
@@ -145,6 +145,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     relato_inicial: initialData?.observacoes_iniciais || '',
     conselheiro_referencia_id: initialData?.conselheiro_referencia_id || '',
     providencia_imediata_manual: initialData?.providencia_imediata_manual || '',
+    local_ocorrencia: initialData?.local_ocorrencia || '',
     criancas: initialData?.criancas || [{ nome: '', nao_informado: false, data_nascimento: '', cpf: '', genero_identidade: '' }] as ChildData[]
   });
 
@@ -828,6 +829,19 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                     });
                   }}
                 />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Local da Ocorrência da Violação</label>
+                <select 
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500"
+                  value={formData.local_ocorrencia}
+                  onChange={e => setFormData({...formData, local_ocorrencia: e.target.value})}
+                >
+                  <option value="">SELECIONE O LOCAL...</option>
+                  {LOCAL_OCORRENCIA_OPTIONS.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
               </div>
             </div>
           </section>

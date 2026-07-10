@@ -198,13 +198,18 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         'CRIANÇA (7-12)': 0,
         'ADOLESCENTE (13-18)': 0
       },
-      acoesPorConselheiro: {} as Record<string, number>
+      acoesPorConselheiro: {} as Record<string, number>,
+      locaisOcorrencia: {} as Record<string, number>
     };
 
     filteredDocuments.forEach(doc => {
       stats.bairros[doc.bairro] = (stats.bairros[doc.bairro] || 0) + 1;
       stats.origens[doc.origem] = (stats.origens[doc.origem] || 0) + 1;
       stats.canaisComunicado[doc.canal_comunicado] = (stats.canaisComunicado[doc.canal_comunicado] || 0) + 1;
+      
+      if (doc.local_ocorrencia) {
+        stats.locaisOcorrencia[doc.local_ocorrencia] = (stats.locaisOcorrencia[doc.local_ocorrencia] || 0) + 1;
+      }
       
       const currentStatus = doc.status[doc.status.length - 1];
       stats.status[currentStatus] = (stats.status[currentStatus] || 0) + 1;
@@ -320,6 +325,12 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
 
   const servicos136IIIData = useMemo(() => 
     Object.entries(aiStats.servicos136III)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+  , [aiStats]);
+
+  const locaisOcorrenciaData = useMemo(() => 
+    Object.entries(aiStats.locaisOcorrencia)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
   , [aiStats]);
@@ -733,6 +744,23 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       <div className="hidden print:flex justify-between items-center text-[9px] text-slate-400 border-b border-slate-200 pb-2 mb-6 uppercase font-black">
         <span>SIMCT • Relatório de Gestão • Hortolândia</span>
         <span>Página 6</span>
+      </div>
+
+      {/* NOVA SEÇÃO: LOCAL DA OCORRÊNCIA */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-2 print:gap-4 print-avoid-break">
+        <ProfessionalHorizontalChart 
+          title="Gráfico 11: Local da Ocorrência da Violação" 
+          data={locaisOcorrenciaData} 
+          barColor="#dc2626"
+          footerNote="Hortolândia • Locais onde as violações de direitos foram identificadas"
+        />
+      </div>
+
+      {/* QUEBRA DE PÁGINA PARA PÁGINA 7 */}
+      <div className="print-page-break h-0" />
+      <div className="hidden print:flex justify-between items-center text-[9px] text-slate-400 border-b border-slate-200 pb-2 mb-6 uppercase font-black">
+        <span>SIMCT • Relatório de Gestão • Hortolândia</span>
+        <span>Página 7</span>
       </div>
 
       {isGlobal && <AIStatisticsAnalyzer stats={aiStats} totalDocs={filteredDocuments.length} />}

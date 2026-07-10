@@ -16,7 +16,8 @@ import {
   STATUS_LABELS, INITIAL_USERS, 
   SIPIA_HIERARCHY, AGENTES_VIOLADORES_ESTRUTURA, 
   MEDIDAS_101_ECA, MEDIDAS_129_ECA,
-  ATRIBUICOES_136_ECA, REDE_HORTOLANDIA, getEffectiveEscala
+  ATRIBUICOES_136_ECA, REDE_HORTOLANDIA, getEffectiveEscala,
+  LOCAL_OCORRENCIA_OPTIONS
 } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
 import { formatLocalDateString } from '../lib/dateUtils';
@@ -71,6 +72,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const [informacoesDocumento, setInformacoesDocumento] = useState(doc.informacoes_documento || '');
   const [numeroComunicadoViolacao, setNumeroComunicadoViolacao] = useState(doc.numero_comunicado_violacao || '');
   const [numeroSipia, setNumeroSipia] = useState(doc.numero_sipia || '');
+  const [localOcorrencia, setLocalOcorrencia] = useState(doc.local_ocorrencia || '');
   const [showIntelligence, setShowIntelligence] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -92,7 +94,8 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     setInformacoesDocumento(doc.informacoes_documento || '');
     setNumeroComunicadoViolacao(doc.numero_comunicado_violacao || '');
     setNumeroSipia(doc.numero_sipia || '');
-  }, [doc.id, doc.informacoes_documento, doc.numero_comunicado_violacao, doc.numero_sipia]);
+    setLocalOcorrencia(doc.local_ocorrencia || '');
+  }, [doc.id, doc.informacoes_documento, doc.numero_comunicado_violacao, doc.numero_sipia, doc.local_ocorrencia]);
 
   const isUserInTrio = (nome: string) => {
     if (!nome) return false;
@@ -760,6 +763,26 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                             {opt}
                           </div>
                         ))}
+                      </div>
+                    ))}
+                  </div>
+                </AccordionSection>
+
+                <AccordionSection id="local" title="Local da Ocorrência" color="bg-slate-700" active={activeSection} onToggle={setActiveSection} saved={!!localOcorrencia}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {LOCAL_OCORRENCIA_OPTIONS.map(opt => (
+                      <div 
+                        key={opt} 
+                        onClick={() => {
+                          if (!canEditTechnicalFields) return;
+                          const nextLocal = localOcorrencia === opt ? '' : opt;
+                          setLocalOcorrencia(nextLocal);
+                          onUpdateDocument(doc.id, { local_ocorrencia: nextLocal });
+                        }} 
+                        className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer text-[10px] uppercase font-bold transition-all ${localOcorrencia === opt ? 'bg-slate-700 text-white shadow-sm' : 'hover:bg-slate-50 text-slate-600'}`}
+                      >
+                        {localOcorrencia === opt ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4 opacity-20" />} 
+                        {opt}
                       </div>
                     ))}
                   </div>

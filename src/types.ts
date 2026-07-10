@@ -191,6 +191,7 @@ export interface Documento {
   is_family_persistence?: boolean;
   is_manual_providencia?: boolean;
   providencia_imediata_manual?: string;
+  local_ocorrencia?: string;
 }
 
 export interface Atribuicao136Entry {
