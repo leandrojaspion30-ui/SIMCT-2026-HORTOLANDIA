@@ -230,7 +230,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
            </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
             <input type="text" placeholder="NOME, PROTOCOLO OU CÓDIGO DO COMUNICADO..." className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-[11px] uppercase focus:border-blue-500" value={filters.term} onChange={(e) => setFilters({...filters, term: e.target.value})} />
@@ -238,10 +238,6 @@ const DocumentList: React.FC<DocumentListProps> = ({
           <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-blue-500" value={filters.bairro} onChange={(e) => setFilters({...filters, bairro: e.target.value})}>
             <option value="">Qualquer Bairro</option>
             {getBairrosByUnidade(currentUser.unidade_id).map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
-          <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-blue-500" value={filters.status} onChange={(e) => setFilters({...filters, status: e.target.value})}>
-            <option value="">Qualquer Status</option>
-            {Object.entries(STATUS_LABELS).sort((a,b) => a[1].localeCompare(b[1])).map(([val, lab]) => <option key={val} value={val}>{lab}</option>)}
           </select>
           <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-blue-500" value={filters.conselheiro_ref_id} onChange={(e) => setFilters({...filters, conselheiro_ref_id: e.target.value})}>
             <option value="">Qualquer Conselheiro</option>
