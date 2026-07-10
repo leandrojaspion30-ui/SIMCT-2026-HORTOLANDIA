@@ -258,6 +258,7 @@ export interface AgendaEntry {
   genitores_responsavel?: string;
   documento_id?: string;
   descricao: string;
-  tipo: 'REUNIAO' | 'VISITA' | 'AUDIENCIA' | 'NOTIFICACAO 1' | 'NOTIFICACAO 2' | 'NOTIFICACAO 3' | 'REUNIAO DE REDE' | 'OUTROS';
+  tipo: string;
   status?: 'PENDENTE' | 'COMPARECEU' | 'NAO_COMPARECEU' | 'REAGENDADO';
+  excluido?: boolean;
 }

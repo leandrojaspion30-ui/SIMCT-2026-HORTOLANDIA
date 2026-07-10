@@ -130,10 +130,10 @@ export const saveAgenda = async (agendaData: Partial<AgendaEntry>) => {
 export const deleteAgenda = async (id: string) => {
   try {
     const docRef = doc(db, 'agenda', id);
-    await deleteDoc(docRef);
-    console.log(`Registro ${id} excluído com sucesso do Firestore.`);
+    await updateDoc(docRef, { excluido: true });
+    console.log(`Registro ${id} marcado como excluído com sucesso no Firestore.`);
   } catch (error) {
-    console.error("Erro interno ao deletar no Firestore:", error);
+    console.error("Erro interno ao deletar (soft-delete) no Firestore:", error);
     throw error;
   }
 };

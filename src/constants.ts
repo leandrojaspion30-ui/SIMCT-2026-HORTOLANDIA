@@ -667,3 +667,90 @@ export const INITIAL_AGENDA: any[] = [
     status: 'PENDENTE'
   }
 ];
+
+export const AGENDA_TIPOS = [
+  {
+    category: "ATENDIMENTOS",
+    options: [
+      "Atendimento no Conselho Tutelar",
+      "Atendimento espontâneo",
+      "Atendimento agendado",
+      "Atendimento domiciliar",
+      "Atendimento institucional"
+    ]
+  },
+  {
+    category: "VISITAS",
+    options: [
+      "Visita domiciliar",
+      "Visita escolar",
+      "Visita hospitalar",
+      "Visita em instituição de acolhimento",
+      "Visita em unidade socioeducativa",
+      "Visita de fiscalização"
+    ]
+  },
+  {
+    category: "NOTIFICAÇÕES",
+    options: [
+      "1° Notificação",
+      "2° Notificação",
+      "3° Notificação"
+    ]
+  },
+  {
+    category: "REUNIÕES",
+    options: [
+      "Reunião com a escola",
+      "Reunião com a OSC (Organização da Sociedade Civil)",
+      "Reunião com a rede de proteção",
+      "Reunião com CMDCA",
+      "Reunião com CRAS",
+      "Reunião com CREAS",
+      "Reunião com Ministério Público",
+      "Reunião com Poder Judiciário",
+      "Reunião com Segurança Pública",
+      "Reunião com uma Unidade de Saúde",
+      "Reunião de equipe",
+      "Reunião intersetorial"
+    ]
+  },
+  {
+    category: "AUDIÊNCIAS",
+    options: [
+      "Audiência judicial",
+      "Audiência no Ministério Público",
+      "Oitiva especializada",
+      "Escuta protegida (quando houver participação do Conselho)"
+    ]
+  },
+  {
+    category: "DILIGÊNCIAS",
+    options: [
+      "Diligência externa",
+      "Busca ativa",
+      "Averiguação de denúncia",
+      "Cumprimento de requisição",
+      "Acompanhamento de medida protetiva"
+    ]
+  },
+  {
+    category: "CAPACITAÇÃO",
+    options: [
+      "Curso",
+      "Treinamento",
+      "Palestra",
+      "Seminário",
+      "Conferência",
+      "Eventos",
+      "Campanha educativa",
+      "Ação comunitária",
+      "Reunião escolar",
+      "Evento institucional"
+    ]
+  },
+  {
+    category: "OUTROS",
+    options: ["Outros"]
+  }
+];

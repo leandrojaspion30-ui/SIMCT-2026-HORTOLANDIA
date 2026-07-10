@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Documento, AgendaEntry, User } from '../types';
-import { INITIAL_USERS, STATUS_LABELS } from '../constants';
+import { INITIAL_USERS, STATUS_LABELS, AGENDA_TIPOS } from '../constants';
 import { BarChart3, PieChart, TrendingUp, Users, FileText, ShieldAlert, Sparkles, UserCheck, Bell, PhoneCall, Activity, Download, Printer, X, Calendar } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell } from 'recharts';
 import { formatLocalDateString } from '../lib/dateUtils';
@@ -199,8 +199,21 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         'ADOLESCENTE (13-18)': 0
       },
       acoesPorConselheiro: {} as Record<string, number>,
-      locaisOcorrencia: {} as Record<string, number>
+      locaisOcorrencia: {} as Record<string, number>,
+      agendaPorCategoria: {} as Record<string, number>,
+      agendaPorTipo: {} as Record<string, number>
     };
+
+    filteredAgenda.forEach(item => {
+      // Se excluído, só conta para estatística se tiver sido confirmado (Compareceu)
+      if (item.excluido && item.status !== 'COMPARECEU') return;
+
+      stats.agendaPorTipo[item.tipo] = (stats.agendaPorTipo[item.tipo] || 0) + 1;
+      
+      // Categorização baseada no AGENDA_TIPOS
+      const category = AGENDA_TIPOS.find(cat => cat.options.includes(item.tipo))?.category || 'OUTROS';
+      stats.agendaPorCategoria[category] = (stats.agendaPorCategoria[category] || 0) + 1;
+    });
 
     filteredDocuments.forEach(doc => {
       stats.bairros[doc.bairro] = (stats.bairros[doc.bairro] || 0) + 1;
@@ -335,6 +348,18 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       .sort((a, b) => b.value - a.value)
   , [aiStats]);
 
+  const agendaCategoriaData = useMemo(() => 
+    Object.entries(aiStats.agendaPorCategoria)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+  , [aiStats]);
+
+  const agendaTipoData = useMemo(() => 
+    Object.entries(aiStats.agendaPorTipo)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+  , [aiStats]);
+
   const totalAttributions = useMemo(() => 
     filteredDocuments.reduce((acc, doc) => acc + (doc.atribuicoes_136?.length || 0), 0)
   , [filteredDocuments]);
@@ -344,7 +369,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       .filter(u => u.status !== 'EXCLUIDO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && (isGlobal ? true : (u.unidade_id || 1) === (currentUser.unidade_id || 1)))
       .map(u => {
         const myDocs = filteredDocuments.filter(d => d.conselheiro_referencia_id === u.id);
-        const myAgenda = filteredAgenda.filter(a => a.conselheiro_id === u.id);
+        const myAgenda = filteredAgenda.filter(a => a.conselheiro_id === u.id && (!a.excluido || a.status === 'COMPARECEU'));
         
         return {
           id: u.id,
@@ -353,7 +378,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
           docs: myDocs.length,
           disque100: myDocs.filter(d => d.origem.includes('DISQUE 100')).length,
           monitoring: myDocs.filter(d => d.status.includes('MONITORAMENTO')).length,
-          notifications: myAgenda.filter(a => a.tipo.startsWith('NOTIFICACAO')).length,
+          agendaActions: myAgenda.length,
           attendances: myAgenda.filter(a => a.status === 'COMPARECEU').length
         };
       })
@@ -361,13 +386,13 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
   }, [filteredDocuments, filteredAgenda]);
 
   const handleExportCSV = () => {
-    const headers = ["Conselheiro", "Unidade", "Documentos", "Disque 100", "Notificações", "Atendimentos", "Monitoramentos"];
+    const headers = ["Conselheiro", "Unidade", "Documentos", "Disque 100", "Ações Agenda", "Atendimentos", "Monitoramentos"];
     const rows = counselorPerformance.map(p => [
       p.nome,
       `CT ${p.unidade}`,
       p.docs,
       p.disque100,
-      p.notifications,
+      p.agendaActions,
       p.attendances,
       p.monitoring
     ]);
@@ -763,6 +788,30 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         <span>Página 7</span>
       </div>
 
+      {/* NOVA SEÇÃO: AÇÕES DO CONSELHO TUTELAR (AGENDA) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-2 print:gap-4 print-avoid-break">
+        <ProfessionalHorizontalChart 
+          title="Gráfico 12: Ações do Conselho Tutelar por Categoria" 
+          data={agendaCategoriaData} 
+          barColor="#2563eb"
+          footerNote="Hortolândia • Atividades registradas na agenda institucional"
+        />
+
+        <ProfessionalHorizontalChart 
+          title="Gráfico 13: Top 10 Ações Detalhadas" 
+          data={agendaTipoData.slice(0, 10)} 
+          barColor="#2563eb"
+          footerNote="Hortolândia • Detalhamento das atividades mais frequentes"
+        />
+      </div>
+
+      {/* QUEBRA DE PÁGINA PARA PÁGINA 8 */}
+      <div className="print-page-break h-0" />
+      <div className="hidden print:flex justify-between items-center text-[9px] text-slate-400 border-b border-slate-200 pb-2 mb-6 uppercase font-black">
+        <span>SIMCT • Relatório de Gestão • Hortolândia</span>
+        <span>Página 8</span>
+      </div>
+
       {isGlobal && <AIStatisticsAnalyzer stats={aiStats} totalDocs={filteredDocuments.length} />}
 
       {/* NOVA SEÇÃO: DESEMPENHO DOS CONSELHEIROS */}
@@ -807,8 +856,8 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
                 <div className="bg-white p-3 rounded-2xl border border-slate-100 flex items-center gap-2">
                   <Bell className="w-3.5 h-3.5 text-amber-400" />
                   <div className="flex flex-col">
-                    <span className="text-[12px] font-black text-slate-700 leading-none">{perf.notifications}</span>
-                    <span className="text-[8px] font-bold text-slate-400 uppercase">Notif</span>
+                    <span className="text-[12px] font-black text-slate-700 leading-none">{perf.agendaActions}</span>
+                    <span className="text-[8px] font-bold text-slate-400 uppercase">Ações</span>
                   </div>
                 </div>
                 <div className="bg-white p-3 rounded-2xl border border-slate-100 flex items-center gap-2">
@@ -839,7 +888,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
                 <th className="px-4 sm:px-6 py-4 text-center">Unidade</th>
                 <th className="px-4 sm:px-6 py-4 text-center">Documentos</th>
                 <th className="px-4 sm:px-6 py-4 text-center">Disque 100</th>
-                <th className="px-4 sm:px-6 py-4 text-center">Notificações</th>
+                <th className="px-4 sm:px-6 py-4 text-center">Ações Agenda</th>
                 <th className="px-4 sm:px-6 py-4 text-center">Atendimentos</th>
                 <th className="px-4 sm:px-6 py-4 text-center">Monitoramentos</th>
               </tr>
@@ -875,7 +924,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
                   <td className="px-4 sm:px-6 py-5 bg-slate-50 group-hover:bg-white border-y border-transparent group-hover:border-slate-100 text-center">
                     <div className="flex items-center justify-center gap-1 sm:gap-2">
                       <Bell className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400" />
-                      <span className="text-[12px] sm:text-[14px] font-black text-slate-600">{perf.notifications}</span>
+                      <span className="text-[12px] sm:text-[14px] font-black text-slate-600">{perf.agendaActions}</span>
                     </div>
                   </td>
                   <td className="px-4 sm:px-6 py-5 bg-slate-50 group-hover:bg-white border-y border-transparent group-hover:border-slate-100 text-center">

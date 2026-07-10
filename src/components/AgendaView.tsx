@@ -15,7 +15,7 @@ import {
   Edit3
 } from 'lucide-react';
 import { AgendaEntry, User, Documento } from '../types';
-import { INITIAL_USERS } from '../constants';
+import { INITIAL_USERS, AGENDA_TIPOS } from '../constants';
 import { saveAgenda, deleteAgenda } from '../lib/db';
 
 interface AgendaViewProps {
@@ -126,6 +126,7 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, users, setAgenda, allDo
 
   const visibleEvents = agenda
     .filter(item => {
+      if (item.excluido) return false;
       if (filterType === 'MY') {
         return item.conselheiro_id === effectiveUserId;
       }
@@ -405,16 +406,16 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, users, setAgenda, allDo
                       required 
                       className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl font-black text-xs uppercase outline-none focus:border-blue-500 transition-all"
                       value={newEntry.tipo}
-                      onChange={e => setNewEntry({...newEntry, tipo: e.target.value as any})}
+                      onChange={e => setNewEntry({...newEntry, tipo: e.target.value})}
                    >
-                     <option value="REUNIAO">REUNIÃO</option>
-                     <option value="VISITA">VISITA</option>
-                     <option value="AUDIENCIA">AUDIÊNCIA</option>
-                     <option value="NOTIFICACAO 1">NOTIFICAÇÃO 1</option>
-                     <option value="NOTIFICACAO 2">NOTIFICAÇÃO 2</option>
-                     <option value="NOTIFICACAO 3">NOTIFICAÇÃO 3</option>
-                     <option value="REUNIAO DE REDE">REUNIÃO DE REDE</option>
-                     <option value="OUTROS">OUTROS</option>
+                     <option value="">Selecione o tipo...</option>
+                     {AGENDA_TIPOS.map(group => (
+                       <optgroup key={group.category} label={group.category}>
+                         {group.options.map(opt => (
+                           <option key={opt} value={opt}>{opt.toUpperCase()}</option>
+                         ))}
+                       </optgroup>
+                     ))}
                    </select>
                  </div>
                  <div className="space-y-2">

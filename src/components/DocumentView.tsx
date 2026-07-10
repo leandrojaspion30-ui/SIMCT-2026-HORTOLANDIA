@@ -285,6 +285,23 @@ const DocumentView: React.FC<DocumentViewProps> = ({
 
   const handleSave = (finalize: boolean) => {
     if (!canEditTechnicalFields) return;
+
+    // VALIDAÇÃO: Local da Ocorrência obrigatório se houver Direito Violado AND Agente Violador
+    if (finalize) {
+      const hasViolations = tempViolacoes.length > 0;
+      const hasAgents = tempAgentes.length > 0 && !tempAgentes.some(a => a.categoria === 'INEXISTENTE');
+      
+      if (hasViolations && hasAgents && !localOcorrencia) {
+        alert("⚠️ O preenchimento do LOCAL DA OCORRÊNCIA é obrigatório quando há Direito Violado e Agente Violador identificados.");
+        const section = document.getElementById('local');
+        if (section) {
+          section.scrollIntoView({ behavior: 'smooth' });
+          setActiveSection('local');
+        }
+        return;
+      }
+    }
+
     const now = new Date();
     const formattedDate = now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
     
@@ -491,6 +508,8 @@ const DocumentView: React.FC<DocumentViewProps> = ({
 
   const provName = users.find(u => u.id === doc.conselheiro_providencia_id)?.nome || 'Não Encontrado';
   const refName = users.find(u => u.id === doc.conselheiro_referencia_id)?.nome || 'Não Encontrado';
+
+  const isLocalMandatory = tempViolacoes.length > 0 && tempAgentes.length > 0 && !tempAgentes.some(a => a.categoria === 'INEXISTENTE');
 
   return (
     <>
@@ -768,7 +787,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                   </div>
                 </AccordionSection>
 
-                <AccordionSection id="local" title="Local da Ocorrência" color="bg-slate-700" active={activeSection} onToggle={setActiveSection} saved={!!localOcorrencia}>
+                <AccordionSection id="local" title={isLocalMandatory ? "Local da Ocorrência (Obrigatório)" : "Local da Ocorrência"} color="bg-slate-700" active={activeSection} onToggle={setActiveSection} saved={!!localOcorrencia}>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {LOCAL_OCORRENCIA_OPTIONS.map(opt => (
                       <div 

@@ -176,7 +176,7 @@ const App: React.FC = () => {
   const imminentEvent = useMemo(() => {
     if (!currentUser) return null;
     const now = new Date();
-    const myEvents = agenda.filter(e => (e.conselheiro_id === currentUser.id || e.conselheiro_id === currentUser.real_user_id) && !acknowledgedEventIds.includes(e.id));
+    const myEvents = agenda.filter(e => !e.excluido && (e.conselheiro_id === currentUser.id || e.conselheiro_id === currentUser.real_user_id) && !acknowledgedEventIds.includes(e.id));
     
     return myEvents.find(e => {
       try {
@@ -197,7 +197,7 @@ const App: React.FC = () => {
     const now = new Date();
     
     return agenda.find(e => {
-      if ((e.conselheiro_id !== currentUser.id && e.conselheiro_id !== currentUser.real_user_id) || acknowledgedReminderIds.includes(`${e.id}-2h`)) return false;
+      if (e.excluido || (e.conselheiro_id !== currentUser.id && e.conselheiro_id !== currentUser.real_user_id) || acknowledgedReminderIds.includes(`${e.id}-2h`)) return false;
       try {
         const eventDate = new Date(`${e.data}T${e.hora}:00`);
         const diffMs = eventDate.getTime() - now.getTime();
