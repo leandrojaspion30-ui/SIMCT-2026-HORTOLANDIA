@@ -838,9 +838,12 @@ const App: React.FC = () => {
           // Adiciona localmente para reconhecimento instantâneo
           setUsers(prev => [...prev.filter(u => u.id !== newUser.id), newUser]);
         }}
-        onResetDocuments={async () => {
-          await deleteAllDocuments();
-          addLog('SISTEMA', `RH: RESET TOTAL DO SISTEMA - Todos os procedimentos foram apagados.`, 'SEGURANÇA');
+        onResetDocuments={async (unidadeId?: number) => {
+          await deleteAllDocuments(unidadeId);
+          const logMsg = unidadeId 
+            ? `RH: RESET DO SISTEMA (UNIDADE ${unidadeId}) - Os procedimentos da Unidade ${unidadeId} foram apagados.`
+            : `RH: RESET TOTAL DO SISTEMA - Todos os procedimentos foram apagados.`;
+          addLog('SISTEMA', logMsg, 'SEGURANÇA');
         }}
         onAddLog={(action) => addLog('SISTEMA', action, 'SEGURANÇA')} 
         setActiveTab={(tab: any) => navigateTo(tab)}

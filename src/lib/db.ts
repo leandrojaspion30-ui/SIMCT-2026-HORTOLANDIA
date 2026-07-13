@@ -86,7 +86,7 @@ export const deleteDocument = async (id: string) => {
   await deleteDoc(doc(db, 'documents', id));
 };
 
-export const deleteAllDocuments = async () => {
+export const deleteAllDocuments = async (unidadeId?: number) => {
   await ensureAuthenticated();
   
   const collectionsToClear = ['documents', 'monitoring'];
@@ -97,13 +97,18 @@ export const deleteAllDocuments = async () => {
     let count = 0;
 
     for (const docRef of snapshot.docs) {
-      batch.delete(docRef.ref);
-      count++;
+      const data = docRef.data();
+      const docUnidadeId = data ? data.unidade_id : undefined;
       
-      if (count === 450) { // Firebase limit is 500
-        await batch.commit();
-        batch = writeBatch(db);
-        count = 0;
+      if (!unidadeId || docUnidadeId === unidadeId) {
+        batch.delete(docRef.ref);
+        count++;
+        
+        if (count === 450) { // Firebase limit is 500
+          await batch.commit();
+          batch = writeBatch(db);
+          count = 0;
+        }
       }
     }
 

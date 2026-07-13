@@ -9,7 +9,7 @@ interface UserManagementPanelProps {
   onUpdateUser: (id: string, update: Partial<UserWithPassword>) => Promise<void> | void;
   onDeleteUser?: (id: string) => Promise<void> | void;
   onAddUser?: (user: UserWithPassword) => Promise<void> | void;
-  onResetDocuments?: () => Promise<void> | void;
+  onResetDocuments?: (unidadeId?: number) => Promise<void> | void;
   onAddLog: (action: string) => void;
   setActiveTab?: (tab: string) => void;
 }
@@ -40,6 +40,7 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
   const [userToStopSubstituicao, setUserToStopSubstituicao] = useState<UserWithPassword | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [replaceSuccess, setReplaceSuccess] = useState<{from: string, to: string} | null>(null);
+  const [resetTargetUnit, setResetTargetUnit] = useState<number | 'ALL'>('ALL');
   const [newUser, setNewUser] = useState<UserWithPassword>({
     id: '',
     nome: '',
@@ -493,23 +494,69 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                 <p className="text-[14px] font-bold text-red-600 uppercase tracking-widest">Ação Irreversível de Segurança</p>
               </div>
               
-              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 w-full">
+              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 w-full space-y-4">
                 <p className="text-[12px] font-bold text-slate-500 uppercase leading-relaxed text-left">
                   {pendingResetAction === 'BACKUP_AND_RESET' 
-                    ? "O sistema realizará o BACKUP e depois apagará TODOS os procedimentos e monitoramentos registrados." 
-                    : "O sistema apagará TODOS os procedimentos e monitoramentos registrados sem backup automático."}
+                    ? "O sistema realizará o BACKUP e depois apagará os registros selecionados." 
+                    : "O sistema apagará os registros selecionados sem backup automático."}
                 </p>
-                <p className="mt-4 text-[11px] font-black text-slate-800 uppercase text-left">
-                  Para confirmar, digite a palavra <span className="text-red-600">RESET</span> abaixo:
-                </p>
-                <input 
-                  autoFocus
-                  type="text" 
-                  className="w-full mt-3 p-4 bg-white border-2 border-red-100 rounded-2xl font-black text-center text-lg uppercase outline-none focus:border-red-600 transition-all"
-                  value={resetConfirmText}
-                  placeholder="DIGITE AQUI..."
-                  onChange={e => setResetConfirmText(e.target.value.toUpperCase())}
-                />
+
+                {/* Seletor de Unidades para Reset */}
+                <div className="text-left space-y-2 pt-2 border-t border-slate-200">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Selecione o Escopo do Reset</label>
+                  <div className="grid grid-cols-1 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setResetTargetUnit('ALL')}
+                      className={`p-3 rounded-xl border text-xs font-black uppercase tracking-wider transition-all text-left flex items-center justify-between ${
+                        resetTargetUnit === 'ALL'
+                          ? 'bg-red-600 text-white border-red-600 shadow-md'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span>Ambas as Unidades (Geral)</span>
+                      {resetTargetUnit === 'ALL' && <UserCheck className="w-4 h-4" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setResetTargetUnit(1)}
+                      className={`p-3 rounded-xl border text-xs font-black uppercase tracking-wider transition-all text-left flex items-center justify-between ${
+                        resetTargetUnit === 1
+                          ? 'bg-red-600 text-white border-red-600 shadow-md'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span>Conselho Tutelar 1 (Unidade 1)</span>
+                      {resetTargetUnit === 1 && <UserCheck className="w-4 h-4" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setResetTargetUnit(2)}
+                      className={`p-3 rounded-xl border text-xs font-black uppercase tracking-wider transition-all text-left flex items-center justify-between ${
+                        resetTargetUnit === 2
+                          ? 'bg-red-600 text-white border-red-600 shadow-md'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span>Conselho Tutelar 2 (Unidade 2)</span>
+                      {resetTargetUnit === 2 && <UserCheck className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200">
+                  <p className="text-[11px] font-black text-slate-800 uppercase text-left">
+                    Para confirmar, digite a palavra <span className="text-red-600">RESET</span> abaixo:
+                  </p>
+                  <input 
+                    autoFocus
+                    type="text" 
+                    className="w-full mt-3 p-4 bg-white border-2 border-red-100 rounded-2xl font-black text-center text-lg uppercase outline-none focus:border-red-600 transition-all"
+                    value={resetConfirmText}
+                    placeholder="DIGITE AQUI..."
+                    onChange={e => setResetConfirmText(e.target.value.toUpperCase())}
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-1 gap-3 w-full pt-4">
@@ -523,8 +570,14 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                         if (!backupOk) throw new Error("Erro no backup");
                       }
                       
-                      if (onResetDocuments) await onResetDocuments();
-                      alert("SISTEMA REINICIALIZADO: Banco de dados limpo com sucesso.");
+                      const targetUnitId = resetTargetUnit === 'ALL' ? undefined : resetTargetUnit;
+                      if (onResetDocuments) await onResetDocuments(targetUnitId);
+                      
+                      const successMsg = resetTargetUnit === 'ALL'
+                        ? "SISTEMA REINICIALIZADO: Banco de dados geral limpo com sucesso."
+                        : `SISTEMA REINICIALIZADO: Dados do Conselho Tutelar ${resetTargetUnit} limpos com sucesso.`;
+                      
+                      alert(successMsg);
                       setIsResetModalOpen(false);
                     } catch (error: any) {
                       const msg = error?.message || String(error);
@@ -536,7 +589,9 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                   }}
                   className="w-full py-5 bg-red-600 text-white rounded-2xl font-black text-[13px] uppercase tracking-widest shadow-xl shadow-red-100 hover:bg-slate-900 transition-all disabled:opacity-30 disabled:grayscale"
                 >
-                  Confirmar Reset Total
+                  {resetTargetUnit === 'ALL'
+                    ? "Confirmar Reset Total"
+                    : `Confirmar Reset (Unidade ${resetTargetUnit})`}
                 </button>
                 <button 
                   onClick={() => setIsResetModalOpen(false)}
