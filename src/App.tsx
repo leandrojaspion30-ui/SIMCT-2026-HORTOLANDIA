@@ -490,6 +490,12 @@ const App: React.FC = () => {
   // DIRETRIZ: Alertas de Monitoramento Vencido
   const expiredMonitoringItems = useMemo(() => {
     if (!currentUser) return [];
+    
+    // Nenhum ADM geral e adm deve receber esses alertas de monitoramento
+    if (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO') {
+      return [];
+    }
+
     const today = new Date();
     today.setHours(0,0,0,0);
 
@@ -498,8 +504,7 @@ const App: React.FC = () => {
       
       // Apenas o conselheiro de referência ou membros da unidade no caso de supervisão
       const isRef = d.conselheiro_referencia_id === currentUser.id;
-      const isAdminTask = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
-      if (!isRef && !isAdminTask) return false;
+      if (!isRef) return false;
 
       return d.monitoramento.requisicoes?.some(r => {
         if (r.concluido || (r as any).excluidoDoMonitoramento) return false;
