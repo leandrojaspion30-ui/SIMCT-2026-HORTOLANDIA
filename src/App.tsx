@@ -687,6 +687,132 @@ const App: React.FC = () => {
             addLog('SISTEMA', `RH: Nome do usuário alterado de ${oldName} para ${newName}.`, 'SEGURANÇA');
           }
 
+          // LÓGICA DE RETORNO DO CONSELHEIRO SUBSTITUÍDO (SUPLENTE FINALIZA SUBSTITUIÇÃO)
+          if (target.perfil === 'SUPLENTE' && target.substituicao_ativa && upd.substituicao_ativa === false) {
+            const conselheiroId = target.substituindo_id;
+            const startDate = target.data_inicio_substituicao;
+            if (conselheiroId && startDate) {
+              const conselheiroObj = users.find(u => u.id === conselheiroId);
+              if (conselheiroObj) {
+                const suplenteId = target.id;
+                const suplenteName = target.nome;
+                const conselheiroName = conselheiroObj.nome;
+
+                console.log(`[RH] Suplente ${suplenteName} (${suplenteId}) encerrando substituição de ${conselheiroName} (${conselheiroId}) iniciada em ${startDate}. Migrando documentos e agenda gerados no período.`);
+                addLog('SISTEMA', `RH: MIGRAÇÃO DE SUPLÊNCIA - Transferindo registros gerados por [${suplenteName}] desde [${startDate}] de volta para o titular [${conselheiroName}].`, 'SEGURANÇA');
+
+                const currentDocs = await new Promise<any[]>(resolve => {
+                  setAllDocuments(prev => {
+                    resolve(prev);
+                    return prev;
+                  });
+                });
+
+                // Encontra documentos criados durante o período de suplência que pertencem ao suplente
+                const docsToMigrate = currentDocs.filter(d => {
+                  const createdDateStr = d.criado_em ? d.criado_em.substring(0, 10) : '';
+                  const receiptDateStr = d.data_recebimento || '';
+                  const isWithinPeriod = (createdDateStr && createdDateStr >= startDate) || (receiptDateStr && receiptDateStr >= startDate);
+
+                  if (!isWithinPeriod) return false;
+
+                  const isAssignedToSuplente = d.conselheiro_referencia_id === suplenteId || 
+                                              d.conselheiro_providencia_id === suplenteId || 
+                                              d.criado_por_id === suplenteId ||
+                                              d.conselheiros_providencia_nomes?.some(n => n.toUpperCase() === suplenteName.toUpperCase()) ||
+                                              d.notificacao?.toUpperCase() === suplenteName.toUpperCase();
+
+                  return isAssignedToSuplente;
+                });
+
+                console.log(`[RH] Encontrados ${docsToMigrate.length} documentos criados pelo suplente ${suplenteName} no período.`);
+
+                for (const doc of docsToMigrate) {
+                  let updatedDoc: any = { id: doc.id };
+
+                  // IDs
+                  if (doc.conselheiro_referencia_id === suplenteId) updatedDoc.conselheiro_referencia_id = conselheiroId;
+                  if (doc.conselheiro_providencia_id === suplenteId) updatedDoc.conselheiro_providencia_id = conselheiroId;
+                  if (doc.criado_por_id === suplenteId) updatedDoc.criado_por_id = conselheiroId;
+
+                  // Nomes nas listas
+                  if (doc.conselheiros_providencia_nomes) {
+                    updatedDoc.conselheiros_providencia_nomes = doc.conselheiros_providencia_nomes.map(n => 
+                      n.toUpperCase() === suplenteName.toUpperCase() ? conselheiroName : n
+                    );
+                  }
+
+                  if (doc.notificacoes_trio) {
+                    updatedDoc.notificacoes_trio = doc.notificacoes_trio.map(n => 
+                      n.toUpperCase() === suplenteName.toUpperCase() ? conselheiroName : n
+                    );
+                  }
+
+                  // Substituição nos campos de texto principais se contiverem o nome do suplente
+                  const textFields: (keyof any)[] = [
+                    'notificacao', 'conselheiro_referencia_name', 'conselheiro_providencia_name'
+                  ];
+
+                  textFields.forEach(field => {
+                    if (doc[field] && typeof doc[field] === 'string' && (doc[field] as string).toUpperCase().includes(suplenteName.toUpperCase())) {
+                      const regex = new RegExp(suplenteName, 'gi');
+                      updatedDoc[field] = (doc[field] as string).replace(regex, conselheiroName);
+                    }
+                  });
+
+                  await saveDocument(updatedDoc);
+                }
+
+                // Agenda
+                const currentAgenda = await new Promise<any[]>(resolve => {
+                  setAllAgenda(prev => {
+                    resolve(prev);
+                    return prev;
+                  });
+                });
+
+                const agendaToMigrate = currentAgenda.filter(a => 
+                  a.conselheiro_id === suplenteId && 
+                  a.data >= startDate
+                );
+
+                console.log(`[RH] Encontrados ${agendaToMigrate.length} eventos de agenda criados pelo suplente.`);
+
+                for (const evt of agendaToMigrate) {
+                  await saveAgenda({ ...evt, conselheiro_id: conselheiroId });
+                }
+
+                // Forçar atualização local dos estados dos documentos
+                setAllDocuments(prev => prev.map(d => {
+                  const createdDateStr = d.criado_em ? d.criado_em.substring(0, 10) : '';
+                  const receiptDateStr = d.data_recebimento || '';
+                  const isWithinPeriod = (createdDateStr && createdDateStr >= startDate) || (receiptDateStr && receiptDateStr >= startDate);
+
+                  if (isWithinPeriod && (d.conselheiro_referencia_id === suplenteId || d.conselheiro_providencia_id === suplenteId)) {
+                    return { 
+                      ...d, 
+                      conselheiro_referencia_id: d.conselheiro_referencia_id === suplenteId ? conselheiroId : d.conselheiro_referencia_id,
+                      conselheiro_providencia_id: d.conselheiro_providencia_id === suplenteId ? conselheiroId : d.conselheiro_providencia_id,
+                      conselheiros_providencia_nomes: d.conselheiros_providencia_nomes?.map(n => n.toUpperCase() === suplenteName.toUpperCase() ? conselheiroName : n),
+                      notificacao: d.notificacao?.toUpperCase() === suplenteName.toUpperCase() ? conselheiroName : d.notificacao
+                    };
+                  }
+                  return d;
+                }));
+
+                // Forçar atualização local dos estados da agenda
+                setAllAgenda(prev => prev.map(a => {
+                  if (a.conselheiro_id === suplenteId && a.data >= startDate) {
+                    return { ...a, conselheiro_id: conselheiroId };
+                  }
+                  return a;
+                }));
+
+                addLog('SISTEMA', `RH: RETORNO DE TITULAR CONCLUÍDO. [${conselheiroName}] reassumiu todas as funções e registros gerados por [${suplenteName}] desde [${startDate}].`, 'SEGURANÇA');
+              }
+            }
+          }
+
           // LÓGICA DE SUBSTITUIÇÃO PERMANENTE (MIGRAÇÃO DE ID E NOMES)
           if (upd.substituicao_permanente_por) {
             const successorId = upd.substituicao_permanente_por;
