@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { 
   Documento, Log, User as UserType, DocumentStatus, 
-  MedidaAplicada, SipiaViolation, AgenteVioladorEntry, LogType, AgendaEntry
+  MedidaAplicada, SipiaViolation, AgenteVioladorEntry, LogType, AgendaEntry, ScaleException
 } from '../types';
 import { 
   STATUS_LABELS, INITIAL_USERS, 
@@ -41,6 +41,7 @@ interface DocumentViewProps {
   onAddLog: (docId: string, acao: string, tipo?: LogType) => void;
   onScience: (id: string) => void;
   nameMap?: Record<string, string>;
+  scaleExceptions?: ScaleException[];
 }
 
 const DocumentView: React.FC<DocumentViewProps> = ({ 
@@ -57,7 +58,8 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   onUpdateDocument,
   onAddLog,
   onScience,
-  nameMap
+  nameMap,
+  scaleExceptions = []
 }) => {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [tempViolacoes, setTempViolacoes] = useState<SipiaViolation[]>(doc.violacoesSipia || []);
@@ -330,7 +332,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       confirmacoes = confirmacoes.filter(c => c.usuario_id === currentUser.id);
       const escala = (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.length > 0)
         ? doc.conselheiros_providencia_nomes
-        : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap);
+        : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap, scaleExceptions);
       notificacoesTrio = escala.filter(nome => !isUserInTrio(nome));
     }
     
@@ -435,7 +437,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
         // Notificar automaticamente os outros membros do trio de imediata
         const escala = (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.length > 0)
           ? doc.conselheiros_providencia_nomes
-          : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap);
+          : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap, scaleExceptions);
         const outrosDoTrio = escala.filter(nome => !isUserInTrio(nome));
         
         const novasNotificacoes = [...notificacoesTrio];

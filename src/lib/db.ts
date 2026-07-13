@@ -14,7 +14,7 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { db, ensureAuthenticated } from './firebase';
-import { Documento, Log, AgendaEntry, User } from '../types';
+import { Documento, Log, AgendaEntry, User, ScaleException } from '../types';
 
 export const syncCollection = <T extends { id: string }>(
   collectionName: string, 
@@ -154,3 +154,16 @@ export const deleteUser = async (id: string) => {
   await ensureAuthenticated();
   await deleteDoc(doc(db, 'users', id));
 };
+
+export const saveScaleException = async (exceptionData: Partial<ScaleException>) => {
+  await ensureAuthenticated();
+  const id = exceptionData.id || `swap-${Date.now()}`;
+  const data = cleanData({ ...exceptionData, id });
+  await setDoc(doc(db, 'scale_exceptions', id), data, { merge: true });
+};
+
+export const deleteScaleException = async (id: string) => {
+  await ensureAuthenticated();
+  await deleteDoc(doc(db, 'scale_exceptions', id));
+};
+

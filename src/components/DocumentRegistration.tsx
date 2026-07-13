@@ -1,9 +1,10 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check } from 'lucide-react';
-import { Documento, User, ChildData, DocumentStatus, AgendaEntry } from '../types';
+import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check, Repeat } from 'lucide-react';
+import { Documento, User, ChildData, DocumentStatus, AgendaEntry, ScaleException } from '../types';
 import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, CANAIS_COMUNICADO_LIST, getEffectiveEscala, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade, getUnidadeByBairro, LOCAL_OCORRENCIA_OPTIONS } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
+import { saveScaleException, deleteScaleException, saveLog } from '../lib/db';
 
 interface SearchableSelectProps {
   options: string[];
@@ -117,9 +118,10 @@ interface DocumentRegistrationProps {
   title?: string;
   nameMap?: Record<string, string>;
   allUsers?: User[];
+  scaleExceptions?: ScaleException[];
 }
 
-const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, users, agenda, currentUser, onSubmit, onCancel, initialData, isReadOnly, title, nameMap, allUsers = users }) => {
+const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, users, agenda, currentUser, onSubmit, onCancel, initialData, isReadOnly, title, nameMap, allUsers = users, scaleExceptions = [] }) => {
   const systemNow = new Date();
   const year = systemNow.getFullYear();
   const month = String(systemNow.getMonth() + 1).padStart(2, '0');
@@ -179,6 +181,121 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
 
   const isADM = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
 
+  // Estados para gerenciamento de Troca Excepcional de Escala (Casos Excepcionais)
+  const [isScaleSwapModalOpen, setIsScaleSwapModalOpen] = useState(false);
+  const [swapDate, setSwapDate] = useState(todayDate);
+  const [swapOriginalId, setSwapOriginalId] = useState('');
+  const [swapSubstituteId, setSwapSubstituteId] = useState('');
+  const [swapJustification, setSwapJustification] = useState('');
+
+  const unitCounselors = useMemo(() => {
+    return allUsers.filter(u => u.unidade_id === formData.unidade_id && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.status === 'ATIVO');
+  }, [allUsers, formData.unidade_id]);
+
+  const activeSwapForDate = useMemo(() => {
+    return scaleExceptions.find(ex => ex.data === swapDate && ex.unidade_id === formData.unidade_id);
+  }, [scaleExceptions, swapDate, formData.unidade_id]);
+
+  useEffect(() => {
+    if (isScaleSwapModalOpen) {
+      const trio = getEffectiveEscala(swapDate, '12:00', formData.unidade_id, nameMap);
+      const firstTrioUser = unitCounselors.find(u => trio.map(n => n.toUpperCase()).includes(u.nome.toUpperCase()));
+      if (firstTrioUser) {
+        setSwapOriginalId(firstTrioUser.id);
+      } else if (unitCounselors.length > 0) {
+        setSwapOriginalId(unitCounselors[0].id);
+      }
+    }
+  }, [swapDate, formData.unidade_id, isScaleSwapModalOpen, unitCounselors, nameMap]);
+
+  useEffect(() => {
+    if (swapOriginalId) {
+      const firstSub = unitCounselors.find(u => u.id !== swapOriginalId);
+      if (firstSub) {
+        setSwapSubstituteId(firstSub.id);
+      }
+    }
+  }, [swapOriginalId, unitCounselors]);
+
+  const handleConfirmScaleSwap = async () => {
+    if (!swapDate) {
+      alert("Por favor, selecione uma data válida.");
+      return;
+    }
+    if (!swapOriginalId || !swapSubstituteId) {
+      alert("Por favor, selecione os dois conselheiros.");
+      return;
+    }
+    if (swapOriginalId === swapSubstituteId) {
+      alert("O conselheiro substituto não pode ser o mesmo a ser substituído.");
+      return;
+    }
+    if (!swapJustification.trim()) {
+      alert("Por favor, informe uma justificativa para esta substituição excepcional.");
+      return;
+    }
+
+    const originalUser = allUsers.find(u => u.id === swapOriginalId);
+    const substituteUser = allUsers.find(u => u.id === swapSubstituteId);
+
+    if (!originalUser || !substituteUser) return;
+
+    try {
+      const exceptionId = `swap-${swapDate}-u${formData.unidade_id}`;
+      await saveScaleException({
+        id: exceptionId,
+        data: swapDate,
+        unidade_id: formData.unidade_id,
+        conselheiro_original_id: originalUser.id,
+        conselheiro_original_nome: originalUser.nome,
+        conselheiro_substituto_id: substituteUser.id,
+        conselheiro_substituto_nome: substituteUser.nome,
+        justificativa: swapJustification.trim(),
+        criado_em: new Date().toISOString(),
+        criado_por_id: currentUser.id,
+        criado_por_nome: currentUser.nome
+      });
+
+      await saveLog({
+        id: `log-${Date.now()}`,
+        documento_id: 'SISTEMA',
+        data_hora: new Date().toISOString(),
+        usuario_id: currentUser.id,
+        usuario_nome: currentUser.nome,
+        unidade_id: formData.unidade_id,
+        acao: `ESCALA: Substituição Excepcional na Unidade ${formData.unidade_id} em ${swapDate}. Conselheiro(a) ${originalUser.nome.toUpperCase()} substituído(a) por ${substituteUser.nome.toUpperCase()}. Justificativa: ${swapJustification.trim()}`,
+        tipo: 'SISTEMA'
+      });
+
+      setSwapJustification('');
+      setIsScaleSwapModalOpen(false);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao salvar a alteração de escala.");
+    }
+  };
+
+  const handleRemoveScaleSwap = async (exceptionId: string) => {
+    if (!window.confirm("Deseja realmente remover esta alteração e restaurar a escala original?")) return;
+    try {
+      await deleteScaleException(exceptionId);
+
+      await saveLog({
+        id: `log-${Date.now()}`,
+        documento_id: 'SISTEMA',
+        data_hora: new Date().toISOString(),
+        usuario_id: currentUser.id,
+        usuario_nome: currentUser.nome,
+        unidade_id: formData.unidade_id,
+        acao: `ESCALA: Cancelamento de Substituição Excepcional em ${swapDate} (escala original restaurada).`,
+        tipo: 'SISTEMA'
+      });
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao remover a alteração de escala.");
+    }
+  };
+
   // DIRETRIZ 41/50/53: Reconhecimento por CPF e Auto-preenchimento
   useEffect(() => {
     const cpfGen = (formData.cpf_genitora || '').replace(/\D/g, '');
@@ -219,8 +336,8 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
   const trioNames = useMemo(() => {
     const d = initialData ? formData.data_aporte : todayDate;
     const t = '12:00'; // Sempre usa horário de expediente comercial padrão para alinhar com o Diagnóstico de Distribuição do dia
-    return getEffectiveEscala(d, t, formData.unidade_id, nameMap);
-  }, [initialData, formData.data_aporte, todayDate, formData.unidade_id, nameMap]);
+    return getEffectiveEscala(d, t, formData.unidade_id, nameMap, scaleExceptions);
+  }, [initialData, formData.data_aporte, todayDate, formData.unidade_id, nameMap, scaleExceptions]);
 
     // DIRETRIZ 51/52: Rodízio Alfabético Estável para Referência
   const assignedReference = useMemo(() => {
@@ -830,19 +947,6 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   }}
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Local da Ocorrência da Violação</label>
-                <select 
-                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500"
-                  value={formData.local_ocorrencia}
-                  onChange={e => setFormData({...formData, local_ocorrencia: e.target.value})}
-                >
-                  <option value="">SELECIONE O LOCAL...</option>
-                  {LOCAL_OCORRENCIA_OPTIONS.map(opt => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-              </div>
             </div>
           </section>
 
@@ -1054,6 +1158,18 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                         : (formData.notificacao ? 'Vínculo de Notificação' : 'Escala do Dia'))}
                 </span>
               </div>
+              {!isReadOnly && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsScaleSwapModalOpen(true)}
+                    className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-amber-50 hover:bg-amber-100 text-amber-700 hover:text-amber-800 text-[10px] font-black uppercase rounded-xl border border-amber-200/60 transition-all duration-200 shadow-sm"
+                  >
+                    <Repeat className="w-3.5 h-3.5 animate-spin-slow" />
+                    Alterar Escala de Plantão (Caso Excepcional)
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </fieldset>
@@ -1077,6 +1193,172 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
           currentUser={currentUser} 
           onClose={() => setShowHistoryModal(false)} 
         />
+      )}
+
+      {isScaleSwapModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-amber-50 rounded-2xl text-amber-600">
+                  <Repeat className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-[14px] font-black text-slate-800 uppercase tracking-wider">Substituição Excepcional</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Alterar plantão de providência imediata</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  setSwapJustification('');
+                  setIsScaleSwapModalOpen(false);
+                }}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Warning Banner */}
+            <div className="mx-8 mt-6 p-4 bg-amber-50 rounded-2xl border border-amber-100 flex gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[11px] font-bold text-amber-800 uppercase leading-relaxed tracking-tight">Aviso Importante</p>
+                <p className="text-[10px] font-medium text-amber-700 leading-normal mt-0.5">
+                  Esta troca é uma exceção temporária. O sistema considerará o conselheiro substituto para providências imediatas das 08:00h do dia selecionado até as 08:00h do dia seguinte.
+                </p>
+              </div>
+            </div>
+
+            {/* Content (Scrollable if needed) */}
+            <div className="p-8 flex-1 overflow-y-auto space-y-6">
+              {/* Date Input */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-slate-500" /> Data do Plantão / Escala
+                </label>
+                <input
+                  type="date"
+                  value={swapDate}
+                  onChange={(e) => setSwapDate(e.target.value)}
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm"
+                />
+              </div>
+
+              {/* Existing Exception Details */}
+              {activeSwapForDate ? (
+                <div className="p-5 bg-blue-50/50 rounded-2xl border border-blue-100 space-y-4">
+                  <div className="flex items-center gap-2 text-[10px] font-black text-blue-800 uppercase tracking-wider">
+                    <CheckCircle2 className="w-4 h-4 text-blue-600" /> Substituição Já Cadastrada
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-[11px]">
+                    <div>
+                      <div className="text-[9px] font-bold text-slate-400 uppercase">Substituído</div>
+                      <div className="font-black text-slate-700 uppercase mt-0.5">{activeSwapForDate.conselheiro_original_nome}</div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-bold text-slate-400 uppercase">Substituto</div>
+                      <div className="font-black text-blue-700 uppercase mt-0.5">{activeSwapForDate.conselheiro_substituto_nome}</div>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-blue-100">
+                    <div className="text-[9px] font-bold text-slate-400 uppercase">Justificativa</div>
+                    <p className="text-[10px] font-bold text-slate-600 uppercase mt-1 leading-relaxed bg-white/60 p-2.5 rounded-lg border border-slate-100">
+                      {activeSwapForDate.justificativa}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveScaleSwap(activeSwapForDate.id)}
+                    className="w-full py-2.5 px-4 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 text-[10px] font-black uppercase rounded-xl border border-red-100 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Restaurar Escala Original (Remover Troca)
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Swap Row (Original & Substitute) */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        A Ser Substituído
+                      </label>
+                      <select
+                        value={swapOriginalId}
+                        onChange={(e) => setSwapOriginalId(e.target.value)}
+                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm"
+                      >
+                        <option value="">Selecione...</option>
+                        {unitCounselors.map(u => (
+                          <option key={u.id} value={u.id}>{u.nome.toUpperCase()}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        Substituto
+                      </label>
+                      <select
+                        value={swapSubstituteId}
+                        onChange={(e) => setSwapSubstituteId(e.target.value)}
+                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm"
+                      >
+                        <option value="">Selecione...</option>
+                        {unitCounselors
+                          .filter(u => u.id !== swapOriginalId)
+                          .map(u => (
+                            <option key={u.id} value={u.id}>{u.nome.toUpperCase()}</option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Justification Textarea */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                      Justificativa da Troca Excepcional
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={swapJustification}
+                      onChange={(e) => setSwapJustification(e.target.value)}
+                      placeholder="Descreva o motivo desta alteração na escala..."
+                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm placeholder:text-slate-400 leading-relaxed resize-none"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-8 border-t border-slate-100 bg-slate-50 flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setSwapJustification('');
+                  setIsScaleSwapModalOpen(false);
+                }}
+                className="flex-1 py-3.5 px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[11px] font-black uppercase rounded-2xl transition-all tracking-wider active:scale-[0.98]"
+              >
+                Fechar
+              </button>
+              {!activeSwapForDate && (
+                <button
+                  type="button"
+                  onClick={handleConfirmScaleSwap}
+                  className="flex-1 py-3.5 px-4 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-black uppercase rounded-2xl transition-all tracking-wider shadow-md hover:shadow-lg flex items-center justify-center gap-2 active:scale-[0.98]"
+                >
+                  <Save className="w-4 h-4" />
+                  Salvar Substituição
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

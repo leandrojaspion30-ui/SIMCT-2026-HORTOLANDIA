@@ -19,7 +19,7 @@ import {
   FileText,
   Sliders
 } from 'lucide-react';
-import { Documento, User } from '../types';
+import { Documento, User, ScaleException } from '../types';
 import { CONSELHEIROS_ALFABETICO_POR_UNIDADE, getEffectiveEscala } from '../constants';
 import { saveDocument, deleteDocument } from '../lib/db';
 
@@ -29,6 +29,7 @@ interface DistributionSimulatorProps {
   currentUser: User;
   onAddLog: (action: string) => void;
   nameMap?: Record<string, string>;
+  scaleExceptions?: ScaleException[];
 }
 
 interface TestLog {
@@ -42,7 +43,8 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
   users, 
   currentUser,
   onAddLog,
-  nameMap: propNameMap
+  nameMap: propNameMap,
+  scaleExceptions = []
 }) => {
   const [selectedUnidade, setSelectedUnidade] = useState<number>(currentUser?.unidade_id || 1);
 
@@ -169,8 +171,8 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
       const day = String(today.getDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
     })();
-    return getEffectiveEscala(todayDateReal, '12:00', selectedUnidade, nameMap);
-  }, [selectedUnidade, nameMap]);
+    return getEffectiveEscala(todayDateReal, '12:00', selectedUnidade, nameMap, scaleExceptions);
+  }, [selectedUnidade, nameMap, scaleExceptions]);
 
   // Encontra quem foi o último conselheiro de providência imediata distribuído hoje automaticamente
   const lastAssignedImediata = useMemo(() => {
@@ -275,7 +277,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         const day = String(today.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
       })();
-      const virtualTrio = getEffectiveEscala(todayDateReal, '12:00', selectedUnidade, nameMap);
+      const virtualTrio = getEffectiveEscala(todayDateReal, '12:00', selectedUnidade, nameMap, scaleExceptions);
       let currentProvName = lastAssignedImediata;
       for (let i = 0; i < simulationSize; i++) {
         const refUser = expectedRefs[i];
@@ -461,7 +463,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
     }
 
     // For expected sequence (Imediata)
-    const liveTrio = getEffectiveEscala(todayDateReal, '12:00', selectedUnidade, nameMap);
+    const liveTrio = getEffectiveEscala(todayDateReal, '12:00', selectedUnidade, nameMap, scaleExceptions);
     let currentProvName = lastAssignedImediata;
     for (let i = 0; i < 3; i++) {
       const refUser = testExpectedRefs[i];

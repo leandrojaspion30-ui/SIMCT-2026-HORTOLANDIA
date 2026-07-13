@@ -262,3 +262,18 @@ export interface AgendaEntry {
   status?: 'PENDENTE' | 'COMPARECEU' | 'NAO_COMPARECEU' | 'REAGENDADO';
   excluido?: boolean;
 }
+
+export interface ScaleException {
+  id: string;
+  data: string; // YYYY-MM-DD (the duty/scale date)
+  unidade_id: number;
+  conselheiro_original_id: string;
+  conselheiro_original_nome: string;
+  conselheiro_substituto_id: string;
+  conselheiro_substituto_nome: string;
+  justificativa?: string;
+  criado_em?: string;
+  criado_por_id?: string;
+  criado_por_nome?: string;
+}
+

@@ -5,10 +5,10 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, ArrowLeft, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart, Timer, Save, Eye, EyeOff, RefreshCw } from 'lucide-react';
-import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada } from './types';
+import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada, ScaleException } from './types';
 import { INITIAL_USERS, UserWithPassword, INITIAL_AGENDA, getUnidadeByBairro } from './constants';
 import { db, ensureAuthenticated } from './lib/firebase';
-import { syncCollection, saveDocument, saveLog, saveAgenda, deleteDocument, deleteAgenda, saveUser, deleteUser, deleteAllDocuments } from './lib/db';
+import { syncCollection, saveDocument, saveLog, saveAgenda, deleteDocument, deleteAgenda, saveUser, deleteUser, deleteAllDocuments, saveScaleException, deleteScaleException } from './lib/db';
 import ConfidentialityTermModal from './components/ConfidentialityTermModal';
 import DocumentList from './components/DocumentList';
 import DocumentRegistration from './components/DocumentRegistration';
@@ -126,6 +126,7 @@ const App: React.FC = () => {
   const [allLogs, setAllLogs] = useState<Log[]>([]);
   const [allFiles, setAllFiles] = useState<DocumentFile[]>([]);
   const [allAgenda, setAllAgenda] = useState<AgendaEntry[]>([]);
+  const [scaleExceptions, setScaleExceptions] = useState<ScaleException[]>([]);
   const [navHistory, setNavHistory] = useState<{
     activeTab: typeof activeTab;
     selectedDocId: string | null;
@@ -220,6 +221,7 @@ const App: React.FC = () => {
       limitCount: 150
     });
     const unsubAgenda = syncCollection<AgendaEntry>('agenda', setAllAgenda);
+    const unsubScaleExceptions = syncCollection<ScaleException>('scale_exceptions', setScaleExceptions);
     const unsubUsers = syncCollection<UserWithPassword>('users', (storedUsers) => {
       const baseUsers = INITIAL_USERS.map(u => ({ ...u, status: u.status || 'ATIVO', tentativas_login: 0 }));
       
@@ -259,6 +261,7 @@ const App: React.FC = () => {
       unsubDocs();
       unsubLogs();
       unsubAgenda();
+      unsubScaleExceptions();
       unsubUsers();
     };
   }, []);
@@ -986,8 +989,8 @@ const App: React.FC = () => {
       return null;
     }
 
-    if (activeTab === 'register' || activeTab === 'plantao') return <DocumentRegistration documents={documents} users={filteredUsers} agenda={agenda} currentUser={currentUser} onSubmit={handleDocumentSubmit} onCancel={goBack} isReadOnly={activeTab === 'register' ? !isAdministrative : false} title={activeTab === 'plantao' ? 'SIMCT - Novo Proced/Plantão' : undefined} nameMap={userNameMap} allUsers={filteredUsers} />;
-    if (activeTab === 'edit' && editingDocId) return <DocumentRegistration documents={documents} users={filteredUsers} agenda={agenda} currentUser={currentUser} initialData={documents.find(d => d.id === editingDocId)} onSubmit={handleDocumentSubmit} onCancel={goBack} isReadOnly={!isAdministrative} nameMap={userNameMap} allUsers={filteredUsers} />;
+    if (activeTab === 'register' || activeTab === 'plantao') return <DocumentRegistration documents={documents} users={filteredUsers} agenda={agenda} currentUser={currentUser} onSubmit={handleDocumentSubmit} onCancel={goBack} isReadOnly={activeTab === 'register' ? !isAdministrative : false} title={activeTab === 'plantao' ? 'SIMCT - Novo Proced/Plantão' : undefined} nameMap={userNameMap} allUsers={filteredUsers} scaleExceptions={scaleExceptions} />;
+    if (activeTab === 'edit' && editingDocId) return <DocumentRegistration documents={documents} users={filteredUsers} agenda={agenda} currentUser={currentUser} initialData={documents.find(d => d.id === editingDocId)} onSubmit={handleDocumentSubmit} onCancel={goBack} isReadOnly={!isAdministrative} nameMap={userNameMap} allUsers={filteredUsers} scaleExceptions={scaleExceptions} />;
     
     if (selectedDocId) {
       const doc = documents.find(d => d.id === selectedDocId);
@@ -999,7 +1002,7 @@ const App: React.FC = () => {
       }} onUpdateStatus={async (id, s) => {
           addLog(id, `STATUS: Documento alterado para a situação [${s[s.length-1]}].`, 'SISTEMA');
           await saveDocument({ id, status: s });
-      }} onUpdateDocument={async (id, fields) => await saveDocument({ ...fields, id })} onAddLog={addLog} onScience={() => {}} nameMap={userNameMap} />;
+      }} onUpdateDocument={async (id, fields) => await saveDocument({ ...fields, id })} onAddLog={addLog} onScience={() => {}} nameMap={userNameMap} scaleExceptions={scaleExceptions} />;
     }
 
     if (activeTab === 'logs' && !(isSuperAdmin || isAdministrative)) {
@@ -1127,7 +1130,7 @@ const App: React.FC = () => {
       }} />;
       case 'statistics': return <StatisticsView documents={documents} agenda={agenda} users={users} currentUser={currentUser} />;
       case 'global-statistics': return <StatisticsView documents={normalizedDocuments} agenda={allAgenda} users={users} currentUser={currentUser} isGlobal />;
-      case 'distribution-test': return <DistributionSimulator documents={normalizedDocuments} users={users} currentUser={currentUser} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} nameMap={userNameMap} />;
+      case 'distribution-test': return <DistributionSimulator documents={normalizedDocuments} users={users} currentUser={currentUser} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} nameMap={userNameMap} scaleExceptions={scaleExceptions} />;
       default: return null;
     }
   };

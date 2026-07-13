@@ -1,4 +1,4 @@
-import { User, Documento, Log, ViolenceType } from './types';
+import { User, Documento, Log, ViolenceType, ScaleException } from './types';
 
 export interface UserWithPassword extends User {
   senha?: string;
@@ -139,12 +139,22 @@ export const classifyTurno = (dateStr: string, timeStr: string): 'COMERCIAL' | '
   return (isWeekend || !isBusinessHours) ? 'PLANTAO' : 'COMERCIAL';
 };
 
-export const getEffectiveEscala = (dateStr: string, timeStr: string = "08:00", unidade_id: number = 1, nameMap?: Record<string, string>): string[] => {
+export const getEffectiveEscala = (
+  dateStr: string, 
+  timeStr: string = "08:00", 
+  unidade_id: number = 1, 
+  nameMap?: Record<string, string>,
+  scaleExceptions?: ScaleException[]
+): string[] => {
   const [hours] = timeStr.split(':').map(Number);
   let dt = new Date(`${dateStr}T12:00:00`);
   if (hours < 8) dt.setDate(dt.getDate() - 1);
   
   const mapName = (name: string) => (nameMap && nameMap[name]) ? nameMap[name] : name;
+  
+  const dutyDayStr = dt.toISOString().split('T')[0];
+
+  let rawTrio: string[] = [];
 
   // Lógica de Escala para 2026 baseada no padrão de rodízio semanal/diário
   if (dt.getFullYear() === 2026) {
@@ -169,7 +179,7 @@ export const getEffectiveEscala = (dateStr: string, timeStr: string = "08:00", u
       const offsets3 = [0, 2, 1, 3, 4];
       const s3 = (b3 + offsets3[dayOfWeek] + 5) % 5;
       
-      return [
+      rawTrio = [
         mapName(sequenceU2[p]), 
         mapName(sequenceU2[s2]), 
         mapName(sequenceU2[s3])
@@ -200,22 +210,39 @@ export const getEffectiveEscala = (dateStr: string, timeStr: string = "08:00", u
       const offsets3 = [0, 2, 1, 3, 4];
       const s3 = (b3 + offsets3[dayOfWeek] + 5) % 5;
       
-      return [
+      rawTrio = [
         mapName(sequenceU1[p]),
         mapName(sequenceU1[s2]),
         mapName(sequenceU1[s3])
       ];
     }
+  } else {
+    const day = dt.getDate();
+    const sequence = CONSELHEIROS_ALFABETICO_POR_UNIDADE[unidade_id] || CONSELHEIROS_ALFABETICO_POR_UNIDADE[1];
+    const index = (day - 1) % 5;
+    rawTrio = [
+      mapName(sequence[index]), 
+      mapName(sequence[(index + 1) % 5]), 
+      mapName(sequence[(index + 2) % 5])
+    ];
   }
 
-  const day = dt.getDate();
-  const sequence = CONSELHEIROS_ALFABETICO_POR_UNIDADE[unidade_id] || CONSELHEIROS_ALFABETICO_POR_UNIDADE[1];
-  const index = (day - 1) % 5;
-  return [
-    mapName(sequence[index]), 
-    mapName(sequence[(index + 1) % 5]), 
-    mapName(sequence[(index + 2) % 5])
-  ];
+  // Se houver exceção/troca excepcional cadastrada para esse dia da escala e unidade
+  if (scaleExceptions && scaleExceptions.length > 0) {
+    const exception = scaleExceptions.find(ex => ex.data === dutyDayStr && ex.unidade_id === unidade_id);
+    if (exception) {
+      const originalUpper = exception.conselheiro_original_nome.trim().toUpperCase();
+      const replacementUpper = exception.conselheiro_substituto_nome.trim().toUpperCase();
+      return rawTrio.map(name => {
+        if (name.toUpperCase() === originalUpper) {
+          return replacementUpper;
+        }
+        return name;
+      });
+    }
+  }
+
+  return rawTrio;
 };
 
 export const BAIRROS = [
