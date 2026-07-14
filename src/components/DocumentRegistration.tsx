@@ -193,6 +193,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
   const [swapStartTime, setSwapStartTime] = useState('08:00');
   const [swapEndDate, setSwapEndDate] = useState(todayDate);
   const [swapEndTime, setSwapEndTime] = useState('08:00');
+  const [swapIdToDelete, setSwapIdToDelete] = useState<string | null>(null);
 
   const unitCounselors = useMemo(() => {
     return allUsers.filter(u => u.unidade_id === formData.unidade_id && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.status === 'ATIVO');
@@ -205,41 +206,6 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
       return ex.data === swapDate || ex.inicio_data === swapDate;
     });
   }, [scaleExceptions, swapDate, formData.unidade_id]);
-
-  // Inicializa o período da troca (padrão: 24 horas, das 08:00 do dia selecionado às 08:00 do dia seguinte)
-  useEffect(() => {
-    if (swapDate) {
-      setSwapStartDate(swapDate);
-      setSwapStartTime('08:00');
-      
-      const d = new Date(`${swapDate}T12:00:00`);
-      d.setDate(d.getDate() + 1);
-      const nextDayStr = d.toISOString().split('T')[0];
-      setSwapEndDate(nextDayStr);
-      setSwapEndTime('08:00');
-    }
-  }, [swapDate]);
-
-  useEffect(() => {
-    if (isScaleSwapModalOpen) {
-      const trio = getEffectiveEscala(swapDate, '12:00', formData.unidade_id, nameMap, scaleExceptions);
-      const firstTrioUser = unitCounselors.find(u => trio.map(n => n.toUpperCase()).includes(u.nome.toUpperCase()));
-      if (firstTrioUser) {
-        setSwapOriginalId(firstTrioUser.id);
-      } else if (unitCounselors.length > 0) {
-        setSwapOriginalId(unitCounselors[0].id);
-      }
-    }
-  }, [swapDate, formData.unidade_id, isScaleSwapModalOpen, unitCounselors, nameMap, scaleExceptions]);
-
-  useEffect(() => {
-    if (swapOriginalId) {
-      const firstSub = unitCounselors.find(u => u.id !== swapOriginalId);
-      if (firstSub) {
-        setSwapSubstituteId(firstSub.id);
-      }
-    }
-  }, [swapOriginalId, unitCounselors]);
 
   const handleConfirmScaleSwap = async () => {
     if (!swapDate) {
@@ -309,7 +275,6 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
   };
 
   const handleRemoveScaleSwap = async (exceptionId: string) => {
-    if (!window.confirm("Deseja realmente remover esta alteração e restaurar a escala original?")) return;
     try {
       await deleteScaleException(exceptionId);
 
@@ -1195,7 +1160,27 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 <div className="pt-1">
                   <button
                     type="button"
-                    onClick={() => setIsScaleSwapModalOpen(true)}
+                    onClick={() => {
+                      setSwapDate(todayDate);
+                      setSwapStartDate(todayDate);
+                      setSwapStartTime('08:00');
+                      
+                      const d = new Date(`${todayDate}T12:00:00`);
+                      d.setDate(d.getDate() + 1);
+                      const nextDayStr = d.toISOString().split('T')[0];
+                      setSwapEndDate(nextDayStr);
+                      setSwapEndTime('08:00');
+                      
+                      const trio = getEffectiveEscala(todayDate, '12:00', formData.unidade_id, nameMap, scaleExceptions);
+                      const firstTrioUser = unitCounselors.find(u => trio.map(n => n.toUpperCase()).includes(u.nome.toUpperCase()));
+                      const targetOrigId = firstTrioUser ? firstTrioUser.id : (unitCounselors[0]?.id || '');
+                      setSwapOriginalId(targetOrigId);
+                      
+                      const nextSub = unitCounselors.find(u => u.id !== targetOrigId);
+                      setSwapSubstituteId(nextSub ? nextSub.id : '');
+                      setSwapJustification('');
+                      setIsScaleSwapModalOpen(true);
+                    }}
                     className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-amber-50 hover:bg-amber-100 text-amber-700 hover:text-amber-800 text-[10px] font-black uppercase rounded-xl border border-amber-200/60 transition-all duration-200 shadow-sm"
                   >
                     <Repeat className="w-3.5 h-3.5 animate-spin-slow" />
@@ -1275,7 +1260,24 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 <input
                   type="date"
                   value={swapDate}
-                  onChange={(e) => setSwapDate(e.target.value)}
+                  onChange={(e) => {
+                    const newDate = e.target.value;
+                    setSwapDate(newDate);
+                    setSwapStartDate(newDate);
+                    
+                    const d = new Date(`${newDate}T12:00:00`);
+                    d.setDate(d.getDate() + 1);
+                    const nextDayStr = d.toISOString().split('T')[0];
+                    setSwapEndDate(nextDayStr);
+                    
+                    const trio = getEffectiveEscala(newDate, '12:00', formData.unidade_id, nameMap, scaleExceptions);
+                    const firstTrioUser = unitCounselors.find(u => trio.map(n => n.toUpperCase()).includes(u.nome.toUpperCase()));
+                    const targetOrigId = firstTrioUser ? firstTrioUser.id : (unitCounselors[0]?.id || '');
+                    setSwapOriginalId(targetOrigId);
+                    
+                    const nextSub = unitCounselors.find(u => u.id !== targetOrigId);
+                    setSwapSubstituteId(nextSub ? nextSub.id : '');
+                  }}
                   className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm"
                 />
               </div>
@@ -1340,7 +1342,14 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   </label>
                   <select
                     value={swapOriginalId}
-                    onChange={(e) => setSwapOriginalId(e.target.value)}
+                    onChange={(e) => {
+                      const newOrigId = e.target.value;
+                      setSwapOriginalId(newOrigId);
+                      if (newOrigId === swapSubstituteId) {
+                        const nextSub = unitCounselors.find(u => u.id !== newOrigId);
+                        setSwapSubstituteId(nextSub ? nextSub.id : '');
+                      }
+                    }}
                     className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm"
                   >
                     <option value="">Selecione...</option>
@@ -1396,7 +1405,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                           </div>
                           <button
                             type="button"
-                            onClick={() => handleRemoveScaleSwap(swap.id)}
+                            onClick={() => setSwapIdToDelete(swap.id)}
                             className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
                             title="Remover Substituição"
                           >
@@ -1439,6 +1448,39 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
               >
                 <Save className="w-4 h-4" />
                 Salvar Substituição
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {swapIdToDelete && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-2xl max-w-sm w-full p-6 animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 bg-red-50 text-red-500 rounded-xl flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-[16px] font-black uppercase text-slate-800 text-center tracking-tight mb-2">Excluir Substituição?</h3>
+            <p className="text-[11px] font-medium text-slate-500 text-center mb-6 leading-relaxed">
+              Deseja realmente remover esta alteração e restaurar a escala original?
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setSwapIdToDelete(null)}
+                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await handleRemoveScaleSwap(swapIdToDelete);
+                  setSwapIdToDelete(null);
+                }}
+                className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all shadow-md"
+              >
+                Confirmar
               </button>
             </div>
           </div>

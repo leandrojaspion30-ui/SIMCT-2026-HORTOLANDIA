@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { Documento, User, ScaleException } from '../types';
 import { CONSELHEIROS_ALFABETICO_POR_UNIDADE, getEffectiveEscala } from '../constants';
-import { saveDocument, deleteDocument } from '../lib/db';
+import { saveDocument, deleteDocument, deleteScaleException, saveLog } from '../lib/db';
 
 interface DistributionSimulatorProps {
   documents: Documento[];
@@ -48,12 +48,34 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
   scaleExceptions = []
 }) => {
   const [selectedUnidade, setSelectedUnidade] = useState<number>(currentUser?.unidade_id || 1);
+  const [swapIdToDelete, setSwapIdToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     if (currentUser?.unidade_id) {
       setSelectedUnidade(currentUser.unidade_id);
     }
   }, [currentUser?.unidade_id]);
+
+  const handleRemoveScaleSwap = async (exceptionId: string) => {
+    try {
+      await deleteScaleException(exceptionId);
+
+      await saveLog({
+        id: `log-${Date.now()}`,
+        documento_id: 'SISTEMA',
+        data_hora: new Date().toISOString(),
+        usuario_id: currentUser.id,
+        usuario_nome: currentUser.nome,
+        unidade_id: selectedUnidade,
+        acao: `ESCALA: Cancelamento de Substituição Excepcional pelo Diagnóstico de Distribuição (escala original restaurada).`,
+        tipo: 'SISTEMA'
+      });
+      onAddLog(`ESCALA: Cancelamento de Substituição Excepcional (escala original restaurada na Unidade ${selectedUnidade}).`);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao remover a alteração de escala.");
+    }
+  };
 
   const [simulationSize, setSimulationSize] = useState<number>(5);
   const [testLogs, setTestLogs] = useState<TestLog[]>([]);
@@ -855,10 +877,20 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
                       key={swap.id} 
                       className="p-3 bg-amber-50/30 border border-amber-200/60 rounded-xl space-y-1.5 text-[10px]"
                     >
-                      <div className="flex justify-between items-center font-black text-slate-700 uppercase">
-                        <span>{swap.conselheiro_original_nome}</span>
-                        <span className="text-amber-600">➔</span>
-                        <span className="text-blue-700">{swap.conselheiro_substituto_nome}</span>
+                      <div className="flex justify-between items-center font-black text-slate-700 uppercase gap-1">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="truncate">{swap.conselheiro_original_nome}</span>
+                          <span className="text-amber-600">➔</span>
+                          <span className="text-blue-700 truncate">{swap.conselheiro_substituto_nome}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSwapIdToDelete(swap.id)}
+                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                          title="Remover Substituição"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                       <div className="text-[9px] text-slate-500 font-bold uppercase flex flex-col gap-0.5 pt-1.5 border-t border-amber-100">
                         <div>📅 Início: {swap.inicio_data ? swap.inicio_data.split('-').reverse().join('/') : swap.data} às {swap.inicio_hora || '08:00'}</div>
@@ -1316,6 +1348,38 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         </div>
       </div>
 
+      {swapIdToDelete && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-2xl max-w-sm w-full p-6 animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 bg-red-50 text-red-500 rounded-xl flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-[16px] font-black uppercase text-slate-800 text-center tracking-tight mb-2">Excluir Substituição?</h3>
+            <p className="text-[11px] font-medium text-slate-500 text-center mb-6 leading-relaxed">
+              Deseja realmente remover esta alteração e restaurar a escala original?
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setSwapIdToDelete(null)}
+                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await handleRemoveScaleSwap(swapIdToDelete);
+                  setSwapIdToDelete(null);
+                }}
+                className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all shadow-md"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
