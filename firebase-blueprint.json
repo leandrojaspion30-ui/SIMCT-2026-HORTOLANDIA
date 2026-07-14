@@ -62,6 +62,29 @@
         "local": { "type": "string" },
         "tipo": { "type": "string" }
       }
+    },
+    "ScaleException": {
+      "title": "ScaleException",
+      "description": "Scale and duty swaps exceptions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "data": { "type": "string" },
+        "unidade_id": { "type": "number" },
+        "conselheiro_original_id": { "type": "string" },
+        "conselheiro_original_nome": { "type": "string" },
+        "conselheiro_substituto_id": { "type": "string" },
+        "conselheiro_substituto_nome": { "type": "string" },
+        "justificativa": { "type": "string" },
+        "criado_em": { "type": "string" },
+        "criado_por_id": { "type": "string" },
+        "criado_por_nome": { "type": "string" },
+        "inicio_data": { "type": "string" },
+        "inicio_hora": { "type": "string" },
+        "fim_data": { "type": "string" },
+        "fim_hora": { "type": "string" }
+      },
+      "required": ["id", "data", "unidade_id", "conselheiro_original_id", "conselheiro_substituto_id"]
     }
   },
   "firestore": {
@@ -80,6 +103,10 @@
     "/agenda/{eventId}": {
       "schema": "AgendaEntry",
       "description": "Calendar events"
+    },
+    "/scale_exceptions/{exceptionId}": {
+      "schema": "ScaleException",
+      "description": "Duty scale exception swaps"
     }
   }
 }

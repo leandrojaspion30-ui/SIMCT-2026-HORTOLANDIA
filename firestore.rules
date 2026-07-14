@@ -46,5 +46,9 @@ service cloud.firestore {
     match /agenda/{eventId} {
       allow read, write: if true;
     }
+
+    match /scale_exceptions/{exceptionId} {
+      allow read, write: if true;
+    }
   }
 }
