@@ -188,17 +188,41 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
   const [swapSubstituteId, setSwapSubstituteId] = useState('');
   const [swapJustification, setSwapJustification] = useState('');
 
+  // Novos estados para personalização do horário da troca
+  const [swapStartDate, setSwapStartDate] = useState(todayDate);
+  const [swapStartTime, setSwapStartTime] = useState('08:00');
+  const [swapEndDate, setSwapEndDate] = useState(todayDate);
+  const [swapEndTime, setSwapEndTime] = useState('08:00');
+
   const unitCounselors = useMemo(() => {
     return allUsers.filter(u => u.unidade_id === formData.unidade_id && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.status === 'ATIVO');
   }, [allUsers, formData.unidade_id]);
 
-  const activeSwapForDate = useMemo(() => {
-    return scaleExceptions.find(ex => ex.data === swapDate && ex.unidade_id === formData.unidade_id);
+  // Lista todas as substituições ativas ou cadastradas para esta data e unidade
+  const activeSwapsForDate = useMemo(() => {
+    return scaleExceptions.filter(ex => {
+      if (ex.unidade_id !== formData.unidade_id) return false;
+      return ex.data === swapDate || ex.inicio_data === swapDate;
+    });
   }, [scaleExceptions, swapDate, formData.unidade_id]);
+
+  // Inicializa o período da troca (padrão: 24 horas, das 08:00 do dia selecionado às 08:00 do dia seguinte)
+  useEffect(() => {
+    if (swapDate) {
+      setSwapStartDate(swapDate);
+      setSwapStartTime('08:00');
+      
+      const d = new Date(`${swapDate}T12:00:00`);
+      d.setDate(d.getDate() + 1);
+      const nextDayStr = d.toISOString().split('T')[0];
+      setSwapEndDate(nextDayStr);
+      setSwapEndTime('08:00');
+    }
+  }, [swapDate]);
 
   useEffect(() => {
     if (isScaleSwapModalOpen) {
-      const trio = getEffectiveEscala(swapDate, '12:00', formData.unidade_id, nameMap);
+      const trio = getEffectiveEscala(swapDate, '12:00', formData.unidade_id, nameMap, scaleExceptions);
       const firstTrioUser = unitCounselors.find(u => trio.map(n => n.toUpperCase()).includes(u.nome.toUpperCase()));
       if (firstTrioUser) {
         setSwapOriginalId(firstTrioUser.id);
@@ -206,7 +230,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
         setSwapOriginalId(unitCounselors[0].id);
       }
     }
-  }, [swapDate, formData.unidade_id, isScaleSwapModalOpen, unitCounselors, nameMap]);
+  }, [swapDate, formData.unidade_id, isScaleSwapModalOpen, unitCounselors, nameMap, scaleExceptions]);
 
   useEffect(() => {
     if (swapOriginalId) {
@@ -234,6 +258,10 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
       alert("Por favor, informe uma justificativa para esta substituição excepcional.");
       return;
     }
+    if (!swapStartDate || !swapStartTime || !swapEndDate || !swapEndTime) {
+      alert("Por favor, preencha todos os campos de data e horário.");
+      return;
+    }
 
     const originalUser = allUsers.find(u => u.id === swapOriginalId);
     const substituteUser = allUsers.find(u => u.id === swapSubstituteId);
@@ -241,7 +269,8 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     if (!originalUser || !substituteUser) return;
 
     try {
-      const exceptionId = `swap-${swapDate}-u${formData.unidade_id}`;
+      // Geramos um ID único incluindo o timestamp para permitir múltiplas trocas por faixas de horário
+      const exceptionId = `swap-${swapDate}-${Date.now()}-u${formData.unidade_id}`;
       await saveScaleException({
         id: exceptionId,
         data: swapDate,
@@ -253,7 +282,11 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
         justificativa: swapJustification.trim(),
         criado_em: new Date().toISOString(),
         criado_por_id: currentUser.id,
-        criado_por_nome: currentUser.nome
+        criado_por_nome: currentUser.nome,
+        inicio_data: swapStartDate,
+        inicio_hora: swapStartTime,
+        fim_data: swapEndDate,
+        fim_hora: swapEndTime
       });
 
       await saveLog({
@@ -263,7 +296,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
         usuario_id: currentUser.id,
         usuario_nome: currentUser.nome,
         unidade_id: formData.unidade_id,
-        acao: `ESCALA: Substituição Excepcional na Unidade ${formData.unidade_id} em ${swapDate}. Conselheiro(a) ${originalUser.nome.toUpperCase()} substituído(a) por ${substituteUser.nome.toUpperCase()}. Justificativa: ${swapJustification.trim()}`,
+        acao: `ESCALA: Substituição Excepcional na Unidade ${formData.unidade_id}. Conselheiro(a) ${originalUser.nome.toUpperCase()} substituído(a) por ${substituteUser.nome.toUpperCase()} de ${swapStartDate} ${swapStartTime} até ${swapEndDate} ${swapEndTime}. Justificativa: ${swapJustification.trim()}`,
         tipo: 'SISTEMA'
       });
 
@@ -287,7 +320,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
         usuario_id: currentUser.id,
         usuario_nome: currentUser.nome,
         unidade_id: formData.unidade_id,
-        acao: `ESCALA: Cancelamento de Substituição Excepcional em ${swapDate} (escala original restaurada).`,
+        acao: `ESCALA: Cancelamento de Substituição Excepcional (escala original restaurada).`,
         tipo: 'SISTEMA'
       });
     } catch (err) {
@@ -1205,7 +1238,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   <Repeat className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-[14px] font-black text-slate-800 uppercase tracking-wider">Substituição Excepcional</h3>
+                  <h3 className="text-[14px] font-black text-slate-800 uppercase tracking-wider">Substituição de Escala</h3>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Alterar plantão de providência imediata</p>
                 </div>
               </div>
@@ -1225,9 +1258,9 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
             <div className="mx-8 mt-6 p-4 bg-amber-50 rounded-2xl border border-amber-100 flex gap-3">
               <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
               <div>
-                <p className="text-[11px] font-bold text-amber-800 uppercase leading-relaxed tracking-tight">Aviso Importante</p>
+                <p className="text-[11px] font-bold text-amber-800 uppercase leading-relaxed tracking-tight">Personalização de Horários</p>
                 <p className="text-[10px] font-medium text-amber-700 leading-normal mt-0.5">
-                  Esta troca é uma exceção temporária. O sistema considerará o conselheiro substituto para providências imediatas das 08:00h do dia selecionado até as 08:00h do dia seguinte.
+                  Esta troca é uma exceção. O sistema considerará o conselheiro substituto apenas no intervalo de data/horário selecionado abaixo. Fora desse período, a escala original segue normalmente.
                 </p>
               </div>
             </div>
@@ -1237,7 +1270,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
               {/* Date Input */}
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-slate-500" /> Data do Plantão / Escala
+                  <Calendar className="w-4 h-4 text-slate-500" /> Data de Referência
                 </label>
                 <input
                   type="date"
@@ -1247,90 +1280,143 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 />
               </div>
 
-              {/* Existing Exception Details */}
-              {activeSwapForDate ? (
-                <div className="p-5 bg-blue-50/50 rounded-2xl border border-blue-100 space-y-4">
-                  <div className="flex items-center gap-2 text-[10px] font-black text-blue-800 uppercase tracking-wider">
-                    <CheckCircle2 className="w-4 h-4 text-blue-600" /> Substituição Já Cadastrada
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 text-[11px]">
-                    <div>
-                      <div className="text-[9px] font-bold text-slate-400 uppercase">Substituído</div>
-                      <div className="font-black text-slate-700 uppercase mt-0.5">{activeSwapForDate.conselheiro_original_nome}</div>
-                    </div>
-                    <div>
-                      <div className="text-[9px] font-bold text-slate-400 uppercase">Substituto</div>
-                      <div className="font-black text-blue-700 uppercase mt-0.5">{activeSwapForDate.conselheiro_substituto_nome}</div>
-                    </div>
-                  </div>
-                  <div className="pt-2 border-t border-blue-100">
-                    <div className="text-[9px] font-bold text-slate-400 uppercase">Justificativa</div>
-                    <p className="text-[10px] font-bold text-slate-600 uppercase mt-1 leading-relaxed bg-white/60 p-2.5 rounded-lg border border-slate-100">
-                      {activeSwapForDate.justificativa}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveScaleSwap(activeSwapForDate.id)}
-                    className="w-full py-2.5 px-4 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 text-[10px] font-black uppercase rounded-xl border border-red-100 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Restaurar Escala Original (Remover Troca)
-                  </button>
+              {/* Start Date & Time */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400" /> Data de Início
+                  </label>
+                  <input
+                    type="date"
+                    value={swapStartDate}
+                    onChange={(e) => setSwapStartDate(e.target.value)}
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm"
+                  />
                 </div>
-              ) : (
-                <>
-                  {/* Swap Row (Original & Substitute) */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        A Ser Substituído
-                      </label>
-                      <select
-                        value={swapOriginalId}
-                        onChange={(e) => setSwapOriginalId(e.target.value)}
-                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm"
-                      >
-                        <option value="">Selecione...</option>
-                        {unitCounselors.map(u => (
-                          <option key={u.id} value={u.id}>{u.nome.toUpperCase()}</option>
-                        ))}
-                      </select>
-                    </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-slate-400" /> Hora de Início
+                  </label>
+                  <input
+                    type="time"
+                    value={swapStartTime}
+                    onChange={(e) => setSwapStartTime(e.target.value)}
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm"
+                  />
+                </div>
+              </div>
 
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        Substituto
-                      </label>
-                      <select
-                        value={swapSubstituteId}
-                        onChange={(e) => setSwapSubstituteId(e.target.value)}
-                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm"
-                      >
-                        <option value="">Selecione...</option>
-                        {unitCounselors
-                          .filter(u => u.id !== swapOriginalId)
-                          .map(u => (
-                            <option key={u.id} value={u.id}>{u.nome.toUpperCase()}</option>
-                          ))}
-                      </select>
-                    </div>
-                  </div>
+              {/* End Date & Time */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400" /> Data de Término
+                  </label>
+                  <input
+                    type="date"
+                    value={swapEndDate}
+                    onChange={(e) => setSwapEndDate(e.target.value)}
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-slate-400" /> Hora de Término
+                  </label>
+                  <input
+                    type="time"
+                    value={swapEndTime}
+                    onChange={(e) => setSwapEndTime(e.target.value)}
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm"
+                  />
+                </div>
+              </div>
 
-                  {/* Justification Textarea */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                      Justificativa da Troca Excepcional
-                    </label>
-                    <textarea
-                      rows={3}
-                      value={swapJustification}
-                      onChange={(e) => setSwapJustification(e.target.value)}
-                      placeholder="Descreva o motivo desta alteração na escala..."
-                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm placeholder:text-slate-400 leading-relaxed resize-none"
-                    />
+              {/* Swap Row (Original & Substitute) */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    A Ser Substituído
+                  </label>
+                  <select
+                    value={swapOriginalId}
+                    onChange={(e) => setSwapOriginalId(e.target.value)}
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm"
+                  >
+                    <option value="">Selecione...</option>
+                    {unitCounselors.map(u => (
+                      <option key={u.id} value={u.id}>{u.nome.toUpperCase()}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    Substituto
+                  </label>
+                  <select
+                    value={swapSubstituteId}
+                    onChange={(e) => setSwapSubstituteId(e.target.value)}
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm"
+                  >
+                    <option value="">Selecione...</option>
+                    {unitCounselors
+                      .filter(u => u.id !== swapOriginalId)
+                      .map(u => (
+                        <option key={u.id} value={u.id}>{u.nome.toUpperCase()}</option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Justification Textarea */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  Justificativa da Troca Excepcional
+                </label>
+                <textarea
+                  rows={2}
+                  value={swapJustification}
+                  onChange={(e) => setSwapJustification(e.target.value)}
+                  placeholder="Descreva o motivo desta alteração na escala..."
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 shadow-sm placeholder:text-slate-400 leading-relaxed resize-none"
+                />
+              </div>
+
+              {/* Existing Exception Details for this Date */}
+              {activeSwapsForDate.length > 0 && (
+                <div className="pt-4 border-t border-slate-100 space-y-3">
+                  <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Substituições Ativas na Data ({swapDate})</h4>
+                  <div className="space-y-3">
+                    {activeSwapsForDate.map(swap => (
+                      <div key={swap.id} className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100 space-y-2 animate-in fade-in duration-200">
+                        <div className="flex justify-between items-start">
+                          <div className="text-[11px] font-black text-blue-800 uppercase tracking-wide">
+                            {swap.conselheiro_original_nome} ➔ {swap.conselheiro_substituto_nome}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveScaleSwap(swap.id)}
+                            className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Remover Substituição"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="text-[9px] font-bold text-slate-500 uppercase flex flex-wrap gap-x-2">
+                          <span>Início: {swap.inicio_data || swap.data} {swap.inicio_hora || '08:00'}</span>
+                          <span>|</span>
+                          <span>Fim: {swap.fim_data || '-'} {swap.fim_hora || '08:00'}</span>
+                        </div>
+                        {swap.justificativa && (
+                          <div className="p-2 bg-white rounded-lg border border-slate-100 text-[10px] text-slate-600 font-bold uppercase leading-relaxed">
+                            {swap.justificativa}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                </>
+                </div>
               )}
             </div>
 
@@ -1346,16 +1432,14 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
               >
                 Fechar
               </button>
-              {!activeSwapForDate && (
-                <button
-                  type="button"
-                  onClick={handleConfirmScaleSwap}
-                  className="flex-1 py-3.5 px-4 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-black uppercase rounded-2xl transition-all tracking-wider shadow-md hover:shadow-lg flex items-center justify-center gap-2 active:scale-[0.98]"
-                >
-                  <Save className="w-4 h-4" />
-                  Salvar Substituição
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleConfirmScaleSwap}
+                className="flex-1 py-3.5 px-4 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-black uppercase rounded-2xl transition-all tracking-wider shadow-md hover:shadow-lg flex items-center justify-center gap-2 active:scale-[0.98]"
+              >
+                <Save className="w-4 h-4" />
+                Salvar Substituição
+              </button>
             </div>
           </div>
         </div>

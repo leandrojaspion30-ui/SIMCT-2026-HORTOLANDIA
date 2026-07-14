@@ -275,5 +275,9 @@ export interface ScaleException {
   criado_em?: string;
   criado_por_id?: string;
   criado_por_nome?: string;
+  inicio_data?: string;
+  inicio_hora?: string;
+  fim_data?: string;
+  fim_hora?: string;
 }
 

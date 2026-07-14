@@ -229,7 +229,23 @@ export const getEffectiveEscala = (
 
   // Se houver exceção/troca excepcional cadastrada para esse dia da escala e unidade
   if (scaleExceptions && scaleExceptions.length > 0) {
-    const exception = scaleExceptions.find(ex => ex.data === dutyDayStr && ex.unidade_id === unidade_id);
+    const [qH, qM] = timeStr.split(':').map(Number);
+    const queryDateTime = new Date(`${dateStr}T${String(qH).padStart(2, '0')}:${String(qM || 0).padStart(2, '0')}:00`);
+
+    const exception = scaleExceptions.find(ex => {
+      if (ex.unidade_id !== unidade_id) return false;
+
+      // Se houver campos de início e fim personalizados
+      if (ex.inicio_data && ex.inicio_hora && ex.fim_data && ex.fim_hora) {
+        const startDateTime = new Date(`${ex.inicio_data}T${ex.inicio_hora}:00`);
+        const endDateTime = new Date(`${ex.fim_data}T${ex.fim_hora}:00`);
+        return queryDateTime >= startDateTime && queryDateTime < endDateTime;
+      }
+
+      // Fallback para comportamento padrão de dia inteiro (data inteira baseada no dutyDayStr)
+      return ex.data === dutyDayStr;
+    });
+
     if (exception) {
       const originalUpper = exception.conselheiro_original_nome.trim().toUpperCase();
       const replacementUpper = exception.conselheiro_substituto_nome.trim().toUpperCase();
