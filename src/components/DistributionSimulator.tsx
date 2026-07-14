@@ -17,7 +17,8 @@ import {
   Lock,
   Bell,
   FileText,
-  Sliders
+  Sliders,
+  Repeat
 } from 'lucide-react';
 import { Documento, User, ScaleException } from '../types';
 import { CONSELHEIROS_ALFABETICO_POR_UNIDADE, getEffectiveEscala } from '../constants';
@@ -173,6 +174,11 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
     })();
     return getEffectiveEscala(todayDateReal, '12:00', selectedUnidade, nameMap, scaleExceptions);
   }, [selectedUnidade, nameMap, scaleExceptions]);
+
+  const activeExceptionsForUnit = useMemo(() => {
+    if (!scaleExceptions) return [];
+    return scaleExceptions.filter(ex => ex.unidade_id === selectedUnidade);
+  }, [scaleExceptions, selectedUnidade]);
 
   // Encontra quem foi o último conselheiro de providência imediata distribuído hoje automaticamente
   const lastAssignedImediata = useMemo(() => {
@@ -781,32 +787,90 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
                   escalaTrio.map((name, index) => {
                     const isLast = lastAssignedImediata && name.toUpperCase() === lastAssignedImediata;
                     const isNext = nextPredictedImediata && name.toUpperCase() === nextPredictedImediata?.toUpperCase();
+                    
+                    // Verifica se este conselheiro está substituindo alguém na escala de hoje
+                    const replacedException = activeExceptionsForUnit.find(ex => {
+                      const todayDateReal = (() => {
+                        const today = new Date();
+                        const year = today.getFullYear();
+                        const month = String(today.getMonth() + 1).padStart(2, '0');
+                        const day = String(today.getDate()).padStart(2, '0');
+                        return `${year}-${month}-${day}`;
+                      })();
+                      const originalTrioRaw = getEffectiveEscala(todayDateReal, '12:00', selectedUnidade, nameMap, []);
+                      const isOriginalInTrio = originalTrioRaw.map(n => n.toUpperCase()).includes(ex.conselheiro_original_nome.toUpperCase());
+                      return isOriginalInTrio && ex.conselheiro_substituto_nome.toUpperCase() === name.toUpperCase();
+                    });
+
                     return (
                       <div 
                         key={index} 
-                        className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all ${isNext ? 'bg-amber-50/50 border-amber-200 shadow-sm' : isLast ? 'bg-slate-50 border-slate-300' : 'bg-white border-slate-100'}`}
+                        className={`flex flex-col p-2.5 rounded-xl border text-xs transition-all ${isNext ? 'bg-amber-50/50 border-amber-200 shadow-sm' : isLast ? 'bg-slate-50 border-slate-300' : 'bg-white border-slate-100'}`}
                       >
-                        <div className="flex items-center gap-2 font-bold text-slate-700">
-                          <span className="w-5 h-5 bg-slate-100 text-slate-500 font-mono text-[10px] font-black rounded-full flex items-center justify-center">
-                            {index + 1}
-                          </span>
-                          <span className="uppercase text-[11px] font-extrabold">{name}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {isLast && (
-                            <span className="px-2 py-0.5 bg-slate-200 text-slate-700 font-black text-[8px] uppercase rounded">
-                              Último
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 font-bold text-slate-700">
+                            <span className="w-5 h-5 bg-slate-100 text-slate-500 font-mono text-[10px] font-black rounded-full flex items-center justify-center">
+                              {index + 1}
                             </span>
-                          )}
-                          {isNext && (
-                            <span className="px-2 py-0.5 bg-amber-600 text-white font-black text-[8px] uppercase rounded animate-pulse">
-                              Próximo
-                            </span>
-                          )}
+                            <span className="uppercase text-[11px] font-extrabold">{name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {isLast && (
+                              <span className="px-2 py-0.5 bg-slate-200 text-slate-700 font-black text-[8px] uppercase rounded">
+                                Último
+                              </span>
+                            )}
+                            {isNext && (
+                              <span className="px-2 py-0.5 bg-amber-600 text-white font-black text-[8px] uppercase rounded animate-pulse">
+                                Próximo
+                              </span>
+                            )}
+                          </div>
                         </div>
+                        {replacedException && (
+                          <div className="mt-1 pl-7 text-[8px] font-black text-amber-600 uppercase tracking-wider flex items-center gap-1">
+                            <Repeat className="w-2.5 h-2.5" /> Substituindo {replacedException.conselheiro_original_nome}
+                          </div>
+                        )}
                       </div>
                     );
                   })
+                )}
+              </div>
+            </div>
+
+            {/* Trocas de Escala Cadastradas (Substituições) */}
+            <div className="space-y-3 pt-4 border-t border-slate-100">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block flex items-center gap-1.5">
+                <Repeat className="w-3.5 h-3.5 text-amber-500 animate-spin" style={{ animationDuration: '6s' }} /> Substituições / Trocas Cadastradas ({activeExceptionsForUnit.length})
+              </span>
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {activeExceptionsForUnit.length === 0 ? (
+                  <div className="text-[10px] text-slate-400 font-bold p-3 bg-slate-50 rounded-xl uppercase tracking-wider text-center">
+                    Nenhuma troca cadastrada para esta Unidade.
+                  </div>
+                ) : (
+                  activeExceptionsForUnit.map((swap) => (
+                    <div 
+                      key={swap.id} 
+                      className="p-3 bg-amber-50/30 border border-amber-200/60 rounded-xl space-y-1.5 text-[10px]"
+                    >
+                      <div className="flex justify-between items-center font-black text-slate-700 uppercase">
+                        <span>{swap.conselheiro_original_nome}</span>
+                        <span className="text-amber-600">➔</span>
+                        <span className="text-blue-700">{swap.conselheiro_substituto_nome}</span>
+                      </div>
+                      <div className="text-[9px] text-slate-500 font-bold uppercase flex flex-col gap-0.5 pt-1.5 border-t border-amber-100">
+                        <div>📅 Início: {swap.inicio_data ? swap.inicio_data.split('-').reverse().join('/') : swap.data} às {swap.inicio_hora || '08:00'}</div>
+                        <div>📅 Término: {swap.fim_data ? swap.fim_data.split('-').reverse().join('/') : ''} às {swap.fim_hora || '08:00'}</div>
+                      </div>
+                      {swap.justificativa && (
+                        <div className="text-[9px] font-bold text-slate-600 uppercase bg-white/60 p-1.5 rounded border border-amber-100/50 italic">
+                          Motivo: "{swap.justificativa}"
+                        </div>
+                      )}
+                    </div>
+                  ))
                 )}
               </div>
             </div>
@@ -1081,25 +1145,6 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
                   </tr>
                 ) : (
                   unitCasesReal.slice(0, 15).map((doc) => {
-                    // Detect high-level assignment type
-                    let methodLabel = "Escala do Dia";
-                    let methodStyle = "bg-emerald-50 text-emerald-700 border-emerald-100";
-                    let methodIcon = <RefreshCw className="w-3.5 h-3.5" />;
-
-                    if (doc.is_manual_providencia || doc.providencia_imediata_manual) {
-                      methodLabel = "Sobrescrita Manual";
-                      methodStyle = "bg-rose-50 text-rose-700 border-rose-100";
-                      methodIcon = <Zap className="w-3.5 h-3.5" />;
-                    } else if (doc.notificacao) {
-                      methodLabel = "Vínculo de Notificação";
-                      methodStyle = "bg-blue-50 text-blue-700 border-blue-100";
-                      methodIcon = <Bell className="w-3.5 h-3.5" />;
-                    } else if (doc.is_family_persistence) {
-                      methodLabel = "Persistência Familiar";
-                      methodStyle = "bg-indigo-50 text-indigo-700 border-indigo-100";
-                      methodIcon = <Users className="w-3.5 h-3.5" />;
-                    }
-
                     // Map name safely
                     const getMappedName = (id: string, nameField?: string) => {
                       if (!id) return "Não atribuído";
@@ -1130,6 +1175,71 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
                         return doc.data_recebimento || '';
                       }
                     })();
+
+                    // Detecta se havia uma substituição/troca de escala ativa no momento de recebimento desse documento
+                    const activeException = (() => {
+                      if (!scaleExceptions || scaleExceptions.length === 0) return null;
+                      const cDate = doc.data_recebimento || doc.data_aporte || doc.criado_em?.split('T')[0];
+                      if (!cDate) return null;
+
+                      let cTime = doc.hora_rece_bimento || doc.hora_aporte;
+                      if (!cTime && doc.criado_em) {
+                        try {
+                          cTime = new Date(doc.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                        } catch {
+                          cTime = '12:00';
+                        }
+                      }
+                      if (!cTime) cTime = '12:00';
+
+                      const [qH, qM] = cTime.split(':').map(Number);
+                      const queryDateTime = new Date(`${cDate}T${String(qH).padStart(2, '0')}:${String(qM || 0).padStart(2, '0')}:00`);
+
+                      // Trata a passagem de dia no limite das 08:00h do plantão
+                      let dutyDayStr = cDate;
+                      if (qH < 8) {
+                        try {
+                          const d = new Date(`${cDate}T12:00:00`);
+                          d.setDate(d.getDate() - 1);
+                          dutyDayStr = d.toISOString().split('T')[0];
+                        } catch {}
+                      }
+
+                      return scaleExceptions.find(ex => {
+                        if (ex.unidade_id !== doc.unidade_id) return false;
+
+                        if (ex.inicio_data && ex.inicio_hora && ex.fim_data && ex.fim_hora) {
+                          const startDateTime = new Date(`${ex.inicio_data}T${ex.inicio_hora}:00`);
+                          const endDateTime = new Date(`${ex.fim_data}T${ex.fim_hora}:00`);
+                          return queryDateTime >= startDateTime && queryDateTime < endDateTime;
+                        }
+
+                        return ex.data === dutyDayStr;
+                      });
+                    })();
+
+                    // Detect high-level assignment type
+                    let methodLabel = "Escala do Dia";
+                    let methodStyle = "bg-emerald-50 text-emerald-700 border-emerald-100";
+                    let methodIcon = <RefreshCw className="w-3.5 h-3.5" />;
+
+                    if (doc.is_manual_providencia || doc.providencia_imediata_manual) {
+                      methodLabel = "Sobrescrita Manual";
+                      methodStyle = "bg-rose-50 text-rose-700 border-rose-100";
+                      methodIcon = <Zap className="w-3.5 h-3.5" />;
+                    } else if (doc.notificacao) {
+                      methodLabel = "Vínculo de Notificação";
+                      methodStyle = "bg-blue-50 text-blue-700 border-blue-100";
+                      methodIcon = <Bell className="w-3.5 h-3.5" />;
+                    } else if (doc.is_family_persistence) {
+                      methodLabel = "Persistência Familiar";
+                      methodStyle = "bg-indigo-50 text-indigo-700 border-indigo-100";
+                      methodIcon = <Users className="w-3.5 h-3.5" />;
+                    } else if (activeException) {
+                      methodLabel = "Troca de Escala";
+                      methodStyle = "bg-amber-50 text-amber-700 border-amber-200";
+                      methodIcon = <Repeat className="w-3.5 h-3.5 text-amber-600" />;
+                    }
 
                     return (
                       <tr key={doc.id} className="hover:bg-slate-50/50 transition-all text-[11px] sm:text-xs">
@@ -1163,9 +1273,16 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
 
                         {/* PROVIDÊNCIA IMEDIATA */}
                         <td className="p-4">
-                          <div className="flex items-center gap-1.5 font-black text-slate-800">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
-                            <span className="uppercase truncate max-w-[130px]">{provName}</span>
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5 font-black text-slate-800">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                              <span className="uppercase truncate max-w-[130px]">{provName}</span>
+                            </div>
+                            {activeException && (
+                              <span className="text-[8px] font-bold text-amber-600 uppercase pl-3">
+                                (Substituto)
+                              </span>
+                            )}
                           </div>
                         </td>
 
@@ -1179,8 +1296,14 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
 
                         {/* DIAGNÓSTICO / JUSTIFICATIVA */}
                         <td className="p-4 pr-6 max-w-xs md:max-w-md">
-                          <div className="bg-slate-50 rounded-xl p-2.5 text-[10px] text-slate-500 font-bold leading-relaxed border border-slate-100">
-                            {doc.justificativa_distribuicao || "Distribuição automática síncrona de escala de plantão."}
+                          <div className="bg-slate-50 rounded-xl p-2.5 text-[10px] text-slate-500 font-bold leading-relaxed border border-slate-100 space-y-1">
+                            <div>{doc.justificativa_distribuicao || "Distribuição automática síncrona de escala de plantão."}</div>
+                            {activeException && (
+                              <div className="mt-1 p-2 bg-amber-50 rounded-lg border border-amber-100 text-[9px] text-amber-800 leading-normal font-bold uppercase">
+                                🔄 <strong>SUBSTITUIÇÃO DE ESCALA ATIVA:</strong> {activeException.conselheiro_original_nome} foi substituído(a) por {activeException.conselheiro_substituto_nome} das {activeException.inicio_hora || '08:00'} de {activeException.inicio_data ? activeException.inicio_data.split('-').reverse().join('/') : ''} às {activeException.fim_hora || '08:00'} de {activeException.fim_data ? activeException.fim_data.split('-').reverse().join('/') : ''}.
+                                {activeException.justificativa && <div className="mt-0.5 font-semibold text-slate-500 italic">Motivo: "{activeException.justificativa}"</div>}
+                              </div>
+                            )}
                           </div>
                         </td>
                       </tr>
