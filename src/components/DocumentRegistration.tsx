@@ -355,9 +355,9 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     if (isReferenceLocked) return allUsers.find(u => u.id === formData.conselheiro_referencia_id);
     if (isManualReference && formData.conselheiro_referencia_id) return allUsers.find(u => u.id === formData.conselheiro_referencia_id);
     
-    // Filtra casos novos (sem histórico) ordenando descendente por data de criação para obter o último de forma consistente
+    // Filtra casos novos (sem histórico e sem notificação) ordenando descendente por data de criação para obter o último de forma consistente
     const newCases = documents
-      .filter(d => !d.is_manual_override && d.unidade_id === formData.unidade_id)
+      .filter(d => !d.is_manual_override && !d.notificacao && d.unidade_id === formData.unidade_id)
       .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
     const lastAssignedRefId = newCases[0]?.conselheiro_referencia_id;
     const lastRefUser = allUsers.find(u => u.id === lastAssignedRefId);
@@ -1123,8 +1123,8 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
               ) : (
                 <div className="p-4 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 flex items-center justify-between">
                   <span>{assignedReference?.nome || 'Aguardando...'}</span>
-                  <span className={`text-[9px] px-2 py-1 rounded-md uppercase ${initialData ? 'bg-slate-100 text-slate-500' : (isReferenceLocked ? 'bg-amber-50 text-amber-600' : 'bg-indigo-50 text-indigo-600')}`}>
-                    {initialData ? 'Distribuição Bloqueada' : (isReferenceLocked ? 'Vínculo Histórico' : 'Rodízio Alfabético')}
+                  <span className={`text-[9px] px-2 py-1 rounded-md uppercase ${initialData ? 'bg-slate-100 text-slate-500' : (isReferenceLocked ? 'bg-amber-50 text-amber-600' : (formData.notificacao ? 'bg-blue-50 text-blue-600' : 'bg-indigo-50 text-indigo-600'))}`}>
+                    {initialData ? 'Distribuição Bloqueada' : (isReferenceLocked ? 'Vínculo Histórico' : (formData.notificacao ? 'Notificação (Isento do Rodízio)' : 'Rodízio Alfabético'))}
                   </span>
                 </div>
               )}
