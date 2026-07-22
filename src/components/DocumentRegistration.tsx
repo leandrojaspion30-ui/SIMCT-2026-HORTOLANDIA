@@ -179,7 +179,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     return baseOptions.includes('OUTROS') ? 'OUTROS' : 'OUTRO';
   });
 
-  const isADM = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
+  const isADM = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome === 'LEANDRO';
 
   // Estados para gerenciamento de Troca Excepcional de Escala (Casos Excepcionais)
   const [isScaleSwapModalOpen, setIsScaleSwapModalOpen] = useState(false);
@@ -351,9 +351,9 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
       .map(u => u.nome.toUpperCase())
       .sort();
     
-    if (initialData) return allUsers.find(u => u.id === initialData.conselheiro_referencia_id);
-    if (isReferenceLocked) return allUsers.find(u => u.id === formData.conselheiro_referencia_id);
     if (isManualReference && formData.conselheiro_referencia_id) return allUsers.find(u => u.id === formData.conselheiro_referencia_id);
+    if (initialData) return allUsers.find(u => u.id === (formData.conselheiro_referencia_id || initialData.conselheiro_referencia_id));
+    if (isReferenceLocked) return allUsers.find(u => u.id === formData.conselheiro_referencia_id);
     
     // Filtra casos novos (sem histórico e sem notificação) ordenando descendente por data de criação para obter o último de forma consistente
     const newCases = documents
@@ -591,7 +591,9 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     const sameFamilyTodayDiffProvRef = sameFamilyTodayDocs.find(d => d.conselheiro_providencia_id !== d.conselheiro_referencia_id);
     const sameFamilyTodayDirect = sameFamilyTodayDiffProvRef || sameFamilyTodayDocs[0];
 
-    const finalRefId = initialData ? initialData.conselheiro_referencia_id : ((isManualReference || isReferenceLocked) ? formData.conselheiro_referencia_id : (assignedReference?.id || formData.conselheiro_referencia_id));
+    const finalRefId = (isManualReference && formData.conselheiro_referencia_id)
+      ? formData.conselheiro_referencia_id
+      : (initialData ? (formData.conselheiro_referencia_id || initialData.conselheiro_referencia_id) : ((isManualReference || isReferenceLocked) ? formData.conselheiro_referencia_id : (assignedReference?.id || formData.conselheiro_referencia_id)));
     const finalRefUser = allUsers.find(u => u.id === finalRefId);
     
     const finalRefName = finalRefUser?.nome?.toUpperCase();
@@ -1088,22 +1090,27 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-indigo-600" /> Conselheiro de Referência
                 </div>
-                {!isReferenceLocked && !initialData && (
+                {(!isReferenceLocked || isADM) && (
                   <button 
                     type="button" 
-                    onClick={() => setIsManualReference(!isManualReference)}
+                    onClick={() => {
+                      if (!formData.conselheiro_referencia_id && assignedReference?.id) {
+                        setFormData(prev => ({ ...prev, conselheiro_referencia_id: assignedReference.id }));
+                      }
+                      setIsManualReference(!isManualReference);
+                    }}
                     className={`px-2 py-1 rounded text-[9px] font-bold uppercase transition-all ${isManualReference ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}
                   >
-                    Ajuste Histórico
+                    {initialData ? (isManualReference ? 'Cancelar Alteração' : 'Alterar Referência') : 'Ajuste Histórico'}
                   </button>
                 )}
               </label>
               
-              {isManualReference && !isReferenceLocked && !initialData ? (
+              {isManualReference ? (
                 <select 
                   required
                   className="w-full p-4 bg-white border border-indigo-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-indigo-500 shadow-sm"
-                  value={formData.conselheiro_referencia_id}
+                  value={formData.conselheiro_referencia_id || assignedReference?.id || ''}
                   onChange={e => setFormData({...formData, conselheiro_referencia_id: e.target.value})}
                 >
                   <option value="">Selecione o Conselheiro...</option>
@@ -1124,7 +1131,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 <div className="p-4 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 flex items-center justify-between">
                   <span>{assignedReference?.nome || 'Aguardando...'}</span>
                   <span className={`text-[9px] px-2 py-1 rounded-md uppercase ${initialData ? 'bg-slate-100 text-slate-500' : (isReferenceLocked ? 'bg-amber-50 text-amber-600' : (formData.notificacao ? 'bg-blue-50 text-blue-600' : 'bg-indigo-50 text-indigo-600'))}`}>
-                    {initialData ? 'Distribuição Bloqueada' : (isReferenceLocked ? 'Vínculo Histórico' : (formData.notificacao ? 'Notificação (Isento do Rodízio)' : 'Rodízio Alfabético'))}
+                    {initialData ? 'Cadastrado' : (isReferenceLocked ? 'Vínculo Histórico' : (formData.notificacao ? 'Notificação (Isento do Rodízio)' : 'Rodízio Alfabético'))}
                   </span>
                 </div>
               )}
@@ -1143,19 +1150,58 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
               )}
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-amber-600" /> Providência Imediata
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-amber-600" /> Providência Imediata
+                </div>
+                {isADM && (
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      if (formData.providencia_imediata_manual) {
+                        setFormData(prev => ({ ...prev, providencia_imediata_manual: '' }));
+                      } else {
+                        setFormData(prev => ({ ...prev, providencia_imediata_manual: assignedImediata?.id || '' }));
+                      }
+                    }}
+                    className={`px-2 py-1 rounded text-[9px] font-bold uppercase transition-all ${formData.providencia_imediata_manual ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-500'}`}
+                  >
+                    {formData.providencia_imediata_manual ? 'Cancelar Ajuste' : 'Alterar Imediata'}
+                  </button>
+                )}
               </label>
-              <div className="p-4 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 flex items-center justify-between">
-                <span>{assignedImediata?.nome || 'Aguardando...'}</span>
-                <span className={`text-[9px] px-2 py-1 rounded-md uppercase ${(initialData && !formData.notificacao && !formData.providencia_imediata_manual) ? 'bg-slate-100 text-slate-500' : 'bg-amber-50 text-amber-600'}`}>
-                  {(initialData && !formData.notificacao && !formData.providencia_imediata_manual) 
-                    ? 'Distribuição Bloqueada' 
-                    : (formData.providencia_imediata_manual 
-                        ? 'Sobrescrita Manual' 
-                        : (formData.notificacao ? 'Vínculo de Notificação' : 'Escala do Dia'))}
-                </span>
-              </div>
+              {formData.providencia_imediata_manual && isADM ? (
+                <select 
+                  required
+                  className="w-full p-4 bg-white border border-amber-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-amber-500 shadow-sm"
+                  value={formData.providencia_imediata_manual}
+                  onChange={e => setFormData({...formData, providencia_imediata_manual: e.target.value})}
+                >
+                  <option value="">Selecione o Conselheiro...</option>
+                  {allUsers
+                    .filter(u => {
+                      if (u.unidade_id !== formData.unidade_id) return false;
+                      if (u.status !== 'ATIVO') return false;
+                      if (u.perfil !== 'CONSELHEIRO' && u.perfil !== 'SUPLENTE') return false;
+                      return true;
+                    })
+                    .sort((a, b) => a.nome.localeCompare(b.nome))
+                    .map(u => (
+                      <option key={u.id} value={u.id}>{u.nome.toUpperCase()}</option>
+                    ))}
+                </select>
+              ) : (
+                <div className="p-4 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 flex items-center justify-between">
+                  <span>{assignedImediata?.nome || 'Aguardando...'}</span>
+                  <span className={`text-[9px] px-2 py-1 rounded-md uppercase ${(initialData && !formData.notificacao && !formData.providencia_imediata_manual) ? 'bg-slate-100 text-slate-500' : 'bg-amber-50 text-amber-600'}`}>
+                    {(initialData && !formData.notificacao && !formData.providencia_imediata_manual) 
+                      ? 'Cadastrado' 
+                      : (formData.providencia_imediata_manual 
+                          ? 'Sobrescrita Manual' 
+                          : (formData.notificacao ? 'Vínculo de Notificação' : 'Escala do Dia'))}
+                  </span>
+                </div>
+              )}
               {!isReadOnly && (
                 <div className="pt-1">
                   <button

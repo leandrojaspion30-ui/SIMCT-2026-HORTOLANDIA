@@ -383,7 +383,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                      </div>
                   </div>
                   <div className="shrink-0 flex items-center gap-3">
-                     {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); onEditDoc(doc.id); }} className="p-3 bg-white border border-[#E5E7EB] text-[#4B5563] rounded-xl hover:bg-[#111827] hover:text-white transition-all"><FileText className="w-4 h-4" /></button>}
+                     {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); onEditDoc(doc.id); }} className="p-3 bg-white border border-[#E5E7EB] text-[#4B5563] rounded-xl hover:bg-[#111827] hover:text-white transition-all" title="Editar Documento"><FileText className="w-4 h-4" /></button>}
                      {(hasCounselorActions => {
                         const isCreatorAdmin = 
                           (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome === 'LEANDRO');

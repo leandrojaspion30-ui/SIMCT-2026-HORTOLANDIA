@@ -521,6 +521,16 @@ const DocumentView: React.FC<DocumentViewProps> = ({
           <button onClick={onBack} className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl transition-all"><ArrowLeft className="w-6 h-6" /></button>
           <div className="text-center"><h2 className="text-[20px] font-black uppercase">{doc.crianca_nome}</h2><p className="text-[10px] opacity-60 uppercase">SIMCT #{doc.id}</p></div>
           <div className="flex items-center gap-3">
+            {(isADM || isResponsible) && (
+              <button 
+                onClick={onEdit}
+                className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-[11px] uppercase tracking-wider transition-all shadow-md cursor-pointer"
+                title="Editar Informações do Documento"
+              >
+                <FileText className="w-4 h-4" />
+                <span>Editar Documento</span>
+              </button>
+            )}
             {(hasCounselorActions => {
                const isCreatorAdmin = 
                  (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome === 'LEANDRO');
@@ -544,7 +554,6 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                 <Trash2 className="w-6 h-6" />
               </button>
             )}
-            <div className="w-6"></div>
           </div>
         </header>
 

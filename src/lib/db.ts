@@ -38,7 +38,7 @@ export const syncCollection = <T extends { id: string }>(
     q, 
     (snapshot) => {
       const items = snapshot.docs.map(doc => ({
-        ...doc.data(),
+        ...doc.data({ serverTimestamps: 'estimate' }),
         id: doc.id
       } as T));
       callback(items);
@@ -76,7 +76,7 @@ export const saveDocument = async (docData: Partial<Documento>) => {
   await ensureAuthenticated();
   const id = docData.id || `doc-${Math.random().toString(36).substr(2, 9)}`;
   const docRef = doc(db, 'documents', id);
-  const data = cleanData({ ...docData, id, updated_at: serverTimestamp() });
+  const data = cleanData({ ...docData, id, updated_at: new Date().toISOString() });
   await setDoc(docRef, data, { merge: true });
   return id;
 };
@@ -121,7 +121,7 @@ export const deleteAllDocuments = async (unidadeId?: number) => {
 export const saveLog = async (logData: Partial<Log>) => {
   await ensureAuthenticated();
   const id = logData.id || `log-${Date.now()}`;
-  const data = cleanData({ ...logData, id, created_at: serverTimestamp() });
+  const data = cleanData({ ...logData, id, created_at: new Date().toISOString() });
   await setDoc(doc(db, 'logs', id), data);
 };
 

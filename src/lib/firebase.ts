@@ -1,7 +1,10 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously } from 'firebase/auth';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, setLogLevel } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
+
+// Suprime warnings verbosos do SDK sobre pequenas diferenças de relógio entre cliente e servidor Firestore
+setLogLevel('error');
 
 const app = initializeApp(firebaseConfig);
 
