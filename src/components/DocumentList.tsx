@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database, Trash2, Timer, Calendar } from 'lucide-react';
+import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, ChevronUp, Folder, FolderOpen, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database, Trash2, Timer, Calendar } from 'lucide-react';
 import { Documento, User as UserType, DocumentStatus } from '../types';
 import { STATUS_LABELS, INITIAL_USERS, BAIRROS, getBairrosByUnidade } from '../constants';
 import { formatLocalDateString, parseLocalDate, formatCadastroDateTime } from '../lib/dateUtils';
@@ -214,7 +214,198 @@ const DocumentList: React.FC<DocumentListProps> = ({
       });
   }, [documents, filters, myViewMode, currentUser]);
 
+  const [isGroupedByFamily, setIsGroupedByFamily] = useState(true);
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
+
+  const toggleFolder = (folderKey: string) => {
+    setExpandedFolders(prev => ({ ...prev, [folderKey]: !prev[folderKey] }));
+  };
+
+  const familyGroups = useMemo(() => {
+    const groups: { [key: string]: { key: string; genitora_nome: string; cpf_genitora?: string; docs: Documento[]; bairro: string } } = {};
+
+    filteredDocs.forEach(doc => {
+      const rawName = (doc.genitora_nome || '').trim().toUpperCase();
+      const cleanCpf = (doc.cpf_genitora || '').replace(/\D/g, '');
+      
+      let key = '';
+      if (cleanCpf) {
+        key = `CPF_${cleanCpf}`;
+      } else if (rawName && rawName !== 'NÃO INFORMADO' && rawName !== 'NAO INFORMADO' && rawName !== 'NÃO INFORMADA') {
+        key = `NOME_${rawName}`;
+      } else {
+        key = `DOC_${doc.id}`;
+      }
+
+      if (!groups[key]) {
+        groups[key] = {
+          key,
+          genitora_nome: rawName || 'RESPONSÁVEL NÃO INFORMADO',
+          cpf_genitora: doc.cpf_genitora,
+          bairro: doc.bairro,
+          docs: []
+        };
+      }
+      groups[key].docs.push(doc);
+    });
+
+    return Object.values(groups);
+  }, [filteredDocs]);
+
   const clearFilters = () => setFilters(initialFilters);
+
+  const renderDocCard = (doc: Documento, isNested: boolean = false) => {
+    const mainStatus = doc.status[doc.status.length - 1] || 'AGUARDANDO_ANALISE';
+    const refCouncilor = users.find(u => u.id === doc.conselheiro_referencia_id);
+    const provCouncilor = users.find(u => u.id === doc.conselheiro_providencia_id);
+    const confirmacoes = doc.medidas_detalhadas?.[0]?.confirmacoes || [];
+    const iValidated = confirmacoes.some(c => c.usuario_id === currentUser.id);
+    const isInTrio = doc.conselheiros_providencia_nomes?.some(name => {
+      if (!name) return false;
+      const upper = name.toUpperCase();
+      if (upper === currentUser.nome.toUpperCase()) return true;
+      const cleanCurrentUserName = currentUser.nome.toUpperCase().split('(')[0].trim();
+      if (upper === cleanCurrentUserName) return true;
+      if (currentUser.is_suplente_active && currentUser.substituted_name && upper === currentUser.substituted_name.toUpperCase()) return true;
+      return false;
+    }) || false;
+
+    let validationState: 'PENDING_SELF' | 'PENDING_OTHERS' | 'COMPLETED' | 'ADMIN_CONCLUDED' | undefined;
+    let dynamicLabel = STATUS_LABELS[mainStatus];
+
+    const isAdminDespacho = [
+      'ARQUIVADO', 'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
+      'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
+      'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
+      'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE'
+    ].includes(mainStatus) || mainStatus.startsWith('NOTIFICACAO_');
+    
+    if (isAdminDespacho) {
+      validationState = 'ADMIN_CONCLUDED';
+      dynamicLabel = `✅ DESPACHO: ${STATUS_LABELS[mainStatus] || mainStatus}`;
+    } else if (doc.status.includes('MEDIDA_APLICADA')) {
+      validationState = 'COMPLETED';
+      dynamicLabel = "✅ MEDIDA APLICADA";
+    } else if (doc.status.includes('AGUARDANDO_VALIDACAO')) {
+      if (!iValidated && isInTrio) {
+        validationState = 'PENDING_SELF';
+        dynamicLabel = "📋 AGUARDANDO VALIDAÇÃO DO COLEGIADO";
+      } else {
+        validationState = 'PENDING_OTHERS';
+        dynamicLabel = "📋 AGUARDANDO VALIDAÇÃO DO COLEGIADO";
+      }
+    }
+
+    const isAwaiting = doc.status.includes('AGUARDANDO_VALIDACAO') && !doc.status.includes('MEDIDA_APLICADA');
+    const isOficializado = doc.status.includes('MEDIDA_APLICADA');
+    const lastDispatch = [...doc.status].reverse().find(s => [
+      'ARQUIVADO', 'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
+      'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
+      'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
+      'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE',
+      'NENHUMA', 'AGUARDANDO_AVALIACAO'
+    ].includes(s) || s.startsWith('NOTIFICACAO_'));
+
+    const style = getStatusStyle(mainStatus, doc.is_improcedente, validationState);
+
+    return (
+      <div key={doc.id} onClick={() => onSelectDoc(doc.id)} className={`bg-white rounded-2xl border border-[#E5E7EB] ${style.border} border-l-4 shadow-sm hover:shadow-md transition-all cursor-pointer group overflow-hidden ${isNested ? 'bg-slate-50/50' : ''}`}>
+         <div className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="flex-1 space-y-4">
+               <div className="flex flex-wrap items-center gap-2">
+                  {isOficializado && (
+                     <span className="flex items-center gap-2 px-3 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest shadow-sm">
+                        <CheckCircle2 className="w-3 h-3" /> Medida Aplicada
+                     </span>
+                  )}
+                  {isAwaiting && (
+                     <span className={`flex items-center gap-2 px-3 py-1 rounded-lg text-white text-[10px] font-black uppercase tracking-widest ${(!iValidated && isInTrio) ? 'bg-red-600 animate-pulse' : 'bg-red-500'}`}>
+                        <ShieldAlert className="w-3 h-3" /> Aguardando Validação do Colegiado
+                     </span>
+                  )}
+                  {(doc.notificacoes_trio || []).some(n => {
+                    if (!n) return false;
+                    const upper = n.toUpperCase();
+                    if (upper === currentUser.nome.toUpperCase()) return true;
+                    const cleanCurrentUserName = currentUser.nome.toUpperCase().split('(')[0].trim();
+                    if (upper === cleanCurrentUserName) return true;
+                    if (currentUser.is_suplente_active && currentUser.substituted_name && upper === currentUser.substituted_name.toUpperCase()) return true;
+                    return false;
+                  }) && (!lastDispatch || lastDispatch === 'NENHUMA') && (
+                     <span className="flex items-center gap-2 px-3 py-1 rounded-lg bg-red-100 text-red-600 text-[10px] font-black uppercase tracking-widest border border-red-200 animate-bounce">
+                        <Zap className="w-3 h-3" /> Revalidação Obrigatória
+                     </span>
+                  )}
+                  {lastDispatch && lastDispatch !== 'NENHUMA' && (
+                     <span className={`flex items-center gap-2 px-3 py-1 rounded-lg text-white text-[10px] font-black uppercase tracking-widest shadow-sm ${lastDispatch === 'DIREITO_NAO_VIOLADO' ? 'bg-emerald-600' : 'bg-blue-600'}`}>
+                        <Tag className="w-3 h-3" /> DESPACHO: {STATUS_LABELS[lastDispatch]}
+                     </span>
+                  )}
+                  {!isOficializado && !isAwaiting && !lastDispatch && (
+                     <span className={`flex items-center gap-2 px-3 py-1 rounded-lg text-white text-[10px] font-black uppercase tracking-widest ${style.color}`}>
+                        {style.icon} {dynamicLabel}
+                     </span>
+                  )}
+                  <span className="text-[11px] font-mono font-bold text-slate-300 uppercase">#{doc.id}</span>
+               </div>
+               <div>
+                  <h3 className="text-[17px] font-black text-[#111827] uppercase group-hover:text-[#2563EB] transition-colors">{doc.crianca_nome || 'PRONTUÁRIO INCOMPLETO'}</h3>
+                  {doc.monitoramento && !doc.monitoramento.concluido && doc.monitoramento.requisicoes?.some(r => {
+                     if (r.concluido || (r as any).excluidoDoMonitoramento) return false;
+                     const deadline = parseLocalDate(r.dataFinal);
+                     deadline.setHours(0,0,0,0);
+                     return deadline.getTime() < new Date().setHours(0,0,0,0);
+                  }) && (
+                     <div className="mt-2 flex items-center gap-2 px-3 py-1 bg-amber-500 text-white text-[10px] font-bold uppercase rounded-lg w-fit animate-pulse shadow-sm">
+                        <Timer className="w-3.5 h-3.5" /> Atenção: Prazo de Monitoramento Expirado
+                     </div>
+                  )}
+                  <div className="flex flex-wrap items-center gap-x-6 mt-2">
+                     {!isNested && <div className="flex items-center gap-2 text-[11px] text-[#4B5563] font-bold uppercase"><UserRound className="w-3.5 h-3.5" /> RESPONSÁVEL: {doc.genitora_nome}</div>}
+                     <div className="flex items-center gap-2 text-[11px] text-emerald-600 font-bold uppercase"><MapPin className="w-3.5 h-3.5" /> {doc.bairro}</div>
+                  </div>
+               </div>
+               <div className="flex flex-wrap items-center gap-4 pt-2">
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-lg text-[10px] font-black text-[#2563EB] uppercase"><UserCheck className="w-3 h-3" /> Titular: {refCouncilor?.nome || 'N/A'}</div>
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[10px] font-black text-amber-700 uppercase"><ShieldCheck className="w-3 h-3" /> Imediata: {provCouncilor?.nome || 'N/A'}</div>
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black text-slate-500 uppercase">
+                    <Timer className="w-3 h-3" /> Registro: {(() => { const r = formatCadastroDateTime(doc.criado_em, doc.data_aporte, doc.hora_aporte); return `${r.date} às ${r.time}`; })()}
+                  </div>
+               </div>
+            </div>
+            <div className="shrink-0 flex items-center gap-3">
+               {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); onEditDoc(doc.id); }} className="p-3 bg-white border border-[#E5E7EB] text-[#4B5563] rounded-xl hover:bg-[#111827] hover:text-white transition-all" title="Editar Documento"><FileText className="w-4 h-4" /></button>}
+               {(hasCounselorActions => {
+                  const isCreatorAdmin = 
+                    (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome === 'LEANDRO');
+                  
+                  return isCreatorAdmin && !hasCounselorActions;
+                })(!!(
+                  (doc.ciência_registrada_por && doc.ciência_registrada_por.length > 0) ||
+                  doc.medidas_detalhadas?.some(m => m.confirmacoes && m.confirmacoes.length > 0) ||
+                  doc.status.some(s => s !== 'AGUARDANDO_ANALISE' && s !== 'EM_PREENCHIMENTO' && !s.startsWith('NOTIFICACAO_')) ||
+                  (doc.medidas_detalhadas && doc.medidas_detalhadas.length > 0) ||
+                  (doc.relato_providencias && doc.relato_providencias.trim() !== '') ||
+                  (doc.fundamentacao_tecnica && doc.fundamentacao_tecnica.trim() !== '') ||
+                  (doc.monitoramento?.requisicoes && doc.monitoramento.requisicoes.length > 0) ||
+                  (doc.historico_monitoramento && doc.historico_monitoramento.length > 0)
+                )) && (
+                  <button 
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      setDocToDelete(doc.id);
+                    }} 
+                    className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+               )}
+               <button className="p-3 bg-[#111827] text-white rounded-xl shadow-lg hover:bg-[#2563EB] transition-all"><Eye className="w-4 h-4" /></button>
+            </div>
+         </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -254,167 +445,228 @@ const DocumentList: React.FC<DocumentListProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-100 rounded-2xl w-full max-w-4xl mt-4 border border-slate-200">
-           <button onClick={() => setMyViewMode('ALL')} className={`flex-1 min-w-[120px] py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'ALL' ? 'bg-[#111827] text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Visão Geral</button>
-           <button onClick={() => setMyViewMode('REF')} className={`flex-1 min-w-[120px] py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'REF' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Minha Titularidade</button>
-           <button onClick={() => setMyViewMode('IMED')} className={`flex-1 min-w-[120px] py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'IMED' ? 'bg-amber-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Minha Imediata</button>
-           <button onClick={() => setMyViewMode('VALID')} className={`flex-1 min-w-[120px] py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'VALID' ? 'bg-red-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Validação Colegiado</button>
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
+           <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-100 rounded-2xl max-w-4xl border border-slate-200">
+              <button onClick={() => setMyViewMode('ALL')} className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'ALL' ? 'bg-[#111827] text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Visão Geral</button>
+              <button onClick={() => setMyViewMode('REF')} className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'REF' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Minha Titularidade</button>
+              <button onClick={() => setMyViewMode('IMED')} className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'IMED' ? 'bg-amber-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Minha Imediata</button>
+              <button onClick={() => setMyViewMode('VALID')} className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'VALID' ? 'bg-red-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Validação Colegiado</button>
+           </div>
+
+           <div className="flex items-center gap-3">
+             <button 
+               onClick={() => setIsGroupedByFamily(!isGroupedByFamily)}
+               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-sm ${isGroupedByFamily ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'}`}
+             >
+               {isGroupedByFamily ? <FolderOpen className="w-4 h-4 text-amber-300" /> : <Folder className="w-4 h-4 text-slate-500" />}
+               <span>{isGroupedByFamily ? '📁 Agrupado por Pasta Familiar' : '📄 Lista Individual'}</span>
+             </button>
+           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4">
-        {filteredDocs.map(doc => {
-          const mainStatus = doc.status[doc.status.length - 1] || 'AGUARDANDO_ANALISE';
-          const refCouncilor = users.find(u => u.id === doc.conselheiro_referencia_id);
-          const provCouncilor = users.find(u => u.id === doc.conselheiro_providencia_id);
-          const confirmacoes = doc.medidas_detalhadas?.[0]?.confirmacoes || [];
-          const iValidated = confirmacoes.some(c => c.usuario_id === currentUser.id);
-          const isInTrio = doc.conselheiros_providencia_nomes?.some(name => {
-            if (!name) return false;
-            const upper = name.toUpperCase();
-            if (upper === currentUser.nome.toUpperCase()) return true;
-            const cleanCurrentUserName = currentUser.nome.toUpperCase().split('(')[0].trim();
-            if (upper === cleanCurrentUserName) return true;
-            if (currentUser.is_suplente_active && currentUser.substituted_name && upper === currentUser.substituted_name.toUpperCase()) return true;
-            return false;
-          }) || false;
+        {isGroupedByFamily ? (
+          familyGroups.map(group => {
+            const isExpanded = !!expandedFolders[group.key];
+            const firstDoc = group.docs[0];
+            const refCouncilor = users.find(u => u.id === firstDoc?.conselheiro_referencia_id);
 
-          let validationState: 'PENDING_SELF' | 'PENDING_OTHERS' | 'COMPLETED' | 'ADMIN_CONCLUDED' | undefined;
-          let dynamicLabel = STATUS_LABELS[mainStatus];
+            // Análise de alertas e providências pendentes na pasta
+            let pendingValidationCount = 0;
+            let myImediataCount = 0;
+            let revalidacaoCount = 0;
+            let expiredMonitoramentoCount = 0;
 
-          const isAdminDespacho = [
-            'ARQUIVADO', 'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
-            'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
-            'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
-            'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE'
-          ].includes(mainStatus) || mainStatus.startsWith('NOTIFICACAO_');
-          
-          if (isAdminDespacho) {
-            validationState = 'ADMIN_CONCLUDED';
-            dynamicLabel = `✅ DESPACHO: ${STATUS_LABELS[mainStatus] || mainStatus}`;
-          } else if (doc.status.includes('MEDIDA_APLICADA')) {
-            validationState = 'COMPLETED';
-            dynamicLabel = "✅ MEDIDA APLICADA";
-          } else if (doc.status.includes('AGUARDANDO_VALIDACAO')) {
-            if (!iValidated && isInTrio) {
-              validationState = 'PENDING_SELF';
-              dynamicLabel = "📋 AGUARDANDO VALIDAÇÃO DO COLEGIADO";
-            } else {
-              validationState = 'PENDING_OTHERS';
-              dynamicLabel = "📋 AGUARDANDO VALIDAÇÃO DO COLEGIADO";
-            }
-          }
+            group.docs.forEach(doc => {
+              const mainStatus = doc.status[doc.status.length - 1] || 'AGUARDANDO_ANALISE';
+              const confirmacoes = doc.medidas_detalhadas?.[0]?.confirmacoes || [];
+              const iValidated = confirmacoes.some(c => c.usuario_id === currentUser.id);
 
-          const isAwaiting = doc.status.includes('AGUARDANDO_VALIDACAO') && !doc.status.includes('MEDIDA_APLICADA');
-          const isOficializado = doc.status.includes('MEDIDA_APLICADA');
-          const lastDispatch = [...doc.status].reverse().find(s => [
-            'ARQUIVADO', 'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
-            'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
-            'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
-            'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE',
-            'NENHUMA', 'AGUARDANDO_AVALIACAO'
-          ].includes(s) || s.startsWith('NOTIFICACAO_'));
+              const isInTrio = doc.conselheiros_providencia_nomes?.some(name => {
+                if (!name) return false;
+                const upper = name.toUpperCase();
+                if (upper === currentUser.nome.toUpperCase()) return true;
+                const cleanCurrentUserName = currentUser.nome.toUpperCase().split('(')[0].trim();
+                if (upper === cleanCurrentUserName) return true;
+                if (currentUser.is_suplente_active && currentUser.substituted_name && upper === currentUser.substituted_name.toUpperCase()) return true;
+                return false;
+              }) || false;
 
-          const style = getStatusStyle(mainStatus, doc.is_improcedente, validationState);
+              const isAwaitingValidation = doc.status.includes('AGUARDANDO_VALIDACAO') && !doc.status.includes('MEDIDA_APLICADA');
+              
+              const isAdminDespacho = [
+                'ARQUIVADO', 'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
+                'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
+                'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
+                'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE'
+              ].includes(mainStatus) || mainStatus.startsWith('NOTIFICACAO_');
 
-          return (
-            <div key={doc.id} onClick={() => onSelectDoc(doc.id)} className={`bg-white rounded-2xl border border-[#E5E7EB] ${style.border} border-l-4 shadow-sm hover:shadow-md transition-all cursor-pointer group overflow-hidden`}>
-               <div className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                  <div className="flex-1 space-y-4">
-                     <div className="flex flex-wrap items-center gap-2">
-                        {isOficializado && (
-                           <span className="flex items-center gap-2 px-3 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest shadow-sm">
-                              <CheckCircle2 className="w-3 h-3" /> Medida Aplicada
-                           </span>
-                        )}
-                        {isAwaiting && (
-                           <span className={`flex items-center gap-2 px-3 py-1 rounded-lg text-white text-[10px] font-black uppercase tracking-widest ${(!iValidated && isInTrio) ? 'bg-red-600 animate-pulse' : 'bg-red-500'}`}>
-                              <ShieldAlert className="w-3 h-3" /> Aguardando Validação do Colegiado
-                           </span>
-                        )}
-                        {(doc.notificacoes_trio || []).some(n => {
-                          if (!n) return false;
-                          const upper = n.toUpperCase();
-                          if (upper === currentUser.nome.toUpperCase()) return true;
-                          const cleanCurrentUserName = currentUser.nome.toUpperCase().split('(')[0].trim();
-                          if (upper === cleanCurrentUserName) return true;
-                          if (currentUser.is_suplente_active && currentUser.substituted_name && upper === currentUser.substituted_name.toUpperCase()) return true;
-                          return false;
-                        }) && (!lastDispatch || lastDispatch === 'NENHUMA') && (
-                           <span className="flex items-center gap-2 px-3 py-1 rounded-lg bg-red-100 text-red-600 text-[10px] font-black uppercase tracking-widest border border-red-200 animate-bounce">
-                              <Zap className="w-3 h-3" /> Revalidação Obrigatória
-                           </span>
-                        )}
-                        {lastDispatch && lastDispatch !== 'NENHUMA' && (
-                           <span className={`flex items-center gap-2 px-3 py-1 rounded-lg text-white text-[10px] font-black uppercase tracking-widest shadow-sm ${lastDispatch === 'DIREITO_NAO_VIOLADO' ? 'bg-emerald-600' : 'bg-blue-600'}`}>
-                              <Tag className="w-3 h-3" /> DESPACHO: {STATUS_LABELS[lastDispatch]}
-                           </span>
-                        )}
-                        {!isOficializado && !isAwaiting && !lastDispatch && (
-                           <span className={`flex items-center gap-2 px-3 py-1 rounded-lg text-white text-[10px] font-black uppercase tracking-widest ${style.color}`}>
-                              {style.icon} {dynamicLabel}
-                           </span>
-                        )}
-                        <span className="text-[11px] font-mono font-bold text-slate-300 uppercase">#{doc.id}</span>
-                     </div>
-                     <div>
-                        <h3 className="text-[17px] font-black text-[#111827] uppercase group-hover:text-[#2563EB] transition-colors">{doc.crianca_nome || 'PRONTUÁRIO INCOMPLETO'}</h3>
-                        {doc.monitoramento && !doc.monitoramento.concluido && doc.monitoramento.requisicoes?.some(r => {
-                           if (r.concluido || (r as any).excluidoDoMonitoramento) return false;
-                           const deadline = parseLocalDate(r.dataFinal);
-                           deadline.setHours(0,0,0,0);
-                           return deadline.getTime() < new Date().setHours(0,0,0,0);
-                        }) && (
-                           <div className="mt-2 flex items-center gap-2 px-3 py-1 bg-amber-500 text-white text-[10px] font-bold uppercase rounded-lg w-fit animate-pulse shadow-sm">
-                              <Timer className="w-3.5 h-3.5" /> Atenção: Prazo de Monitoramento Expirado
-                           </div>
-                        )}
-                        <div className="flex flex-wrap items-center gap-x-6 mt-2">
-                           <div className="flex items-center gap-2 text-[11px] text-[#4B5563] font-bold uppercase"><UserRound className="w-3.5 h-3.5" /> RESPONSÁVEL: {doc.genitora_nome}</div>
-                           <div className="flex items-center gap-2 text-[11px] text-emerald-600 font-bold uppercase"><MapPin className="w-3.5 h-3.5" /> {doc.bairro}</div>
-                        </div>
-                     </div>
-                     <div className="flex flex-wrap items-center gap-4 pt-2">
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-lg text-[10px] font-black text-[#2563EB] uppercase"><UserCheck className="w-3 h-3" /> Titular: {refCouncilor?.nome || 'N/A'}</div>
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[10px] font-black text-amber-700 uppercase"><ShieldCheck className="w-3 h-3" /> Imediata: {provCouncilor?.nome || 'N/A'}</div>
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black text-slate-500 uppercase">
-                          <Timer className="w-3 h-3" /> Registro: {(() => { const r = formatCadastroDateTime(doc.criado_em, doc.data_aporte, doc.hora_aporte); return `${r.date} às ${r.time}`; })()}
-                        </div>
-                     </div>
-                  </div>
-                  <div className="shrink-0 flex items-center gap-3">
-                     {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); onEditDoc(doc.id); }} className="p-3 bg-white border border-[#E5E7EB] text-[#4B5563] rounded-xl hover:bg-[#111827] hover:text-white transition-all" title="Editar Documento"><FileText className="w-4 h-4" /></button>}
-                     {(hasCounselorActions => {
-                        const isCreatorAdmin = 
-                          (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome === 'LEANDRO');
+              const isOficializado = doc.status.includes('MEDIDA_APLICADA');
+
+              if (isAwaitingValidation) {
+                pendingValidationCount++;
+              }
+
+              if (doc.conselheiro_providencia_id === currentUser.id && !isOficializado && !isAdminDespacho) {
+                myImediataCount++;
+              }
+
+              const lastDispatch = [...doc.status].reverse().find(s => [
+                'ARQUIVADO', 'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
+                'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
+                'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
+                'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE',
+                'NENHUMA', 'AGUARDANDO_AVALIACAO'
+              ].includes(s) || s.startsWith('NOTIFICACAO_'));
+
+              if ((doc.notificacoes_trio || []).some(n => {
+                if (!n) return false;
+                const upper = n.toUpperCase();
+                if (upper === currentUser.nome.toUpperCase()) return true;
+                const cleanCurrentUserName = currentUser.nome.toUpperCase().split('(')[0].trim();
+                if (upper === cleanCurrentUserName) return true;
+                if (currentUser.is_suplente_active && currentUser.substituted_name && upper === currentUser.substituted_name.toUpperCase()) return true;
+                return false;
+              }) && (!lastDispatch || lastDispatch === 'NENHUMA')) {
+                revalidacaoCount++;
+              }
+
+              if (doc.monitoramento && !doc.monitoramento.concluido && doc.monitoramento.requisicoes?.some(r => {
+                if (r.concluido || (r as any).excluidoDoMonitoramento) return false;
+                const deadline = parseLocalDate(r.dataFinal);
+                deadline.setHours(0,0,0,0);
+                return deadline.getTime() < new Date().setHours(0,0,0,0);
+              })) {
+                expiredMonitoramentoCount++;
+              }
+            });
+
+            const totalAlerts = pendingValidationCount + myImediataCount + revalidacaoCount + expiredMonitoramentoCount;
+            const hasAlert = totalAlerts > 0;
+
+            return (
+              <div 
+                key={group.key} 
+                className={`rounded-[2rem] p-4 sm:p-5 space-y-3 transition-all ${
+                  hasAlert 
+                    ? 'bg-rose-50/70 border-2 border-rose-300 shadow-sm' 
+                    : 'bg-slate-50/80 border border-slate-200/90 shadow-sm'
+                }`}
+              >
+                {/* Header da Pasta Familiar */}
+                <div 
+                  onClick={() => toggleFolder(group.key)}
+                  className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl cursor-pointer transition-all group ${
+                    hasAlert 
+                      ? 'bg-white text-slate-800 border-2 border-rose-300 hover:border-rose-400 hover:shadow-md' 
+                      : 'bg-white text-slate-800 border border-slate-200 hover:border-indigo-400 hover:shadow-md'
+                  }`}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-md transition-all ${
+                      hasAlert ? 'bg-rose-500 text-white shadow-rose-200' : 'bg-indigo-600 group-hover:bg-indigo-700 text-white'
+                    }`}>
+                      {isExpanded ? (
+                        <FolderOpen className="w-6 h-6 text-amber-300" />
+                      ) : (
+                        <Folder className="w-6 h-6 text-amber-300" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-[10px] font-black uppercase tracking-wider ${hasAlert ? 'text-rose-600' : 'text-indigo-600'}`}>
+                          PASTA FAMILIAR
+                        </span>
+                        <span className={`px-2.5 py-0.5 text-[10px] font-black rounded-full uppercase ${
+                          hasAlert ? 'bg-rose-100 text-rose-700' : 'bg-indigo-100 text-indigo-700'
+                        }`}>
+                          {group.docs.length} {group.docs.length === 1 ? 'Procedimento' : 'Procedimentos'}
+                        </span>
                         
-                        return isCreatorAdmin && !hasCounselorActions;
-                      })(!!(
-                        (doc.ciência_registrada_por && doc.ciência_registrada_por.length > 0) ||
-                        doc.medidas_detalhadas?.some(m => m.confirmacoes && m.confirmacoes.length > 0) ||
-                        doc.status.some(s => s !== 'AGUARDANDO_ANALISE' && s !== 'EM_PREENCHIMENTO' && !s.startsWith('NOTIFICACAO_')) ||
-                        (doc.medidas_detalhadas && doc.medidas_detalhadas.length > 0) ||
-                        (doc.relato_providencias && doc.relato_providencias.trim() !== '') ||
-                        (doc.fundamentacao_tecnica && doc.fundamentacao_tecnica.trim() !== '') ||
-                        (doc.monitoramento?.requisicoes && doc.monitoramento.requisicoes.length > 0) ||
-                        (doc.historico_monitoramento && doc.historico_monitoramento.length > 0)
-                      )) && (
-                        <button 
-                          onClick={(e) => { 
-                            e.stopPropagation(); 
-                            setDocToDelete(doc.id);
-                          }} 
-                          className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                     )}
-                     <button className="p-3 bg-[#111827] text-white rounded-xl shadow-lg hover:bg-[#2563EB] transition-all"><Eye className="w-4 h-4" /></button>
+                        {hasAlert && (
+                          <span className="px-3 py-0.5 bg-rose-600 text-white font-black text-[10px] rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-sm animate-pulse">
+                            <ShieldAlert className="w-3.5 h-3.5" />
+                            <span>
+                              {totalAlerts} {totalAlerts === 1 ? 'AÇÃO PENDENTE' : 'AÇÕES PENDENTES'}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+
+                      <h3 className={`text-[16px] font-black uppercase tracking-wide mt-1 transition-colors ${
+                        hasAlert ? 'text-slate-900 group-hover:text-rose-600' : 'text-slate-800 group-hover:text-indigo-600'
+                      }`}>
+                        RESPONSÁVEL: {group.genitora_nome}
+                      </h3>
+
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-bold text-slate-500 mt-1">
+                        {group.cpf_genitora && <span>CPF: {group.cpf_genitora}</span>}
+                        {group.bairro && (
+                          <span className="flex items-center gap-1 text-emerald-600">
+                            <MapPin className="w-3.5 h-3.5" /> {group.bairro}
+                          </span>
+                        )}
+                        {refCouncilor && (
+                          <span className="text-blue-600">
+                            <UserCheck className="w-3.5 h-3.5 inline mr-1" /> Titular: {refCouncilor.nome}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Motivos de alerta resumidos */}
+                      {hasAlert && (
+                        <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-rose-200">
+                          {myImediataCount > 0 && (
+                            <span className="px-2 py-0.5 bg-rose-100 text-rose-800 border border-rose-200 text-[9px] font-black rounded-md uppercase">
+                              ⚠️ Sua Providência Imediata ({myImediataCount})
+                            </span>
+                          )}
+                          {pendingValidationCount > 0 && (
+                            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 text-[9px] font-black rounded-md uppercase">
+                              📋 Validação Colegiado ({pendingValidationCount})
+                            </span>
+                          )}
+                          {revalidacaoCount > 0 && (
+                            <span className="px-2 py-0.5 bg-red-100 text-red-800 border border-red-200 text-[9px] font-black rounded-md uppercase">
+                              ⚡ Revalidação ({revalidacaoCount})
+                            </span>
+                          )}
+                          {expiredMonitoramentoCount > 0 && (
+                            <span className="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-black rounded-md uppercase">
+                              ⏱️ Prazo Expirado ({expiredMonitoramentoCount})
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-               </div>
-            </div>
-          );
-        })}
+                  
+                  <button className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-wider self-start sm:self-auto transition-all shrink-0 ${
+                    hasAlert 
+                      ? 'bg-rose-100 text-rose-800 font-black hover:bg-rose-200' 
+                      : 'bg-indigo-50 text-indigo-700 group-hover:bg-indigo-600 group-hover:text-white'
+                  }`}>
+                    <span>{isExpanded ? 'Recolher Pasta' : 'Expandir Pasta'}</span>
+                    {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                {/* Conteúdo da Pasta */}
+                {isExpanded && (
+                  <div className={`pl-1 sm:pl-3 space-y-3 pt-1 ${
+                    hasAlert ? 'border-l-2 border-rose-300' : 'border-l-2 border-indigo-200/80'
+                  }`}>
+                    {group.docs.map(doc => renderDocCard(doc, true))}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        ) : (
+          filteredDocs.map(doc => renderDocCard(doc, false))
+        )}
+
         {filteredDocs.length === 0 && (
           <div className="py-20 text-center bg-white rounded-3xl border-4 border-dashed border-slate-100 flex flex-col items-center gap-4">
              <Database className="w-12 h-12 text-slate-200" />
