@@ -1,7 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { UserWithPassword } from '../constants';
-import { UserCog, Shield, User as UserIcon, Lock, Power, Calendar, UserCheck, Plus, Trash2, Edit3, X, Save, AlertCircle, RefreshCw, ArrowRight, Download } from 'lucide-react';
+import { UserCog, Shield, User as UserIcon, Lock, Power, Calendar, UserCheck, Plus, Trash2, Edit3, X, Save, AlertCircle, RefreshCw, ArrowRight, Download, Upload } from 'lucide-react';
 
 interface UserManagementPanelProps {
   users: UserWithPassword[];
@@ -10,6 +10,7 @@ interface UserManagementPanelProps {
   onDeleteUser?: (id: string) => Promise<void> | void;
   onAddUser?: (user: UserWithPassword) => Promise<void> | void;
   onResetDocuments?: (unidadeId?: number) => Promise<void> | void;
+  onRestoreDocuments?: (documents: any[]) => Promise<void> | void;
   onAddLog: (action: string) => void;
   setActiveTab?: (tab: string) => void;
 }
@@ -21,6 +22,7 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
   onDeleteUser, 
   onAddUser, 
   onResetDocuments,
+  onRestoreDocuments,
   onAddLog, 
   setActiveTab 
 }) => {
@@ -37,6 +39,8 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
   const [resetConfirmText, setResetConfirmText] = useState('');
   const [pendingResetAction, setPendingResetAction] = useState<'ONLY_RESET' | 'BACKUP_AND_RESET'>('ONLY_RESET');
   const [userToDelete, setUserToDelete] = useState<UserWithPassword | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [userToStopSubstituicao, setUserToStopSubstituicao] = useState<UserWithPassword | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [replaceSuccess, setReplaceSuccess] = useState<{from: string, to: string} | null>(null);
@@ -225,6 +229,48 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
       console.error(error);
       alert("Erro ao exportar backup.");
       return false;
+    }
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsRestoring(true);
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      let docsToRestore: any[] = [];
+      if (Array.isArray(data)) {
+        docsToRestore = data;
+      } else if (data.documents && Array.isArray(data.documents)) {
+        docsToRestore = data.documents;
+      } else {
+        alert("Formato de arquivo de backup não reconhecido.");
+        return;
+      }
+
+      if (docsToRestore.length === 0) {
+        alert("Nenhum procedimento encontrado no arquivo JSON de backup.");
+        return;
+      }
+
+      if (!confirm(`Confirmar a restauração de ${docsToRestore.length} procedimento(s) do backup? Os procedimentos existentes serão mantidos ou atualizados.`)) {
+        return;
+      }
+
+      if (onRestoreDocuments) {
+        await onRestoreDocuments(docsToRestore);
+        alert(`Restauração concluída! ${docsToRestore.length} procedimento(s) foram restaurados com sucesso.`);
+        onAddLog(`SISTEMA: Backup restaurado com sucesso (${docsToRestore.length} procedimentos).`);
+      }
+    } catch (err) {
+      console.error("Erro ao importar backup:", err);
+      alert("Erro ao ler ou restaurar o arquivo JSON de backup. Verifique se o arquivo está correto.");
+    } finally {
+      setIsRestoring(false);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -447,11 +493,25 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                 <br />Recomendamos <span className="text-blue-500 font-black">SALVAR UM BACKUP</span> antes de resetar.
               </p>
               <div className="flex flex-wrap justify-center md:justify-start gap-3">
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  onChange={handleImportFile} 
+                  accept=".json" 
+                  className="hidden" 
+                />
                 <button 
                    onClick={handleExportData}
-                   className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest flex items-center gap-2 hover:bg-slate-900 transition-all shadow-lg"
+                   className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest flex items-center gap-2 hover:bg-slate-900 transition-all shadow-lg cursor-pointer"
                 >
                   <Download className="w-4 h-4" /> Salvar Backup (JSON)
+                </button>
+                <button 
+                   onClick={() => fileInputRef.current?.click()}
+                   disabled={isRestoring || isProcessing}
+                   className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest flex items-center gap-2 hover:bg-slate-900 transition-all shadow-lg cursor-pointer disabled:opacity-50"
+                >
+                  <Upload className={`w-4 h-4 ${isRestoring ? 'animate-bounce' : ''}`} /> {isRestoring ? 'Restaurando...' : 'Restaurar Backup (JSON)'}
                 </button>
                 <button 
                    onClick={() => {
@@ -459,8 +519,8 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                      setResetConfirmText('');
                      setIsResetModalOpen(true);
                    }}
-                   disabled={isProcessing}
-                   className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest flex items-center gap-2 hover:bg-black transition-all shadow-lg disabled:opacity-50"
+                   disabled={isProcessing || isRestoring}
+                   className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest flex items-center gap-2 hover:bg-black transition-all shadow-lg disabled:opacity-50 cursor-pointer"
                 >
                   <RefreshCw className={`w-4 h-4 ${isProcessing ? 'animate-spin' : ''}`} /> Salvar e Resetar Agora
                 </button>

@@ -979,6 +979,12 @@ const App: React.FC = () => {
             : `RH: RESET TOTAL DO SISTEMA - Todos os procedimentos foram apagados.`;
           addLog('SISTEMA', logMsg, 'SEGURANÇA');
         }}
+        onRestoreDocuments={async (restoredDocs: any[]) => {
+          for (const doc of restoredDocs) {
+            await saveDocument(doc);
+          }
+          addLog('SISTEMA', `RH: RESTAURAÇÃO DE BACKUP - ${restoredDocs.length} procedimentos restaurados com sucesso.`, 'SEGURANÇA');
+        }}
         onAddLog={(action) => addLog('SISTEMA', action, 'SEGURANÇA')} 
         setActiveTab={(tab: any) => navigateTo(tab)}
       />
