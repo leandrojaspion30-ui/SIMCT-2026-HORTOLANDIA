@@ -187,10 +187,11 @@ export const markChatMessageAsRead = async (msgId: string, userId: string) => {
     const docSnap = await getDocs(query(collection(db, 'chat_messages')));
     const msgDoc = docSnap.docs.find(d => d.id === msgId);
     if (msgDoc) {
-      const existingReads = msgDoc.data().read_by || [];
-      if (!existingReads.includes(userId)) {
+      const existingReads = (msgDoc.data().read_by || []).map((id: any) => String(id));
+      const uStr = String(userId);
+      if (!existingReads.includes(uStr)) {
         await updateDoc(docRef, {
-          read_by: [...existingReads, userId]
+          read_by: [...existingReads, uStr]
         });
       }
     }
