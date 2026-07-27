@@ -3,13 +3,21 @@ import { MessageSquare, Send, X, Users, User as UserIcon, Bell, Minimize2, Maxim
 import { User, ChatMessage } from '../types';
 import { saveChatMessage, deleteChatMessage, markChatMessageAsRead, hideChatMessageForUser, hideConversationForUser } from '../lib/db';
 
-interface InternalChatWidgetProps {
+export interface InternalChatWidgetProps {
   currentUser: User;
   users: User[];
   messages: ChatMessage[];
   isOpen: boolean;
   onToggleOpen: () => void;
 }
+
+export const isConselheiroUser = (u: User) => {
+  if (!u) return false;
+  if (u.perfil === 'CONSELHEIRO') return true;
+  if (u.is_suplente_active || u.substituicao_ativa) return true;
+  if (u.cargo && u.cargo.toLowerCase().includes('conselhei') && !u.cargo.toLowerCase().includes('adm')) return true;
+  return false;
+};
 
 export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
   currentUser,
@@ -94,9 +102,12 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
   // 2. Enviadas diretamente para ele (1-on-1)
   // 3. Enviadas no canal Geral - Todos os Usuários
   // 4. Enviadas no canal Geral da SUA Unidade (Unidade 1 ou Unidade 2)
+  // 5. Enviadas no Colegiado I (SE for Conselheiro da Unidade 1)
+  // 6. Enviadas no Colegiado II (SE for Conselheiro da Unidade 2)
   const userVisibleMessages = useMemo(() => {
     const myIdStr = String(currentUser.id);
     const myUnit = currentUser.unidade_id || 1;
+    const isCons = isConselheiroUser(currentUser);
 
     return messages.filter(m => {
       // Se a mensagem foi apagada/ocultada para este usuário específico, não exibe!
@@ -125,6 +136,16 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
       // Grupo Geral da Unidade 2
       if (recipientIdStr === 'ALL_U2' || (!m.recipient_id && m.unidade_id === 2)) {
         return myUnit === 2;
+      }
+
+      // Colegiado I (Exclusivo Conselheiros Tutelares Unidade 1)
+      if (recipientIdStr === 'COLEGIADO_U1') {
+        return myUnit === 1 && isCons;
+      }
+
+      // Colegiado II (Exclusivo Conselheiros Tutelares Unidade 2)
+      if (recipientIdStr === 'COLEGIADO_U2') {
+        return myUnit === 2 && isCons;
       }
 
       // Nenhuma outra mensagem entre terceiros deve ser vista!
@@ -165,7 +186,9 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
         // Nova mensagem que não foi enviada por mim
         if (String(m.sender_id) !== String(currentUser.id)) {
           hasNewIncoming = true;
-          if (m.recipient_id === 'ALL_U1') newestSenderChannel = 'ALL_U1';
+          if (m.recipient_id === 'COLEGIADO_U1') newestSenderChannel = 'COLEGIADO_U1';
+          else if (m.recipient_id === 'COLEGIADO_U2') newestSenderChannel = 'COLEGIADO_U2';
+          else if (m.recipient_id === 'ALL_U1') newestSenderChannel = 'ALL_U1';
           else if (m.recipient_id === 'ALL_U2') newestSenderChannel = 'ALL_U2';
           else if (m.recipient_id === 'ALL_SYSTEM' || m.recipient_id === 'ALL') newestSenderChannel = 'ALL_SYSTEM';
           else newestSenderChannel = String(m.sender_id);
@@ -192,7 +215,9 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
       // Se tiver mensagem não lida, muda a aba diretamente para quem mandou
       if (unreadMessages.length > 0) {
         const lastUnread = unreadMessages[unreadMessages.length - 1];
-        if (lastUnread.recipient_id === 'ALL_U1') setActiveChannel('ALL_U1');
+        if (lastUnread.recipient_id === 'COLEGIADO_U1') setActiveChannel('COLEGIADO_U1');
+        else if (lastUnread.recipient_id === 'COLEGIADO_U2') setActiveChannel('COLEGIADO_U2');
+        else if (lastUnread.recipient_id === 'ALL_U1') setActiveChannel('ALL_U1');
         else if (lastUnread.recipient_id === 'ALL_U2') setActiveChannel('ALL_U2');
         else if (lastUnread.recipient_id === 'ALL_SYSTEM' || lastUnread.recipient_id === 'ALL') setActiveChannel('ALL_SYSTEM');
         else setActiveChannel(String(lastUnread.sender_id));
@@ -204,6 +229,12 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
   // Helper for unread count per specific channel
   const getUnreadForChannel = useCallback((channelKey: string) => {
     return unreadMessages.filter(m => {
+      if (channelKey === 'COLEGIADO_U1') {
+        return m.recipient_id === 'COLEGIADO_U1';
+      }
+      if (channelKey === 'COLEGIADO_U2') {
+        return m.recipient_id === 'COLEGIADO_U2';
+      }
       if (channelKey === 'ALL_U1') {
         return (m.recipient_id === 'ALL_U1' || (!m.recipient_id && m.unidade_id === 1));
       }
@@ -240,6 +271,12 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
   const channelMessages = useMemo(() => {
     return userVisibleMessages
       .filter(m => {
+        if (activeChannel === 'COLEGIADO_U1') {
+          return m.recipient_id === 'COLEGIADO_U1';
+        }
+        if (activeChannel === 'COLEGIADO_U2') {
+          return m.recipient_id === 'COLEGIADO_U2';
+        }
         if (activeChannel === 'ALL_U1') {
           return (m.recipient_id === 'ALL_U1' || (!m.recipient_id && m.unidade_id === 1) || (m.recipient_id === 'ALL' && m.unidade_id === 1));
         }
@@ -336,6 +373,12 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
 
   // Human readable channel label
   const activeChannelInfo = useMemo(() => {
+    if (activeChannel === 'COLEGIADO_U1') {
+      return { title: 'Colegiado I', sub: 'Exclusivo Conselheiros Tutelares - Unidade I', icon: <Users className="w-4 h-4 text-amber-400" /> };
+    }
+    if (activeChannel === 'COLEGIADO_U2') {
+      return { title: 'Colegiado II', sub: 'Exclusivo Conselheiros Tutelares - Unidade II', icon: <Users className="w-4 h-4 text-blue-400" /> };
+    }
     if (activeChannel === 'ALL_U1') {
       return { title: 'Geral - Unidade I', sub: 'Todos os conselheiros e equipe da Unidade I', icon: <Building2 className="w-4 h-4 text-amber-400" /> };
     }
@@ -556,10 +599,114 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
                   {/* LISTA VERTICAL DE OPÇÕES */}
                   <div className="flex-1 overflow-y-auto space-y-2 pr-1">
                     
-                    {/* CANAIS GERAIS */}
+                    {/* CANAIS GERAIS E COLEGIADOS */}
                     <div className="text-[9px] font-black uppercase text-amber-400/80 tracking-widest px-1 pt-1">
-                      📢 Grupos Gerais
+                      🏛️ Colegiados & Grupos Gerais
                     </div>
+
+                    {/* COLEGIADO I */}
+                    {(unitFilter === 'U1' || unitFilter === 'ALL') && (
+                      (() => {
+                        const isMember = (currentUser.unidade_id || 1) === 1 && isConselheiroUser(currentUser);
+                        return (
+                          <button
+                            onClick={() => {
+                              if (!isMember) return;
+                              setActiveChannel('COLEGIADO_U1');
+                              setIsSelectorOpen(false);
+                            }}
+                            disabled={!isMember}
+                            className={`w-full p-3 rounded-2xl flex items-center justify-between text-left transition-all border ${
+                              !isMember 
+                                ? 'bg-slate-800/40 text-slate-500 border-white/5 opacity-60 cursor-not-allowed'
+                                : activeChannel === 'COLEGIADO_U1'
+                                  ? 'bg-amber-400 text-amber-950 border-amber-300 font-bold shadow-lg cursor-pointer'
+                                  : 'bg-slate-800/80 hover:bg-slate-800 text-white border-white/10 cursor-pointer'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold ${
+                                isMember ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-700 text-slate-500'
+                              }`}>
+                                <Users className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="block text-xs font-black uppercase tracking-wider">
+                                    Colegiado I
+                                  </span>
+                                  {!isMember && (
+                                    <span className="px-1.5 py-0.2 bg-red-500/20 text-red-300 border border-red-500/30 rounded text-[8px] font-extrabold uppercase flex items-center gap-1">
+                                      <Shield className="w-2.5 h-2.5" /> Exclusivo Conselheiros CT 1
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="block text-[9px] opacity-80">
+                                  Apenas Conselheiros Tutelares - Unidade I
+                                </span>
+                              </div>
+                            </div>
+                            {isMember && getUnreadForChannel('COLEGIADO_U1') > 0 && (
+                              <span className="px-2 py-0.5 bg-red-500 text-white font-black text-[9px] rounded-full animate-pulse">
+                                {getUnreadForChannel('COLEGIADO_U1')} new
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })()
+                    )}
+
+                    {/* COLEGIADO II */}
+                    {(unitFilter === 'U2' || unitFilter === 'ALL') && (
+                      (() => {
+                        const isMember = currentUser.unidade_id === 2 && isConselheiroUser(currentUser);
+                        return (
+                          <button
+                            onClick={() => {
+                              if (!isMember) return;
+                              setActiveChannel('COLEGIADO_U2');
+                              setIsSelectorOpen(false);
+                            }}
+                            disabled={!isMember}
+                            className={`w-full p-3 rounded-2xl flex items-center justify-between text-left transition-all border ${
+                              !isMember 
+                                ? 'bg-slate-800/40 text-slate-500 border-white/5 opacity-60 cursor-not-allowed'
+                                : activeChannel === 'COLEGIADO_U2'
+                                  ? 'bg-blue-600 text-white border-blue-400 font-bold shadow-lg cursor-pointer'
+                                  : 'bg-slate-800/80 hover:bg-slate-800 text-white border-white/10 cursor-pointer'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold ${
+                                isMember ? 'bg-blue-500/20 text-blue-300' : 'bg-slate-700 text-slate-500'
+                              }`}>
+                                <Users className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="block text-xs font-black uppercase tracking-wider">
+                                    Colegiado II
+                                  </span>
+                                  {!isMember && (
+                                    <span className="px-1.5 py-0.2 bg-red-500/20 text-red-300 border border-red-500/30 rounded text-[8px] font-extrabold uppercase flex items-center gap-1">
+                                      <Shield className="w-2.5 h-2.5" /> Exclusivo Conselheiros CT 2
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="block text-[9px] opacity-80">
+                                  Apenas Conselheiros Tutelares - Unidade II
+                                </span>
+                              </div>
+                            </div>
+                            {isMember && getUnreadForChannel('COLEGIADO_U2') > 0 && (
+                              <span className="px-2 py-0.5 bg-red-500 text-white font-black text-[9px] rounded-full animate-pulse">
+                                {getUnreadForChannel('COLEGIADO_U2')} new
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })()
+                    )}
 
                     {(unitFilter === 'U1' || unitFilter === 'ALL') && (
                       <button

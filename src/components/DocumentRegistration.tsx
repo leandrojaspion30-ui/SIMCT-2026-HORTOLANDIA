@@ -1054,14 +1054,14 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                       setFormData(prev => ({
                         ...prev,
                         tem_outro_membro: checked,
-                        outro_membro_parentesco: checked ? (prev.outro_membro_parentesco || 'TIO / TIA') : '',
+                        outro_membro_parentesco: checked ? (prev.outro_membro_parentesco || 'GENITOR / GENITORA') : '',
                         outro_membro_nome: checked ? prev.outro_membro_nome : '',
                         outro_membro_cpf: checked ? prev.outro_membro_cpf : ''
                       }));
                     }}
                   />
                   <span className="text-[9px] font-black uppercase text-blue-600 group-hover:text-blue-700 transition-colors">
-                    Incluir Outro Membro da Família (Tio, Avô, Avó, etc.)
+                    Incluir Outro Membro da Família (Genitor, Genitora, Tio, Avô, etc.)
                   </span>
                 </label>
               </div>
@@ -1075,6 +1075,9 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                       value={formData.outro_membro_parentesco}
                       onChange={e => setFormData({ ...formData, outro_membro_parentesco: e.target.value })}
                     >
+                      <option value="GENITOR / GENITORA">GENITOR / GENITORA</option>
+                      <option value="GENITOR">GENITOR (PAI)</option>
+                      <option value="GENITORA">GENITORA (MÃE)</option>
                       <option value="TIO / TIA">TIO / TIA</option>
                       <option value="AVÔ / AVÓ">AVÔ / AVÓ</option>
                       <option value="IRMÃO / IRMÃ">IRMÃO / IRMÃ</option>
