@@ -4,8 +4,8 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, ArrowLeft, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart, Timer, Save, Eye, EyeOff, RefreshCw } from 'lucide-react';
-import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada, ScaleException } from './types';
+import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, ArrowLeft, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart, Timer, Save, Eye, EyeOff, RefreshCw, MessageSquare } from 'lucide-react';
+import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada, ScaleException, ChatMessage } from './types';
 import { INITIAL_USERS, UserWithPassword, INITIAL_AGENDA, getUnidadeByBairro } from './constants';
 import { db, ensureAuthenticated } from './lib/firebase';
 import { syncCollection, saveDocument, saveLog, saveAgenda, deleteDocument, deleteAgenda, saveUser, deleteUser, deleteAllDocuments, saveScaleException, deleteScaleException } from './lib/db';
@@ -22,6 +22,7 @@ import StatisticsView from './components/StatisticsView';
 import AppointmentAlert from './components/AppointmentAlert';
 import UserManagementPanel from './components/UserManagementPanel';
 import { DistributionSimulator } from './components/DistributionSimulator';
+import { InternalChatWidget } from './components/InternalChatWidget';
 
 const CT_LOGO_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR6A8u03A307V8A6_vC3B0C77z1u5w8rW6pLg&s";
 
@@ -127,6 +128,8 @@ const App: React.FC = () => {
   const [allFiles, setAllFiles] = useState<DocumentFile[]>([]);
   const [allAgenda, setAllAgenda] = useState<AgendaEntry[]>([]);
   const [scaleExceptions, setScaleExceptions] = useState<ScaleException[]>([]);
+  const [allChatMessages, setAllChatMessages] = useState<ChatMessage[]>([]);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [navHistory, setNavHistory] = useState<{
     activeTab: typeof activeTab;
     selectedDocId: string | null;
@@ -222,6 +225,11 @@ const App: React.FC = () => {
     });
     const unsubAgenda = syncCollection<AgendaEntry>('agenda', setAllAgenda);
     const unsubScaleExceptions = syncCollection<ScaleException>('scale_exceptions', setScaleExceptions);
+    const unsubChat = syncCollection<ChatMessage>('chat_messages', setAllChatMessages, {
+      orderByField: 'created_at',
+      orderDirection: 'asc',
+      limitCount: 200
+    });
     const unsubUsers = syncCollection<UserWithPassword>('users', (storedUsers) => {
       const baseUsers = INITIAL_USERS.map(u => ({ ...u, status: u.status || 'ATIVO', tentativas_login: 0 }));
       
@@ -263,6 +271,7 @@ const App: React.FC = () => {
       unsubAgenda();
       unsubScaleExceptions();
       unsubUsers();
+      unsubChat();
     };
   }, []);
 
@@ -1313,6 +1322,7 @@ const App: React.FC = () => {
             </>
           )}
           <NavItem icon={<CalendarDays className="w-5 h-5" />} label="Agenda" active={activeTab === 'agenda'} onClick={() => { handleNavigate('agenda'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
+          <NavItem icon={<MessageSquare className="w-5 h-5 text-amber-400" />} label="Chat Interno" active={isChatOpen} onClick={() => { setIsChatOpen(!isChatOpen); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
           <NavItem icon={<BarChart3 className="w-5 h-5" />} label="Relatórios" active={activeTab === 'statistics'} onClick={() => { handleNavigate('statistics'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
           <NavItem icon={<ShieldCheck className="w-5 h-5" />} label="Minha Senha" active={activeTab === 'settings'} onClick={() => { handleNavigate('settings'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
           {isSuperAdmin && <NavItem icon={<UserCog className="w-5 h-5" />} label="Gestão de RH" active={activeTab === 'user-management'} onClick={() => { handleNavigate('user-management'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />}
@@ -1421,6 +1431,15 @@ const App: React.FC = () => {
             setAcknowledgedReminderIds(prev => [...prev, `${id}-2h`]);
           }}
           onDismiss={(id) => setAcknowledgedReminderIds(prev => [...prev, `${id}-2h`])}
+        />
+      )}
+      {currentUser && (
+        <InternalChatWidget
+          currentUser={currentUser}
+          users={filteredUsers}
+          messages={allChatMessages}
+          isOpen={isChatOpen}
+          onToggleOpen={() => setIsChatOpen(!isChatOpen)}
         />
       )}
     </div>

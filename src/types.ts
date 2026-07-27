@@ -281,3 +281,16 @@ export interface ScaleException {
   fim_hora?: string;
 }
 
+export interface ChatMessage {
+  id: string;
+  unidade_id: number;
+  sender_id: string;
+  sender_name: string;
+  sender_cargo?: string;
+  sender_perfil?: string;
+  text: string;
+  created_at: string;
+  recipient_id?: string; // 'ALL' or specific user ID
+  read_by?: string[];
+}
+

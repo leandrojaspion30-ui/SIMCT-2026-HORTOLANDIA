@@ -14,7 +14,7 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { db, ensureAuthenticated } from './firebase';
-import { Documento, Log, AgendaEntry, User, ScaleException } from '../types';
+import { Documento, Log, AgendaEntry, User, ScaleException, ChatMessage } from '../types';
 
 export const syncCollection = <T extends { id: string }>(
   collectionName: string, 
@@ -166,4 +166,42 @@ export const deleteScaleException = async (id: string) => {
   await ensureAuthenticated();
   await deleteDoc(doc(db, 'scale_exceptions', id));
 };
+
+export const saveChatMessage = async (msgData: Partial<ChatMessage>) => {
+  await ensureAuthenticated();
+  const id = msgData.id || `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const data = cleanData({
+    ...msgData,
+    id,
+    created_at: msgData.created_at || new Date().toISOString(),
+    read_by: msgData.read_by || [msgData.sender_id || '']
+  });
+  await setDoc(doc(db, 'chat_messages', id), data, { merge: true });
+  return id;
+};
+
+export const markChatMessageAsRead = async (msgId: string, userId: string) => {
+  await ensureAuthenticated();
+  const docRef = doc(db, 'chat_messages', msgId);
+  try {
+    const docSnap = await getDocs(query(collection(db, 'chat_messages')));
+    const msgDoc = docSnap.docs.find(d => d.id === msgId);
+    if (msgDoc) {
+      const existingReads = msgDoc.data().read_by || [];
+      if (!existingReads.includes(userId)) {
+        await updateDoc(docRef, {
+          read_by: [...existingReads, userId]
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("Could not mark message as read:", err);
+  }
+};
+
+export const deleteChatMessage = async (id: string) => {
+  await ensureAuthenticated();
+  await deleteDoc(doc(db, 'chat_messages', id));
+};
+
 
