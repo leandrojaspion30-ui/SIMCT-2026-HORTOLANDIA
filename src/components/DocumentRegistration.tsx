@@ -184,7 +184,12 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
   });
 
   const isADM = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || (currentUser.nome || '').trim().toUpperCase().includes('LEANDRO') || currentUser.id === 'cons1';
-  const isLeandro = isADM;
+  const isLeandro = (currentUser.nome || '').trim().toUpperCase().includes('LEANDRO') || currentUser.id === 'cons1';
+
+  // Permissão para editar conselheiros de referência ou providência imediata:
+  // Se o documento já foi registrado anteriormente (initialData existe), APENAS Leandro pode editar.
+  // Em novos cadastros (!initialData), administradores (isADM) têm a permissão.
+  const canEditCouncillors = initialData ? isLeandro : isADM;
 
   // Estados para gerenciamento de Troca Excepcional de Escala (Casos Excepcionais)
   const [isScaleSwapModalOpen, setIsScaleSwapModalOpen] = useState(false);
@@ -736,16 +741,16 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
       data_recebimento: formData.data_aporte,
       hora_rece_bimento: formData.hora_aporte,
       periodo_rece_bimento: classifyTurno(formData.data_aporte, formData.hora_aporte),
-      conselheiro_referencia_id: (isADM && (isManualReference || (initialData && formData.conselheiro_referencia_id))) 
+      conselheiro_referencia_id: (canEditCouncillors && (isManualReference || (initialData && formData.conselheiro_referencia_id))) 
         ? (formData.conselheiro_referencia_id || (initialData ? initialData.conselheiro_referencia_id : finalRefId)) 
         : (initialData ? initialData.conselheiro_referencia_id : finalRefId),
-      conselheiro_referencia_nome: (allUsers.find(u => u.id === ((isADM && (isManualReference || (initialData && formData.conselheiro_referencia_id))) ? (formData.conselheiro_referencia_id || initialData?.conselheiro_referencia_id || finalRefId) : (initialData ? initialData.conselheiro_referencia_id : finalRefId)))?.nome) || initialData?.conselheiro_referencia_nome || '',
-      is_manual_override: (isADM && isManualReference) || (initialData ? initialData.is_manual_override : isReferenceLocked),
-      conselheiro_providencia_id: (isADM && formData.providencia_imediata_manual)
+      conselheiro_referencia_nome: (allUsers.find(u => u.id === ((canEditCouncillors && (isManualReference || (initialData && formData.conselheiro_referencia_id))) ? (formData.conselheiro_referencia_id || initialData?.conselheiro_referencia_id || finalRefId) : (initialData ? initialData.conselheiro_referencia_id : finalRefId)))?.nome) || initialData?.conselheiro_referencia_nome || '',
+      is_manual_override: (canEditCouncillors && isManualReference) || (initialData ? initialData.is_manual_override : isReferenceLocked),
+      conselheiro_providencia_id: (canEditCouncillors && formData.providencia_imediata_manual)
         ? formData.providencia_imediata_manual
         : (initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || '')),
-      conselheiro_providencia_nome: (allUsers.find(u => u.id === ((isADM && formData.providencia_imediata_manual) ? formData.providencia_imediata_manual : (initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || ''))))?.nome) || initialData?.conselheiro_providencia_nome || '',
-      conselheiros_providencia_nomes: (isADM && formData.providencia_imediata_manual)
+      conselheiro_providencia_nome: (allUsers.find(u => u.id === ((canEditCouncillors && formData.providencia_imediata_manual) ? formData.providencia_imediata_manual : (initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || ''))))?.nome) || initialData?.conselheiro_providencia_nome || '',
+      conselheiros_providencia_nomes: (canEditCouncillors && formData.providencia_imediata_manual)
         ? (() => {
             const manualUser = allUsers.find(u => u.id === formData.providencia_imediata_manual);
             const manualName = manualUser?.nome?.toUpperCase();
@@ -1270,7 +1275,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-indigo-600" /> Conselheiro de Referência
                 </div>
-                {isLeandro && (
+                {canEditCouncillors && (
                   <button 
                     type="button" 
                     onClick={() => {
@@ -1286,7 +1291,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 )}
               </label>
               
-              {isLeandro && isManualReference ? (
+              {canEditCouncillors && isManualReference ? (
                 <select 
                   required
                   className="w-full p-4 bg-white border border-indigo-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-indigo-500 shadow-sm"
@@ -1313,9 +1318,9 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                     {allUsers.find(u => u.id === (formData.conselheiro_referencia_id || assignedReference?.id))?.nome || assignedReference?.nome || 'Aguardando...'}
                   </span>
                   <span className={`text-[9px] px-2 py-1 flex items-center gap-1 rounded-md uppercase font-black ${initialData && !isManualReference ? 'bg-slate-200 text-slate-700 border border-slate-300' : (isReferenceLocked ? 'bg-amber-50 text-amber-600' : (formData.notificacao ? 'bg-blue-50 text-blue-600' : 'bg-indigo-50 text-indigo-600'))}`}>
-                    {(!isLeandro || !isManualReference) && <Lock className="w-3 h-3 text-slate-500" />}
+                    {(!canEditCouncillors || !isManualReference) && <Lock className="w-3 h-3 text-slate-500" />}
                     {initialData 
-                      ? (isManualReference ? 'Ajuste Manual (ADM)' : 'Cadastrado') 
+                      ? (isManualReference ? 'Ajuste Manual (Leandro)' : 'Cadastrado') 
                       : (isReferenceLocked 
                           ? (isManualReference ? 'Ajuste Manual (ADM)' : 'Vínculo Histórico') 
                           : (formData.notificacao 
@@ -1343,7 +1348,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-amber-600" /> Providência Imediata
                 </div>
-                {isLeandro && (
+                {canEditCouncillors && (
                   <button 
                     type="button" 
                     onClick={() => {
@@ -1359,7 +1364,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   </button>
                 )}
               </label>
-              {isLeandro && formData.providencia_imediata_manual ? (
+              {canEditCouncillors && formData.providencia_imediata_manual ? (
                 <select 
                   required
                   className="w-full p-4 bg-white border border-amber-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-amber-500 shadow-sm"
@@ -1385,7 +1390,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                     {allUsers.find(u => u.id === (formData.providencia_imediata_manual || (initialData?.conselheiro_providencia_id) || assignedImediata?.id))?.nome || assignedImediata?.nome || 'Aguardando...'}
                   </span>
                   <span className={`text-[9px] px-2 py-1 flex items-center gap-1 rounded-md uppercase font-black ${initialData && !formData.providencia_imediata_manual ? 'bg-slate-200 text-slate-700 border border-slate-300' : 'bg-amber-50 text-amber-600'}`}>
-                    {(!isLeandro || !formData.providencia_imediata_manual) && <Lock className="w-3 h-3 text-slate-500" />}
+                    {(!canEditCouncillors || !formData.providencia_imediata_manual) && <Lock className="w-3 h-3 text-slate-500" />}
                     {initialData && !formData.providencia_imediata_manual
                       ? 'Cadastrado' 
                       : (formData.providencia_imediata_manual 
