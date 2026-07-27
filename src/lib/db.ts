@@ -167,6 +167,17 @@ export const deleteScaleException = async (id: string) => {
   await deleteDoc(doc(db, 'scale_exceptions', id));
 };
 
+const updateLocalChatCache = (updater: (list: ChatMessage[]) => ChatMessage[]) => {
+  try {
+    const raw = localStorage.getItem('simct_chat_messages_cache');
+    const current: ChatMessage[] = raw ? JSON.parse(raw) : [];
+    const updated = updater(current);
+    localStorage.setItem('simct_chat_messages_cache', JSON.stringify(updated));
+  } catch (e) {
+    console.warn("Could not update local chat cache:", e);
+  }
+};
+
 export const saveChatMessage = async (msgData: Partial<ChatMessage>) => {
   await ensureAuthenticated();
   const id = msgData.id || `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
@@ -175,12 +186,37 @@ export const saveChatMessage = async (msgData: Partial<ChatMessage>) => {
     id,
     created_at: msgData.created_at || new Date().toISOString(),
     read_by: msgData.read_by || [msgData.sender_id || '']
+  }) as ChatMessage;
+
+  // Immediately update local cache
+  updateLocalChatCache(list => {
+    const idx = list.findIndex(m => m.id === id);
+    if (idx >= 0) {
+      const updated = [...list];
+      updated[idx] = { ...updated[idx], ...data };
+      return updated;
+    }
+    return [...list, data];
   });
+
   await setDoc(doc(db, 'chat_messages', id), data, { merge: true });
   return id;
 };
 
 export const markChatMessageAsRead = async (msgId: string, userId: string) => {
+  const uStr = String(userId);
+  updateLocalChatCache(list => {
+    return list.map(m => {
+      if (m.id === msgId) {
+        const reads = (m.read_by || []).map(String);
+        if (!reads.includes(uStr)) {
+          return { ...m, read_by: [...reads, uStr] };
+        }
+      }
+      return m;
+    });
+  });
+
   await ensureAuthenticated();
   const docRef = doc(db, 'chat_messages', msgId);
   try {
@@ -188,7 +224,6 @@ export const markChatMessageAsRead = async (msgId: string, userId: string) => {
     const msgDoc = docSnap.docs.find(d => d.id === msgId);
     if (msgDoc) {
       const existingReads = (msgDoc.data().read_by || []).map((id: any) => String(id));
-      const uStr = String(userId);
       if (!existingReads.includes(uStr)) {
         await updateDoc(docRef, {
           read_by: [...existingReads, uStr]
@@ -201,16 +236,29 @@ export const markChatMessageAsRead = async (msgId: string, userId: string) => {
 };
 
 export const hideChatMessageForUser = async (msgId: string, userId: string) => {
+  const uStr = String(userId);
+  updateLocalChatCache(list => {
+    return list.map(m => {
+      if (m.id === msgId) {
+        const deleted = (m.deleted_for || []).map(String);
+        if (!deleted.includes(uStr)) {
+          return { ...m, deleted_for: [...deleted, uStr] };
+        }
+      }
+      return m;
+    });
+  });
+
   await ensureAuthenticated();
   const docRef = doc(db, 'chat_messages', msgId);
   try {
     const docSnap = await getDocs(query(collection(db, 'chat_messages')));
     const msgDoc = docSnap.docs.find(d => d.id === msgId);
     if (msgDoc) {
-      const existingDeleted = msgDoc.data().deleted_for || [];
-      if (!existingDeleted.includes(userId)) {
+      const existingDeleted = (msgDoc.data().deleted_for || []).map((id: any) => String(id));
+      if (!existingDeleted.includes(uStr)) {
         await updateDoc(docRef, {
-          deleted_for: [...existingDeleted, userId]
+          deleted_for: [...existingDeleted, uStr]
         });
       }
     }
@@ -220,6 +268,20 @@ export const hideChatMessageForUser = async (msgId: string, userId: string) => {
 };
 
 export const hideConversationForUser = async (msgIds: string[], userId: string) => {
+  const uStr = String(userId);
+  const idsSet = new Set(msgIds);
+  updateLocalChatCache(list => {
+    return list.map(m => {
+      if (idsSet.has(m.id)) {
+        const deleted = (m.deleted_for || []).map(String);
+        if (!deleted.includes(uStr)) {
+          return { ...m, deleted_for: [...deleted, uStr] };
+        }
+      }
+      return m;
+    });
+  });
+
   await ensureAuthenticated();
   try {
     await Promise.all(msgIds.map(id => hideChatMessageForUser(id, userId)));
@@ -229,6 +291,7 @@ export const hideConversationForUser = async (msgIds: string[], userId: string) 
 };
 
 export const deleteChatMessage = async (id: string) => {
+  updateLocalChatCache(list => list.filter(m => m.id !== id));
   await ensureAuthenticated();
   await deleteDoc(doc(db, 'chat_messages', id));
 };

@@ -128,7 +128,14 @@ const App: React.FC = () => {
   const [allFiles, setAllFiles] = useState<DocumentFile[]>([]);
   const [allAgenda, setAllAgenda] = useState<AgendaEntry[]>([]);
   const [scaleExceptions, setScaleExceptions] = useState<ScaleException[]>([]);
-  const [allChatMessages, setAllChatMessages] = useState<ChatMessage[]>([]);
+  const [allChatMessages, setAllChatMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem('simct_chat_messages_cache');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [navHistory, setNavHistory] = useState<{
     activeTab: typeof activeTab;
@@ -225,10 +232,28 @@ const App: React.FC = () => {
     });
     const unsubAgenda = syncCollection<AgendaEntry>('agenda', setAllAgenda);
     const unsubScaleExceptions = syncCollection<ScaleException>('scale_exceptions', setScaleExceptions);
-    const unsubChat = syncCollection<ChatMessage>('chat_messages', setAllChatMessages, {
-      orderByField: 'created_at',
-      orderDirection: 'asc',
-      limitCount: 200
+    const unsubChat = syncCollection<ChatMessage>('chat_messages', (serverMsgs) => {
+      setAllChatMessages(prev => {
+        const map = new Map<string, ChatMessage>();
+        prev.forEach(m => map.set(m.id, m));
+        serverMsgs.forEach(m => {
+          const existing = map.get(m.id);
+          if (existing) {
+            const combinedRead = Array.from(new Set([...(existing.read_by || []).map(String), ...(m.read_by || []).map(String)]));
+            const combinedDeleted = Array.from(new Set([...(existing.deleted_for || []).map(String), ...(m.deleted_for || []).map(String)]));
+            map.set(m.id, { ...existing, ...m, read_by: combinedRead, deleted_for: combinedDeleted });
+          } else {
+            map.set(m.id, m);
+          }
+        });
+        const merged = Array.from(map.values());
+        try {
+          localStorage.setItem('simct_chat_messages_cache', JSON.stringify(merged));
+        } catch (e) {
+          console.warn("Could not write chat cache to localStorage:", e);
+        }
+        return merged;
+      });
     });
     const unsubUsers = syncCollection<UserWithPassword>('users', (storedUsers) => {
       const baseUsers = INITIAL_USERS.map(u => ({ ...u, status: u.status || 'ATIVO', tentativas_login: 0 }));
