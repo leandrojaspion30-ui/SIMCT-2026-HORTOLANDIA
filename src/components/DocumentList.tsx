@@ -601,6 +601,25 @@ const DocumentList: React.FC<DocumentListProps> = ({
             const totalAlerts = pendingValidationCount + myImediataCount + revalidacaoCount + expiredMonitoramentoCount;
             const hasAlert = totalAlerts > 0;
 
+            const childNames = Array.from(
+              new Set(
+                group.docs.flatMap(d => {
+                  const names: string[] = [];
+                  if (d.crianca_nome && d.crianca_nome.trim() && d.crianca_nome.trim().toUpperCase() !== 'NÃO INFORMADO' && d.crianca_nome.trim().toUpperCase() !== 'NAO INFORMADO') {
+                    names.push(d.crianca_nome.trim().toUpperCase());
+                  }
+                  if (d.criancas && Array.isArray(d.criancas)) {
+                    d.criancas.forEach(c => {
+                      if (c.nome && c.nome.trim() && c.nome.trim().toUpperCase() !== 'NÃO INFORMADO' && c.nome.trim().toUpperCase() !== 'NAO INFORMADO') {
+                        names.push(c.nome.trim().toUpperCase());
+                      }
+                    });
+                  }
+                  return names;
+                })
+              )
+            );
+
             return (
               <div 
                 key={group.key} 
@@ -655,6 +674,16 @@ const DocumentList: React.FC<DocumentListProps> = ({
                       }`}>
                         RESPONSÁVEL: {group.genitora_nome}
                       </h3>
+
+                      {childNames.length > 0 && (
+                        <div className="flex items-center gap-1.5 mt-1 text-[12px] font-black uppercase tracking-wide text-indigo-900 bg-indigo-50/80 px-2.5 py-1 rounded-lg border border-indigo-100/80 w-fit">
+                          <Baby className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          <span>
+                            {childNames.length === 1 ? 'CRIANÇA / ADOLESCENTE:' : 'CRIANÇAS / ADOLESCENTES:'}{' '}
+                            <span className="text-indigo-950 font-black">{childNames.join(', ')}</span>
+                          </span>
+                        </div>
+                      )}
 
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-bold text-slate-500 mt-1">
                         {group.cpf_genitora && <span>CPF: {group.cpf_genitora}</span>}
