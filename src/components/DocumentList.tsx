@@ -216,9 +216,18 @@ const DocumentList: React.FC<DocumentListProps> = ({
 
   const [isGroupedByFamily, setIsGroupedByFamily] = useState(true);
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
+  const [focusedFolderKey, setFocusedFolderKey] = useState<string | null>(null);
 
   const toggleFolder = (folderKey: string) => {
-    setExpandedFolders(prev => ({ ...prev, [folderKey]: !prev[folderKey] }));
+    if (focusedFolderKey === folderKey) {
+      // Se a pasta já está em foco, ao clicar em recolher, volta a mostrar todas as pastas
+      setFocusedFolderKey(null);
+      setExpandedFolders({});
+    } else {
+      // Ao clicar na pasta, isola ela na tela (foco) e expande
+      setFocusedFolderKey(folderKey);
+      setExpandedFolders({ [folderKey]: true });
+    }
   };
 
   const familyGroups = useMemo(() => {
@@ -251,6 +260,14 @@ const DocumentList: React.FC<DocumentListProps> = ({
 
     return Object.values(groups);
   }, [filteredDocs]);
+
+  const displayedFamilyGroups = useMemo(() => {
+    if (focusedFolderKey) {
+      const target = familyGroups.filter(g => g.key === focusedFolderKey);
+      if (target.length > 0) return target;
+    }
+    return familyGroups;
+  }, [familyGroups, focusedFolderKey]);
 
   const clearFilters = () => setFilters(initialFilters);
 
@@ -455,19 +472,50 @@ const DocumentList: React.FC<DocumentListProps> = ({
 
            <div className="flex items-center gap-3">
              <button 
-               onClick={() => setIsGroupedByFamily(!isGroupedByFamily)}
+               onClick={() => {
+                 setIsGroupedByFamily(!isGroupedByFamily);
+                 setFocusedFolderKey(null);
+                 setExpandedFolders({});
+               }}
                className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-sm ${isGroupedByFamily ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'}`}
              >
-               {isGroupedByFamily ? <FolderOpen className="w-4 h-4 text-amber-300" /> : <Folder className="w-4 h-4 text-slate-500" />}
+               {isGroupedByFamily ? <FolderOpen className="w-4 h-4 text-amber-300 fill-amber-300" /> : <Folder className="w-4 h-4 text-slate-500" />}
                <span>{isGroupedByFamily ? '📁 Agrupado por Pasta Familiar' : '📄 Lista Individual'}</span>
              </button>
            </div>
         </div>
       </div>
 
+      {isGroupedByFamily && focusedFolderKey && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-amber-500/10 border-2 border-amber-400 rounded-2xl shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-amber-400 rounded-xl flex items-center justify-center shrink-0 shadow-sm">
+              <FolderOpen className="w-5 h-5 text-amber-950 fill-amber-100" />
+            </div>
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 block">
+                Modo Isolado Ativo
+              </span>
+              <p className="text-xs font-bold text-slate-800 uppercase">
+                Exibindo apenas a pasta da família selecionada para evitar contaminação visual.
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={() => {
+              setFocusedFolderKey(null);
+              setExpandedFolders({});
+            }}
+            className="px-5 py-2.5 bg-slate-900 hover:bg-indigo-600 text-white rounded-xl font-bold text-[10px] uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer shadow-md shrink-0 self-stretch sm:self-auto justify-center"
+          >
+            <span>⬅️ Ver Todas as Pastas ({familyGroups.length})</span>
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4">
         {isGroupedByFamily ? (
-          familyGroups.map(group => {
+          displayedFamilyGroups.map(group => {
             const isExpanded = !!expandedFolders[group.key];
             const firstDoc = group.docs[0];
             const refCouncilor = users.find(u => u.id === firstDoc?.conselheiro_referencia_id);
@@ -565,21 +613,21 @@ const DocumentList: React.FC<DocumentListProps> = ({
                 >
                   <div className="flex items-center gap-4">
                     <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-md transition-all ${
-                      hasAlert ? 'bg-rose-500 text-white shadow-rose-200' : 'bg-indigo-600 group-hover:bg-indigo-700 text-white'
+                      hasAlert ? 'bg-rose-500 text-white shadow-rose-200' : 'bg-amber-400 group-hover:bg-amber-500 text-amber-950 shadow-amber-200/60'
                     }`}>
                       {isExpanded ? (
-                        <FolderOpen className="w-6 h-6 text-amber-300" />
+                        <FolderOpen className="w-6 h-6 text-amber-950 fill-amber-100" />
                       ) : (
-                        <Folder className="w-6 h-6 text-amber-300" />
+                        <Folder className="w-6 h-6 text-amber-950 fill-amber-100" />
                       )}
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`text-[10px] font-black uppercase tracking-wider ${hasAlert ? 'text-rose-600' : 'text-indigo-600'}`}>
+                        <span className={`text-[10px] font-black uppercase tracking-wider ${hasAlert ? 'text-rose-600' : 'text-amber-700'}`}>
                           PASTA FAMILIAR
                         </span>
                         <span className={`px-2.5 py-0.5 text-[10px] font-black rounded-full uppercase ${
-                          hasAlert ? 'bg-rose-100 text-rose-700' : 'bg-indigo-100 text-indigo-700'
+                          hasAlert ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'
                         }`}>
                           {group.docs.length} {group.docs.length === 1 ? 'Procedimento' : 'Procedimentos'}
                         </span>
