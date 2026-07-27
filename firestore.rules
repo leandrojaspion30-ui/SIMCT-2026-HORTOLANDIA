@@ -50,5 +50,9 @@ service cloud.firestore {
     match /scale_exceptions/{exceptionId} {
       allow read, write: if true;
     }
+
+    match /chat_messages/{msgId} {
+      allow read, write: if true;
+    }
   }
 }

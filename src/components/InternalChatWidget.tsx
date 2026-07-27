@@ -65,9 +65,9 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
   // Helper for unread count per specific channel
   const getUnreadForChannel = useCallback((channelKey: string) => {
     return messages.filter(m => {
-      if (m.sender_id === currentUser.id) return false;
+      if (String(m.sender_id) === String(currentUser.id)) return false;
       const readList = m.read_by || [];
-      if (readList.includes(currentUser.id)) return false;
+      if (readList.includes(currentUser.id) || readList.includes(String(currentUser.id))) return false;
 
       if (channelKey === 'ALL_U1') {
         return (m.recipient_id === 'ALL_U1' || (!m.recipient_id && m.unidade_id === 1) || (m.recipient_id === 'ALL' && m.unidade_id === 1));
@@ -76,17 +76,17 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
         return (m.recipient_id === 'ALL_U2' || (!m.recipient_id && m.unidade_id === 2) || (m.recipient_id === 'ALL' && m.unidade_id === 2));
       }
       if (channelKey === 'ALL_SYSTEM') {
-        return m.recipient_id === 'ALL_SYSTEM';
+        return m.recipient_id === 'ALL_SYSTEM' || m.recipient_id === 'ALL';
       }
       // Direct 1-on-1
-      return m.sender_id === channelKey && m.recipient_id === currentUser.id;
+      return String(m.sender_id) === String(channelKey) && String(m.recipient_id) === String(currentUser.id);
     }).length;
   }, [messages, currentUser]);
 
   // Available users list filtered by unit tab & search query
   const availableUsers = useMemo(() => {
     return users
-      .filter(u => u.id !== currentUser.id && u.status !== 'EXCLUIDO' && u.status !== 'INATIVO')
+      .filter(u => String(u.id) !== String(currentUser.id) && u.status !== 'EXCLUIDO' && u.status !== 'INATIVO')
       .filter(u => {
         if (unitFilter === 'U1') return u.unidade_id === 1;
         if (unitFilter === 'U2') return u.unidade_id === 2;
@@ -111,14 +111,14 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
           return (m.recipient_id === 'ALL_U2' || (!m.recipient_id && m.unidade_id === 2) || (m.recipient_id === 'ALL' && m.unidade_id === 2));
         }
         if (activeChannel === 'ALL_SYSTEM') {
-          return m.recipient_id === 'ALL_SYSTEM';
+          return m.recipient_id === 'ALL_SYSTEM' || m.recipient_id === 'ALL';
         }
         if (activeChannel === 'ALL') {
           return (!m.recipient_id || m.recipient_id === 'ALL' || m.recipient_id === `ALL_U${currentUser.unidade_id || 1}`);
         }
         // Direct private message between currentUser & recipient
-        return (m.sender_id === currentUser.id && m.recipient_id === activeChannel) ||
-               (m.sender_id === activeChannel && m.recipient_id === currentUser.id);
+        return (String(m.sender_id) === String(currentUser.id) && String(m.recipient_id) === String(activeChannel)) ||
+               (String(m.sender_id) === String(activeChannel) && String(m.recipient_id) === String(currentUser.id));
       })
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
   }, [messages, currentUser, activeChannel]);
