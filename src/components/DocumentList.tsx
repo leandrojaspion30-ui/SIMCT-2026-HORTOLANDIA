@@ -1,9 +1,127 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, ChevronUp, Folder, FolderOpen, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database, Trash2, Timer, Calendar } from 'lucide-react';
+import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, ChevronUp, Folder, FolderOpen, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database, Trash2, Timer, Calendar, GraduationCap, Stethoscope, HandHeart, Phone, Mail, Siren, PhoneCall } from 'lucide-react';
 import { Documento, User as UserType, DocumentStatus } from '../types';
 import { STATUS_LABELS, INITIAL_USERS, BAIRROS, getBairrosByUnidade } from '../constants';
 import { formatLocalDateString, parseLocalDate, formatCadastroDateTime } from '../lib/dateUtils';
+
+export const getOrigemIconAndStyle = (origemRaw?: string) => {
+  const origem = (origemRaw || '').toUpperCase().trim();
+  
+  if (origem.includes('FAMÍLIA') || origem.includes('FAMILIA') || origem.includes('MÃE') || origem.includes('PAI') || origem.includes('AVÓ') || origem.includes('AVÔ') || origem.includes('PARENTES') || origem.includes('RESPONSÁVEL') || origem.includes('IRMÃO') || origem.includes('TIA') || origem.includes('TIO') || origem.includes('GENITORA') || origem.includes('MADRASTA') || origem.includes('PADRASTO')) {
+    return {
+      icon: <Users className="w-3.5 h-3.5 text-purple-600 shrink-0" />,
+      label: `ORIGEM: ${origemRaw || 'FAMÍLIA'}`,
+      style: 'bg-purple-50 border-purple-200 text-purple-900',
+      category: 'FAMÍLIA'
+    };
+  }
+  if (origem.includes('EDUCAÇÃO') || origem.includes('EDUCACAO') || origem.includes('EMEF') || origem.includes('EMEI') || origem.includes('E.E.') || origem.includes('ESCOLA') || origem.includes('CRECHE')) {
+    return {
+      icon: <GraduationCap className="w-3.5 h-3.5 text-cyan-600 shrink-0" />,
+      label: `ORIGEM: ${origemRaw || 'EDUCAÇÃO'}`,
+      style: 'bg-cyan-50 border-cyan-200 text-cyan-900',
+      category: 'EDUCAÇÃO'
+    };
+  }
+  if (origem.includes('SAÚDE') || origem.includes('SAUDE') || origem.includes('UBS') || origem.includes('HOSPITAL') || origem.includes('SAMU') || origem.includes('UPA') || origem.includes('AMBULATÓRIO')) {
+    return {
+      icon: <Stethoscope className="w-3.5 h-3.5 text-rose-600 shrink-0" />,
+      label: `ORIGEM: ${origemRaw || 'SAÚDE'}`,
+      style: 'bg-rose-50 border-rose-200 text-rose-900',
+      category: 'SAÚDE'
+    };
+  }
+  if (origem.includes('ASSISTÊNCIA') || origem.includes('ASSISTENCIA') || origem.includes('CRAS') || origem.includes('CREAS') || origem.includes('POP') || origem.includes('ACOLHIMENTO') || origem.includes('DAS')) {
+    return {
+      icon: <Building2 className="w-3.5 h-3.5 text-amber-600 shrink-0" />,
+      label: `ORIGEM: ${origemRaw || 'ASSISTÊNCIA SOCIAL'}`,
+      style: 'bg-amber-50 border-amber-200 text-amber-900',
+      category: 'ASSISTÊNCIA SOCIAL'
+    };
+  }
+  if (origem.includes('SEGURANÇA') || origem.includes('SEGURANCA') || origem.includes('POLÍCIA') || origem.includes('POLICIA') || origem.includes('GUARDA') || origem.includes('DDM') || origem.includes('PATRULHA') || origem.includes('BOMBEIROS')) {
+    return {
+      icon: <ShieldAlert className="w-3.5 h-3.5 text-slate-700 shrink-0" />,
+      label: `ORIGEM: ${origemRaw || 'SEGURANÇA'}`,
+      style: 'bg-slate-100 border-slate-300 text-slate-900',
+      category: 'SEGURANÇA'
+    };
+  }
+  if (origem.includes('JUDICIÁRIO') || origem.includes('JUDICIARIO') || origem.includes('MP') || origem.includes('PROMOTORIA') || origem.includes('VARA') || origem.includes('JUSTIÇA')) {
+    return {
+      icon: <Scale className="w-3.5 h-3.5 text-indigo-600 shrink-0" />,
+      label: `ORIGEM: ${origemRaw || 'PODER JUDICIÁRIO'}`,
+      style: 'bg-indigo-50 border-indigo-200 text-indigo-900',
+      category: 'JUDICIÁRIO'
+    };
+  }
+  if (origem.includes('DENÚNCIA') || origem.includes('DENUNCIA') || origem.includes('DISQUE') || origem.includes('SIPIA')) {
+    return {
+      icon: <Siren className="w-3.5 h-3.5 text-orange-600 shrink-0" />,
+      label: `ORIGEM: ${origemRaw || 'DENÚNCIA / SIPIA'}`,
+      style: 'bg-orange-50 border-orange-200 text-orange-900',
+      category: 'DENÚNCIA'
+    };
+  }
+  return {
+    icon: <Building2 className="w-3.5 h-3.5 text-slate-600 shrink-0" />,
+    label: `ORIGEM: ${origemRaw || 'N/A'}`,
+    style: 'bg-slate-50 border-slate-200 text-slate-800',
+    category: 'OUTROS'
+  };
+};
+
+export const getCanalIconAndStyle = (canalRaw?: string) => {
+  const canal = (canalRaw || '').toUpperCase().trim();
+  if (canal.includes('PRESENCIAL')) {
+    return {
+      icon: <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />,
+      label: `CANAL: ${canalRaw}`,
+      style: 'bg-emerald-50 border-emerald-200 text-emerald-900'
+    };
+  }
+  if (canal.includes('TELEFÔNICO') || canal.includes('TELEFONICO') || canal.includes('TELEFONE') || canal.includes('PLANTÃO') || canal.includes('PLANTAO') || canal.includes('LIGAÇÃO')) {
+    return {
+      icon: <Phone className="w-3.5 h-3.5 text-sky-600 shrink-0" />,
+      label: `CANAL: ${canalRaw}`,
+      style: 'bg-sky-50 border-sky-200 text-sky-900'
+    };
+  }
+  if (canal.includes('EMAIL') || canal.includes('E-MAIL')) {
+    return {
+      icon: <Mail className="w-3.5 h-3.5 text-purple-600 shrink-0" />,
+      label: `CANAL: ${canalRaw}`,
+      style: 'bg-purple-50 border-purple-200 text-purple-900'
+    };
+  }
+  if (canal.includes('DISQUE 100') || canal.includes('DISQUE')) {
+    return {
+      icon: <Siren className="w-3.5 h-3.5 text-red-600 shrink-0" />,
+      label: `CANAL: ${canalRaw}`,
+      style: 'bg-red-50 border-red-200 text-red-900'
+    };
+  }
+  if (canal.includes('SIPIA')) {
+    return {
+      icon: <Database className="w-3.5 h-3.5 text-teal-600 shrink-0" />,
+      label: `CANAL: ${canalRaw}`,
+      style: 'bg-teal-50 border-teal-200 text-teal-900'
+    };
+  }
+  if (canal.includes('OFÍCIO') || canal.includes('OFICIO') || canal.includes('RELATÓRIO') || canal.includes('RELATORIO')) {
+    return {
+      icon: <FileText className="w-3.5 h-3.5 text-amber-700 shrink-0" />,
+      label: `CANAL: ${canalRaw}`,
+      style: 'bg-amber-50 border-amber-200 text-amber-900'
+    };
+  }
+  return {
+    icon: <FileText className="w-3.5 h-3.5 text-slate-600 shrink-0" />,
+    label: `CANAL: ${canalRaw || 'N/A'}`,
+    style: 'bg-slate-50 border-slate-200 text-slate-800'
+  };
+};
 
 const getStatusStyle = (status: DocumentStatus, isImprocedente?: boolean, validationState?: 'PENDING_SELF' | 'PENDING_OTHERS' | 'COMPLETED' | 'ADMIN_CONCLUDED') => {
   if (isImprocedente) return { color: 'bg-slate-400', border: 'border-l-slate-400', icon: <Ban className="w-4 h-4" /> };
@@ -359,6 +477,8 @@ const DocumentList: React.FC<DocumentListProps> = ({
     ].includes(s) || s.startsWith('NOTIFICACAO_'));
 
     const style = getStatusStyle(mainStatus, doc.is_improcedente, validationState);
+    const origemInfo = getOrigemIconAndStyle(doc.origem);
+    const canalInfo = getCanalIconAndStyle(doc.canal_comunicado);
 
     return (
       <div key={doc.id} onClick={() => onSelectDoc(doc.id)} className={`bg-white rounded-2xl border border-[#E5E7EB] ${style.border} border-l-4 shadow-sm hover:shadow-md transition-all cursor-pointer group overflow-hidden ${isNested ? 'bg-slate-50/50' : ''}`}>
@@ -422,9 +542,21 @@ const DocumentList: React.FC<DocumentListProps> = ({
                      <div className="flex items-center gap-2 text-[11px] text-emerald-600 font-bold uppercase"><MapPin className="w-3.5 h-3.5" /> {doc.bairro}</div>
                   </div>
                </div>
-               <div className="flex flex-wrap items-center gap-4 pt-2">
+               <div className="flex flex-wrap items-center gap-2 pt-2">
                   <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-lg text-[10px] font-black text-[#2563EB] uppercase"><UserCheck className="w-3 h-3" /> Titular: {refCouncilor?.nome || 'N/A'}</div>
                   <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[10px] font-black text-amber-700 uppercase"><ShieldCheck className="w-3 h-3" /> Imediata: {provCouncilor?.nome || 'N/A'}</div>
+                  {doc.origem && (
+                     <div className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-[10px] font-black uppercase ${origemInfo.style}`} title="Origem do Caso">
+                        {origemInfo.icon}
+                        <span>{origemInfo.label}</span>
+                     </div>
+                  )}
+                  {doc.canal_comunicado && (
+                     <div className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-[10px] font-black uppercase ${canalInfo.style}`} title="Canal do Comunicado">
+                        {canalInfo.icon}
+                        <span>{canalInfo.label}</span>
+                     </div>
+                  )}
                   <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black text-slate-500 uppercase">
                     <Timer className="w-3 h-3" /> Registro: {(() => { const r = formatCadastroDateTime(doc.criado_em, doc.data_aporte, doc.hora_aporte); return `${r.date} às ${r.time}`; })()}
                   </div>
@@ -729,6 +861,26 @@ const DocumentList: React.FC<DocumentListProps> = ({
                             <UserCheck className="w-3.5 h-3.5 inline mr-1" /> Titular: {refCouncilor.nome}
                           </span>
                         )}
+                      </div>
+
+                      {/* Origens e Canais presentes na Pasta Familiar */}
+                      <div className="flex flex-wrap items-center gap-2 mt-2 pt-1 border-t border-slate-100">
+                        {Array.from(new Set(group.docs.map(d => d.origem).filter(Boolean))).map(orig => {
+                          const info = getOrigemIconAndStyle(orig);
+                          return (
+                            <span key={orig} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[9px] font-black uppercase ${info.style}`} title="Origem do Caso">
+                              {info.icon} <span>{info.label}</span>
+                            </span>
+                          );
+                        })}
+                        {Array.from(new Set(group.docs.map(d => d.canal_comunicado).filter(Boolean))).map(canal => {
+                          const info = getCanalIconAndStyle(canal);
+                          return (
+                            <span key={canal} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[9px] font-black uppercase ${info.style}`} title="Canal do Comunicado">
+                              {info.icon} <span>{info.label}</span>
+                            </span>
+                          );
+                        })}
                       </div>
 
                       {/* Motivos de alerta resumidos */}
