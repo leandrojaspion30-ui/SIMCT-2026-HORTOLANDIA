@@ -44,6 +44,12 @@ interface DocumentListProps {
   onViewModeChange?: (mode: 'ALL' | 'REF' | 'IMED' | 'VALID') => void;
   filters?: { term: string; bairro: string; status: string; conselheiro_ref_id: string; data_registro: string };
   onFiltersChange?: (filters: { term: string; bairro: string; status: string; conselheiro_ref_id: string; data_registro: string }) => void;
+  isGroupedByFamily?: boolean;
+  onIsGroupedByFamilyChange?: (grouped: boolean) => void;
+  expandedFolders?: Record<string, boolean>;
+  onExpandedFoldersChange?: (folders: Record<string, boolean>) => void;
+  focusedFolderKey?: string | null;
+  onFocusedFolderKeyChange?: (key: string | null) => void;
 }
 
 const DocumentList: React.FC<DocumentListProps> = ({ 
@@ -58,7 +64,13 @@ const DocumentList: React.FC<DocumentListProps> = ({
   viewMode: propViewMode,
   onViewModeChange,
   filters: propFilters,
-  onFiltersChange
+  onFiltersChange,
+  isGroupedByFamily: propIsGroupedByFamily,
+  onIsGroupedByFamilyChange,
+  expandedFolders: propExpandedFolders,
+  onExpandedFoldersChange,
+  focusedFolderKey: propFocusedFolderKey,
+  onFocusedFolderKeyChange
 }) => {
   const [docToDelete, setDocToDelete] = useState<string | null>(null);
   
@@ -217,9 +229,29 @@ const DocumentList: React.FC<DocumentListProps> = ({
       });
   }, [documents, filters, myViewMode, currentUser]);
 
-  const [isGroupedByFamily, setIsGroupedByFamily] = useState(true);
-  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
-  const [focusedFolderKey, setFocusedFolderKey] = useState<string | null>(null);
+  const [localIsGroupedByFamily, setLocalIsGroupedByFamily] = useState(true);
+  const isGroupedByFamily = propIsGroupedByFamily !== undefined ? propIsGroupedByFamily : localIsGroupedByFamily;
+  const setIsGroupedByFamily = (val: boolean | ((prev: boolean) => boolean)) => {
+    const nextVal = typeof val === 'function' ? val(isGroupedByFamily) : val;
+    if (onIsGroupedByFamilyChange) onIsGroupedByFamilyChange(nextVal);
+    else setLocalIsGroupedByFamily(nextVal);
+  };
+
+  const [localExpandedFolders, setLocalExpandedFolders] = useState<Record<string, boolean>>({});
+  const expandedFolders = propExpandedFolders !== undefined ? propExpandedFolders : localExpandedFolders;
+  const setExpandedFolders = (val: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => {
+    const nextVal = typeof val === 'function' ? val(expandedFolders) : val;
+    if (onExpandedFoldersChange) onExpandedFoldersChange(nextVal);
+    else setLocalExpandedFolders(nextVal);
+  };
+
+  const [localFocusedFolderKey, setLocalFocusedFolderKey] = useState<string | null>(null);
+  const focusedFolderKey = propFocusedFolderKey !== undefined ? propFocusedFolderKey : localFocusedFolderKey;
+  const setFocusedFolderKey = (val: string | null | ((prev: string | null) => string | null)) => {
+    const nextVal = typeof val === 'function' ? val(focusedFolderKey) : val;
+    if (onFocusedFolderKeyChange) onFocusedFolderKeyChange(nextVal);
+    else setLocalFocusedFolderKey(nextVal);
+  };
 
   const toggleFolder = (folderKey: string) => {
     if (focusedFolderKey === folderKey) {

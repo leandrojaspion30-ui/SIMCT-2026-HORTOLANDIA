@@ -518,7 +518,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       <div className="max-w-6xl mx-auto pb-40 animate-in fade-in flex flex-col gap-10">
       <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden">
         <header className="p-8 bg-[#111827] text-white flex items-center justify-between">
-          <button onClick={onBack} className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl transition-all"><ArrowLeft className="w-6 h-6" /></button>
+          <button onClick={onBack} className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 rounded-2xl font-black text-[12px] uppercase tracking-wider transition-all" title="Voltar para a tela anterior"><ArrowLeft className="w-5 h-5" /> <span>Voltar</span></button>
           <div className="text-center"><h2 className="text-[20px] font-black uppercase">{doc.crianca_nome}</h2><p className="text-[10px] opacity-60 uppercase">SIMCT #{doc.id}</p></div>
           <div className="flex items-center gap-3">
             {(isADM || isResponsible) && (

@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check, Repeat, Lock } from 'lucide-react';
+import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check, Repeat, Lock, ArrowLeft } from 'lucide-react';
 import { Documento, User, ChildData, DocumentStatus, AgendaEntry, ScaleException } from '../types';
 import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, CANAIS_COMUNICADO_LIST, getEffectiveEscala, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade, getUnidadeByBairro, LOCAL_OCORRENCIA_OPTIONS } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
@@ -804,8 +804,9 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
               <p className="text-[8px] sm:text-[9px] font-bold text-blue-400 uppercase tracking-[0.2em] mt-1">Hortolândia - Gestão de Prontuários</p>
             </div>
           </div>
-          <button onClick={onCancel} className="p-2 sm:p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all">
-            <X className="w-4 h-4 sm:w-5 sm:h-5" />
+          <button onClick={onCancel} className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-[12px] uppercase transition-all" title="Voltar para a tela anterior">
+            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="hidden sm:inline">Voltar</span>
           </button>
         </header>
 
@@ -1427,14 +1428,33 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
           </div>
         </fieldset>
 
-        {!isReadOnly && (
-          <button 
-            type="submit" 
-            className="w-full py-6 bg-[#111827] text-white rounded-2xl font-black uppercase text-[14px] tracking-[0.2em] shadow-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
-          >
-            <Save className="w-5 h-5" /> [Salvar Prontuário e Monitoramento]
-          </button>
-        )}
+        <div className="pt-4 border-t border-slate-100">
+          {!isReadOnly ? (
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              <button 
+                type="button"
+                onClick={onCancel}
+                className="w-full sm:w-1/3 py-5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black uppercase text-[12px] tracking-wider transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+              >
+                <ArrowLeft className="w-5 h-5 text-slate-600" /> Voltar
+              </button>
+              <button 
+                type="submit" 
+                className="w-full sm:w-2/3 py-5 bg-[#111827] text-white rounded-2xl font-black uppercase text-[13px] tracking-[0.15em] shadow-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
+              >
+                <Save className="w-5 h-5" /> [Salvar Prontuário e Monitoramento]
+              </button>
+            </div>
+          ) : (
+            <button 
+              type="button"
+              onClick={onCancel}
+              className="w-full py-5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black uppercase text-[12px] tracking-wider transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+            >
+              <ArrowLeft className="w-5 h-5 text-slate-600" /> Voltar para a Tela Anterior
+            </button>
+          )}
+        </div>
       </form>
       </div>
 

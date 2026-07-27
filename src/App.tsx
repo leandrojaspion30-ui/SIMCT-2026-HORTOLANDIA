@@ -96,6 +96,13 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'register' | 'my-docs' | 'monitoring' | 'logs' | 'search' | 'settings' | 'agenda' | 'statistics' | 'edit' | 'user-management' | 'plantao' | 'global-statistics' | 'distribution-test'>('dashboard');
   const [dashboardViewMode, setDashboardViewMode] = useState<'ALL' | 'REF' | 'IMED' | 'VALID'>('ALL');
   const [dashboardFilters, setDashboardFilters] = useState({ term: '', bairro: '', status: '', conselheiro_ref_id: '', data_registro: '' });
+  const [dashboardExpandedFolders, setDashboardExpandedFolders] = useState<Record<string, boolean>>({});
+  const [dashboardFocusedFolderKey, setDashboardFocusedFolderKey] = useState<string | null>(null);
+  const [dashboardIsGroupedByFamily, setDashboardIsGroupedByFamily] = useState<boolean>(true);
+
+  const [myDocsExpandedFolders, setMyDocsExpandedFolders] = useState<Record<string, boolean>>({});
+  const [myDocsFocusedFolderKey, setMyDocsFocusedFolderKey] = useState<string | null>(null);
+  const [myDocsIsGroupedByFamily, setMyDocsIsGroupedByFamily] = useState<boolean>(true);
   const [users, setUsers] = useState<UserWithPassword[]>(INITIAL_USERS);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
@@ -610,6 +617,11 @@ const App: React.FC = () => {
 
   const navigateTo = useCallback((tab: typeof activeTab, options?: { docId?: string | null; editId?: string | null; forceEdit?: boolean }) => {
     pushStateToHistory(activeTab, selectedDocId, editingDocId, forceDirectEdit);
+    try {
+      window.history.pushState({ simct: true, time: Date.now() }, '');
+    } catch {
+      // ignore
+    }
     setActiveTab(tab);
     setSelectedDocId(options?.docId !== undefined ? options.docId : null);
     setEditingDocId(options?.editId !== undefined ? options.editId : null);
@@ -641,6 +653,15 @@ const App: React.FC = () => {
     }
   }, [navHistory, editingDocId, selectedDocId, activeTab]);
 
+  // Escuta o evento popstate do navegador (botão voltar do navegador/dispositivo)
+  useEffect(() => {
+    const handlePopState = () => {
+      goBack();
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [goBack]);
+
   const handleOpenDocument = useCallback((id: string, isFromReference: boolean = false) => {
     navigateTo(activeTab, { docId: id, forceEdit: isFromReference });
     addLog(id, `VISUALIZAÇÃO: Prontuário aberto para consulta de dados técnicos.`, 'DOCUMENTO');
@@ -648,10 +669,13 @@ const App: React.FC = () => {
 
   const handleDocumentSubmit = async (data: any, files: File[]) => {
     if (editingDocId) {
-      await saveDocument({ ...data, id: editingDocId });
-      addLog(editingDocId, `EDIÇÃO: Registro de prontuário atualizado administrativamente.`, 'DOCUMENTO');
+      const savedId = editingDocId;
+      await saveDocument({ ...data, id: savedId });
+      addLog(savedId, `EDIÇÃO: Registro de prontuário atualizado administrativamente.`, 'DOCUMENTO');
       setEditingDocId(null);
-      handleNavigate('dashboard');
+      setSelectedDocId(savedId);
+      // Remove telas temporárias de edição do histórico
+      setNavHistory(prev => prev.filter(h => h.activeTab !== 'edit' && h.editingDocId !== savedId));
       return;
     }
     const id = `doc-${Math.random().toString(36).substr(2, 9)}`;
@@ -673,7 +697,10 @@ const App: React.FC = () => {
 
     await saveDocument(newDoc);
     addLog(id, `CRIAÇÃO: Novo procedimento registrado.${persistenceNote} REF: [${refName}] | IMEDIATA: [${provName}].`, 'DOCUMENTO');
-    handleNavigate('dashboard');
+    setSelectedDocId(id);
+    setActiveTab('dashboard');
+    // Remove telas temporárias de cadastro do histórico
+    setNavHistory(prev => prev.filter(h => h.activeTab !== 'register' && h.activeTab !== 'plantao'));
   };
 
   const handleNavigate = (tab: typeof activeTab) => { 
@@ -1110,6 +1137,12 @@ const App: React.FC = () => {
               onViewModeChange={setDashboardViewMode}
               filters={dashboardFilters}
               onFiltersChange={setDashboardFilters}
+              expandedFolders={dashboardExpandedFolders}
+              onExpandedFoldersChange={setDashboardExpandedFolders}
+              focusedFolderKey={dashboardFocusedFolderKey}
+              onFocusedFolderKeyChange={setDashboardFocusedFolderKey}
+              isGroupedByFamily={dashboardIsGroupedByFamily}
+              onIsGroupedByFamilyChange={setDashboardIsGroupedByFamily}
             />
           </div>
         );
@@ -1138,10 +1171,29 @@ const App: React.FC = () => {
             d.conselheiros_providencia_nomes?.some(name => matchesUserOrSubstitutedName(name));
           return isFixedRef || isImediata;
         });
-        return <DocumentList documents={myReferencedDocs} users={users} currentUser={currentUser} isReadOnly={false} onSelectDoc={(id) => handleOpenDocument(id, true)} onEditDoc={(id) => navigateTo('edit', { editId: id })} onDeleteDoc={async (id) => {
-            addLog(id, `EXCLUSÃO: Documento removido permanentemente via Minha Referência.`, 'DOCUMENTO');
-            await deleteDocument(id);
-        }} onScience={() => {}} onUpdateStatus={() => {}} isMyReferenceView={true} />;
+        return (
+          <DocumentList 
+            documents={myReferencedDocs} 
+            users={users} 
+            currentUser={currentUser} 
+            isReadOnly={false} 
+            onSelectDoc={(id) => handleOpenDocument(id, true)} 
+            onEditDoc={(id) => navigateTo('edit', { editId: id })} 
+            onDeleteDoc={async (id) => {
+              addLog(id, `EXCLUSÃO: Documento removido permanentemente via Minha Referência.`, 'DOCUMENTO');
+              await deleteDocument(id);
+            }} 
+            onScience={() => {}} 
+            onUpdateStatus={() => {}} 
+            isMyReferenceView={true} 
+            expandedFolders={myDocsExpandedFolders}
+            onExpandedFoldersChange={setMyDocsExpandedFolders}
+            focusedFolderKey={myDocsFocusedFolderKey}
+            onFocusedFolderKeyChange={setMyDocsFocusedFolderKey}
+            isGroupedByFamily={myDocsIsGroupedByFamily}
+            onIsGroupedByFamilyChange={setMyDocsIsGroupedByFamily}
+          />
+        );
       
       case 'monitoring': return <MonitoringDashboard documents={documents} currentUser={currentUser} effectiveUserId={currentUser.id} onSelectDoc={handleOpenDocument} onAddLog={addLog} onUpdateMonitoring={async (id, m) => { 
           await saveDocument({ id, monitoramento: m }); 
