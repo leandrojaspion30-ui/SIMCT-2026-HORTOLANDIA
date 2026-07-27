@@ -87,6 +87,7 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
   const availableUsers = useMemo(() => {
     return users
       .filter(u => String(u.id) !== String(currentUser.id) && u.status !== 'EXCLUIDO' && u.status !== 'INATIVO')
+      .filter(u => !u.nome.toUpperCase().includes('LUDIMILA') && u.cargo !== 'ADM GERAL')
       .filter(u => {
         if (unitFilter === 'U1') return u.unidade_id === 1;
         if (unitFilter === 'U2') return u.unidade_id === 2;
