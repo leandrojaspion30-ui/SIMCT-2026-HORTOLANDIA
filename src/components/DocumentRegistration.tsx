@@ -184,6 +184,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
   });
 
   const isADM = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome === 'LEANDRO';
+  const isLeandro = (currentUser.nome || '').trim().toUpperCase().includes('LEANDRO') || currentUser.id === 'cons1';
 
   // Estados para gerenciamento de Troca Excepcional de Escala (Casos Excepcionais)
   const [isScaleSwapModalOpen, setIsScaleSwapModalOpen] = useState(false);
@@ -735,10 +736,20 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
       data_recebimento: formData.data_aporte,
       hora_rece_bimento: formData.hora_aporte,
       periodo_rece_bimento: classifyTurno(formData.data_aporte, formData.hora_aporte),
-      conselheiro_referencia_id: initialData ? initialData.conselheiro_referencia_id : finalRefId,
-      is_manual_override: initialData ? initialData.is_manual_override : (isManualReference || isReferenceLocked),
-      conselheiro_providencia_id: initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || ''),
-      conselheiros_providencia_nomes: initialData ? initialData.conselheiros_providencia_nomes : finalValidators,
+      conselheiro_referencia_id: (isLeandro && isManualReference && formData.conselheiro_referencia_id) 
+        ? formData.conselheiro_referencia_id 
+        : (initialData ? initialData.conselheiro_referencia_id : finalRefId),
+      is_manual_override: (isLeandro && isManualReference) || (initialData ? initialData.is_manual_override : isReferenceLocked),
+      conselheiro_providencia_id: (isLeandro && formData.providencia_imediata_manual)
+        ? formData.providencia_imediata_manual
+        : (initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || '')),
+      conselheiros_providencia_nomes: (isLeandro && formData.providencia_imediata_manual)
+        ? (() => {
+            const manualUser = allUsers.find(u => u.id === formData.providencia_imediata_manual);
+            const manualName = manualUser?.nome?.toUpperCase();
+            return manualName ? [manualName, ...trioNames.filter(n => n.toUpperCase() !== manualName)] : finalValidators;
+          })()
+        : (initialData ? initialData.conselheiros_providencia_nomes : finalValidators),
       is_family_persistence: isFamilyPersistence,
       is_manual_providencia: !!formData.providencia_imediata_manual,
       status: initialData ? initialData.status : (formData.notificacao ? [`NOTIFICACAO_${formData.notificacao.toUpperCase()}` as DocumentStatus] : ['AGUARDANDO_ANALISE']),
@@ -1256,7 +1267,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-indigo-600" /> Conselheiro de Referência
                 </div>
-                {!initialData && (!isReferenceLocked || isADM) && (
+                {isLeandro && (
                   <button 
                     type="button" 
                     onClick={() => {
@@ -1265,14 +1276,14 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                       }
                       setIsManualReference(!isManualReference);
                     }}
-                    className={`px-2 py-1 rounded text-[9px] font-bold uppercase transition-all ${isManualReference ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}
+                    className={`px-2 py-1 rounded text-[9px] font-bold uppercase transition-all ${isManualReference ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500 hover:bg-slate-300'}`}
                   >
-                    {isManualReference ? 'Cancelar Alteração' : 'Ajuste Histórico'}
+                    {isManualReference ? 'Cancelar Alteração' : 'Alterar Referência'}
                   </button>
                 )}
               </label>
               
-              {!initialData && isManualReference ? (
+              {isLeandro && isManualReference ? (
                 <select 
                   required
                   className="w-full p-4 bg-white border border-indigo-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-indigo-500 shadow-sm"
@@ -1295,10 +1306,18 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 </select>
               ) : (
                 <div className="p-4 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 flex items-center justify-between">
-                  <span>{assignedReference?.nome || 'Aguardando...'}</span>
-                  <span className={`text-[9px] px-2 py-1 flex items-center gap-1 rounded-md uppercase font-black ${initialData ? 'bg-slate-200 text-slate-700 border border-slate-300' : (isReferenceLocked ? 'bg-amber-50 text-amber-600' : (formData.notificacao ? 'bg-blue-50 text-blue-600' : 'bg-indigo-50 text-indigo-600'))}`}>
-                    {initialData && <Lock className="w-3 h-3 text-slate-500" />}
-                    {initialData ? 'Cadastrado (Bloqueado)' : (isReferenceLocked ? 'Vínculo Histórico' : (formData.notificacao ? 'Notificação (Isento do Rodízio)' : 'Rodízio Alfabético'))}
+                  <span>
+                    {allUsers.find(u => u.id === (formData.conselheiro_referencia_id || assignedReference?.id))?.nome || assignedReference?.nome || 'Aguardando...'}
+                  </span>
+                  <span className={`text-[9px] px-2 py-1 flex items-center gap-1 rounded-md uppercase font-black ${initialData && !isManualReference ? 'bg-slate-200 text-slate-700 border border-slate-300' : (isReferenceLocked ? 'bg-amber-50 text-amber-600' : (formData.notificacao ? 'bg-blue-50 text-blue-600' : 'bg-indigo-50 text-indigo-600'))}`}>
+                    {(!isLeandro || !isManualReference) && <Lock className="w-3 h-3 text-slate-500" />}
+                    {initialData 
+                      ? (isManualReference ? 'Ajuste Manual (Leandro)' : 'Cadastrado (Bloqueado)') 
+                      : (isReferenceLocked 
+                          ? (isManualReference ? 'Ajuste Manual (Leandro)' : 'Vínculo Histórico') 
+                          : (formData.notificacao 
+                              ? 'Notificação (Isento do Rodízio)' 
+                              : (isManualReference ? 'Ajuste Manual (Leandro)' : 'Rodízio Alfabético')))}
                   </span>
                 </div>
               )}
@@ -1321,7 +1340,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-amber-600" /> Providência Imediata
                 </div>
-                {!initialData && isADM && (
+                {isLeandro && (
                   <button 
                     type="button" 
                     onClick={() => {
@@ -1331,13 +1350,13 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                         setFormData(prev => ({ ...prev, providencia_imediata_manual: assignedImediata?.id || '' }));
                       }
                     }}
-                    className={`px-2 py-1 rounded text-[9px] font-bold uppercase transition-all ${formData.providencia_imediata_manual ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-500'}`}
+                    className={`px-2 py-1 rounded text-[9px] font-bold uppercase transition-all ${formData.providencia_imediata_manual ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-500 hover:bg-slate-300'}`}
                   >
                     {formData.providencia_imediata_manual ? 'Cancelar Ajuste' : 'Alterar Imediata'}
                   </button>
                 )}
               </label>
-              {!initialData && formData.providencia_imediata_manual && isADM ? (
+              {isLeandro && formData.providencia_imediata_manual ? (
                 <select 
                   required
                   className="w-full p-4 bg-white border border-amber-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-amber-500 shadow-sm"
@@ -1359,13 +1378,15 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 </select>
               ) : (
                 <div className="p-4 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 flex items-center justify-between">
-                  <span>{assignedImediata?.nome || 'Aguardando...'}</span>
-                  <span className={`text-[9px] px-2 py-1 flex items-center gap-1 rounded-md uppercase font-black ${initialData ? 'bg-slate-200 text-slate-700 border border-slate-300' : 'bg-amber-50 text-amber-600'}`}>
-                    {initialData && <Lock className="w-3 h-3 text-slate-500" />}
-                    {initialData 
+                  <span>
+                    {allUsers.find(u => u.id === (formData.providencia_imediata_manual || (initialData?.conselheiro_providencia_id) || assignedImediata?.id))?.nome || assignedImediata?.nome || 'Aguardando...'}
+                  </span>
+                  <span className={`text-[9px] px-2 py-1 flex items-center gap-1 rounded-md uppercase font-black ${initialData && !formData.providencia_imediata_manual ? 'bg-slate-200 text-slate-700 border border-slate-300' : 'bg-amber-50 text-amber-600'}`}>
+                    {(!isLeandro || !formData.providencia_imediata_manual) && <Lock className="w-3 h-3 text-slate-500" />}
+                    {initialData && !formData.providencia_imediata_manual
                       ? 'Cadastrado (Bloqueado)' 
                       : (formData.providencia_imediata_manual 
-                          ? 'Sobrescrita Manual' 
+                          ? 'Sobrescrita Manual (Leandro)' 
                           : (formData.notificacao ? 'Vínculo de Notificação' : 'Escala do Dia'))}
                   </span>
                 </div>
