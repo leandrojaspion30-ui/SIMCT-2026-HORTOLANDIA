@@ -53,35 +53,164 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
     setTextInput(prev => prev + emoji);
   };
 
-  // Total unread messages count across all channels
-  const totalUnreadCount = useMemo(() => {
+  // Helper function to play a double-beep sound notification
+  const playNotificationSound = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      
+      // Tone 1
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
+      gain1.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(ctx.currentTime);
+      osc1.stop(ctx.currentTime + 0.15);
+
+      // Tone 2
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(987.77, ctx.currentTime + 0.12); // B5
+      gain2.gain.setValueAtTime(0.25, ctx.currentTime + 0.12);
+      gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.38);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(ctx.currentTime + 0.12);
+      osc2.stop(ctx.currentTime + 0.38);
+    } catch (e) {
+      console.warn('Erro ao tocar som do chat:', e);
+    }
+  };
+
+  // PRIVACIDADE E FILTRAGEM RIGOROSA DE MENSAGENS DO USUÁRIO
+  // O usuário só vê mensagens:
+  // 1. Enviadas por ele
+  // 2. Enviadas diretamente para ele (1-on-1)
+  // 3. Enviadas no canal Geral - Todos os Usuários
+  // 4. Enviadas no canal Geral da SUA Unidade (Unidade 1 ou Unidade 2)
+  const userVisibleMessages = useMemo(() => {
+    const myIdStr = String(currentUser.id);
+    const myUnit = currentUser.unidade_id || 1;
+
     return messages.filter(m => {
-      if (m.sender_id === currentUser.id) return false;
-      const readList = m.read_by || [];
-      return !readList.includes(currentUser.id);
-    }).length;
+      const senderIdStr = String(m.sender_id);
+      const recipientIdStr = m.recipient_id ? String(m.recipient_id) : '';
+
+      // Eu sou o remetente
+      if (senderIdStr === myIdStr) return true;
+
+      // Mensagem direta para mim
+      if (recipientIdStr === myIdStr) return true;
+
+      // Grupo Geral do Sistema (Todos os Usuários)
+      if (recipientIdStr === 'ALL_SYSTEM' || recipientIdStr === 'ALL') return true;
+
+      // Grupo Geral da Unidade 1
+      if (recipientIdStr === 'ALL_U1' || (!m.recipient_id && m.unidade_id === 1)) {
+        return myUnit === 1;
+      }
+
+      // Grupo Geral da Unidade 2
+      if (recipientIdStr === 'ALL_U2' || (!m.recipient_id && m.unidade_id === 2)) {
+        return myUnit === 2;
+      }
+
+      // Nenhuma outra mensagem entre terceiros deve ser vista!
+      return false;
+    });
   }, [messages, currentUser]);
+
+  // Mensagens não lidas visíveis para este usuário
+  const unreadMessages = useMemo(() => {
+    const myIdStr = String(currentUser.id);
+    return userVisibleMessages.filter(m => {
+      if (String(m.sender_id) === myIdStr) return false;
+      const readList = m.read_by || [];
+      return !readList.includes(currentUser.id) && !readList.includes(myIdStr);
+    });
+  }, [userVisibleMessages, currentUser]);
+
+  const totalUnreadCount = unreadMessages.length;
+
+  // Monitorar novas mensagens recebidas para emitir SOM e mudar canal automaticamente
+  const prevMessageIdsRef = useRef<Set<string>>(new Set());
+  const isInitialLoadRef = useRef(true);
+
+  useEffect(() => {
+    const currentIds = new Set(userVisibleMessages.map(m => m.id));
+
+    if (isInitialLoadRef.current) {
+      prevMessageIdsRef.current = currentIds;
+      isInitialLoadRef.current = false;
+      return;
+    }
+
+    let hasNewIncoming = false;
+    let newestSenderChannel: string | null = null;
+
+    userVisibleMessages.forEach(m => {
+      if (!prevMessageIdsRef.current.has(m.id)) {
+        // Nova mensagem que não foi enviada por mim
+        if (String(m.sender_id) !== String(currentUser.id)) {
+          hasNewIncoming = true;
+          if (m.recipient_id === 'ALL_U1') newestSenderChannel = 'ALL_U1';
+          else if (m.recipient_id === 'ALL_U2') newestSenderChannel = 'ALL_U2';
+          else if (m.recipient_id === 'ALL_SYSTEM' || m.recipient_id === 'ALL') newestSenderChannel = 'ALL_SYSTEM';
+          else newestSenderChannel = String(m.sender_id);
+        }
+      }
+    });
+
+    if (hasNewIncoming) {
+      // Tocar alerta sonoro!
+      playNotificationSound();
+
+      // Ir direto para a tela de quem mandou se houver novo remetente!
+      if (newestSenderChannel) {
+        setActiveChannel(newestSenderChannel);
+      }
+    }
+
+    prevMessageIdsRef.current = currentIds;
+  }, [userVisibleMessages, currentUser.id]);
+
+  // Helper para abrir/alternar o chat posicionando direto no remetente não lido
+  const handleToggleChatWithAutoSelect = () => {
+    if (!isOpen) {
+      // Se tiver mensagem não lida, muda a aba diretamente para quem mandou
+      if (unreadMessages.length > 0) {
+        const lastUnread = unreadMessages[unreadMessages.length - 1];
+        if (lastUnread.recipient_id === 'ALL_U1') setActiveChannel('ALL_U1');
+        else if (lastUnread.recipient_id === 'ALL_U2') setActiveChannel('ALL_U2');
+        else if (lastUnread.recipient_id === 'ALL_SYSTEM' || lastUnread.recipient_id === 'ALL') setActiveChannel('ALL_SYSTEM');
+        else setActiveChannel(String(lastUnread.sender_id));
+      }
+    }
+    onToggleOpen();
+  };
 
   // Helper for unread count per specific channel
   const getUnreadForChannel = useCallback((channelKey: string) => {
-    return messages.filter(m => {
-      if (String(m.sender_id) === String(currentUser.id)) return false;
-      const readList = m.read_by || [];
-      if (readList.includes(currentUser.id) || readList.includes(String(currentUser.id))) return false;
-
+    return unreadMessages.filter(m => {
       if (channelKey === 'ALL_U1') {
-        return (m.recipient_id === 'ALL_U1' || (!m.recipient_id && m.unidade_id === 1) || (m.recipient_id === 'ALL' && m.unidade_id === 1));
+        return (m.recipient_id === 'ALL_U1' || (!m.recipient_id && m.unidade_id === 1));
       }
       if (channelKey === 'ALL_U2') {
-        return (m.recipient_id === 'ALL_U2' || (!m.recipient_id && m.unidade_id === 2) || (m.recipient_id === 'ALL' && m.unidade_id === 2));
+        return (m.recipient_id === 'ALL_U2' || (!m.recipient_id && m.unidade_id === 2));
       }
       if (channelKey === 'ALL_SYSTEM') {
         return m.recipient_id === 'ALL_SYSTEM' || m.recipient_id === 'ALL';
       }
       // Direct 1-on-1
-      return String(m.sender_id) === String(channelKey) && String(m.recipient_id) === String(currentUser.id);
+      return String(m.sender_id) === String(channelKey);
     }).length;
-  }, [messages, currentUser]);
+  }, [unreadMessages]);
 
   // Available users list filtered by unit tab & search query
   const availableUsers = useMemo(() => {
@@ -103,7 +232,7 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
 
   // Messages for active channel
   const channelMessages = useMemo(() => {
-    return messages
+    return userVisibleMessages
       .filter(m => {
         if (activeChannel === 'ALL_U1') {
           return (m.recipient_id === 'ALL_U1' || (!m.recipient_id && m.unidade_id === 1) || (m.recipient_id === 'ALL' && m.unidade_id === 1));
@@ -122,7 +251,7 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
                (String(m.sender_id) === String(activeChannel) && String(m.recipient_id) === String(currentUser.id));
       })
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-  }, [messages, currentUser, activeChannel]);
+  }, [userVisibleMessages, currentUser, activeChannel]);
 
   // Mark active channel messages as read
   useEffect(() => {
@@ -220,7 +349,7 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
       {/* Botão Flutuante de Acesso ao Chat */}
       {!isOpen && (
         <button
-          onClick={onToggleOpen}
+          onClick={handleToggleChatWithAutoSelect}
           className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 bg-[#111827] hover:bg-blue-600 text-white rounded-full shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 group cursor-pointer border-2 border-white/20"
           title="Abrir Chat Interno de Comunicação"
         >
