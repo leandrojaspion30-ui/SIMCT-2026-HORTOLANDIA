@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { MessageSquare, Send, X, Users, User as UserIcon, Bell, Minimize2, Maximize2, Shield, AlertCircle, CheckCheck, Trash2, Sparkles, ChevronDown, ChevronLeft, Search, Building2, Globe, UserCheck, Check, Smile } from 'lucide-react';
 import { User, ChatMessage } from '../types';
-import { saveChatMessage, deleteChatMessage, markChatMessageAsRead } from '../lib/db';
+import { saveChatMessage, deleteChatMessage, markChatMessageAsRead, hideChatMessageForUser, hideConversationForUser } from '../lib/db';
 
 interface InternalChatWidgetProps {
   currentUser: User;
@@ -99,6 +99,12 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
     const myUnit = currentUser.unidade_id || 1;
 
     return messages.filter(m => {
+      // Se a mensagem foi apagada/ocultada para este usuário específico, não exibe!
+      const deletedForList = m.deleted_for || [];
+      if (deletedForList.includes(myIdStr) || deletedForList.includes(currentUser.id)) {
+        return false;
+      }
+
       const senderIdStr = String(m.sender_id);
       const recipientIdStr = m.recipient_id ? String(m.recipient_id) : '';
 
@@ -310,8 +316,20 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
   };
 
   const handleDeleteMessage = async (msgId: string) => {
-    if (window.confirm("Deseja apagar esta mensagem do chat?")) {
-      await deleteChatMessage(msgId);
+    if (window.confirm("Deseja apagar esta mensagem do SEU chat? (Ela continuará visível para os outros participantes).")) {
+      await hideChatMessageForUser(msgId, currentUser.id);
+    }
+  };
+
+  const handleClearConversation = async () => {
+    if (channelMessages.length === 0) return;
+    const channelName = activeChannelInfo.title;
+    if (window.confirm(`Deseja apagar as mensagens da conversa "${channelName}" APENAS para você?\n\n(Os outros participantes continuarão vendo o histórico de mensagens).`)) {
+      try {
+        await hideConversationForUser(channelMessages.map(m => m.id), currentUser.id);
+      } catch (err) {
+        console.error('Erro ao apagar conversa para o usuário:', err);
+      }
     }
   };
 
@@ -435,18 +453,31 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
                   </div>
                 </div>
 
-                <button
-                  onClick={() => setIsSelectorOpen(!isSelectorOpen)}
-                  className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-sm shrink-0 border ${
-                    isSelectorOpen 
-                      ? 'bg-amber-400 text-amber-950 border-amber-300 font-black' 
-                      : 'bg-blue-600 hover:bg-blue-500 text-white border-blue-400/40'
-                  }`}
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>{isSelectorOpen ? 'Fechar Lista' : 'Escolher Destinatário'}</span>
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isSelectorOpen ? 'rotate-180' : ''}`} />
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {channelMessages.length > 0 && (
+                    <button
+                      onClick={handleClearConversation}
+                      className="p-2 bg-red-500/20 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/30 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                      title="Apagar mensagens desta conversa"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Limpar Conversa</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => setIsSelectorOpen(!isSelectorOpen)}
+                    className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-sm shrink-0 border ${
+                      isSelectorOpen 
+                        ? 'bg-amber-400 text-amber-950 border-amber-300 font-black' 
+                        : 'bg-blue-600 hover:bg-blue-500 text-white border-blue-400/40'
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>{isSelectorOpen ? 'Fechar Lista' : 'Escolher Destinatário'}</span>
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isSelectorOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                </div>
               </div>
 
               {/* PAINEL OCULTO/EXPANSÍVEL DE SELEÇÃO DE CONTATOS (QUANDO CLICADO) */}
@@ -713,7 +744,20 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
                     </p>
                   </div>
                 ) : (
-                  channelMessages.map(msg => {
+                  <>
+                    <div className="flex items-center justify-between px-3 py-1.5 mb-2 bg-slate-200/70 border border-slate-300/60 rounded-xl text-[10px] text-slate-600 font-semibold shrink-0">
+                      <span>Mensagens na conversa: <strong>{channelMessages.length}</strong></span>
+                      <button
+                        onClick={handleClearConversation}
+                        className="text-red-600 hover:text-red-700 font-black uppercase text-[9px] flex items-center gap-1 cursor-pointer hover:underline"
+                        title="Excluir todas as mensagens desta conversa"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Apagar Conversa</span>
+                      </button>
+                    </div>
+
+                    {channelMessages.map(msg => {
                     const isMe = msg.sender_id === currentUser.id;
                     const timeFormatted = new Date(msg.created_at).toLocaleTimeString('pt-BR', {
                       hour: '2-digit',
@@ -737,15 +781,13 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
                           <span className="text-[9px] font-medium text-slate-400">
                             • {timeFormatted}
                           </span>
-                          {(isMe || currentUser.perfil === 'ADMIN' || currentUser.nome === 'LUDIMILA' || currentUser.nome === 'LEANDRO') && (
-                            <button
-                              onClick={() => handleDeleteMessage(msg.id)}
-                              className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all p-0.5 ml-1 cursor-pointer"
-                              title="Excluir mensagem"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          )}
+                          <button
+                            onClick={() => handleDeleteMessage(msg.id)}
+                            className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all p-0.5 ml-1 cursor-pointer"
+                            title="Apagar do meu chat"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
                         </div>
 
                         <div
@@ -759,7 +801,8 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
                         </div>
                       </div>
                     );
-                  })
+                  })}
+                  </>
                 )}
                 <div ref={messagesEndRef} />
               </div>

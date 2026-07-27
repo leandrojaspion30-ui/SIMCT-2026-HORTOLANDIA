@@ -199,6 +199,34 @@ export const markChatMessageAsRead = async (msgId: string, userId: string) => {
   }
 };
 
+export const hideChatMessageForUser = async (msgId: string, userId: string) => {
+  await ensureAuthenticated();
+  const docRef = doc(db, 'chat_messages', msgId);
+  try {
+    const docSnap = await getDocs(query(collection(db, 'chat_messages')));
+    const msgDoc = docSnap.docs.find(d => d.id === msgId);
+    if (msgDoc) {
+      const existingDeleted = msgDoc.data().deleted_for || [];
+      if (!existingDeleted.includes(userId)) {
+        await updateDoc(docRef, {
+          deleted_for: [...existingDeleted, userId]
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("Could not hide message for user:", err);
+  }
+};
+
+export const hideConversationForUser = async (msgIds: string[], userId: string) => {
+  await ensureAuthenticated();
+  try {
+    await Promise.all(msgIds.map(id => hideChatMessageForUser(id, userId)));
+  } catch (err) {
+    console.warn("Could not hide conversation for user:", err);
+  }
+};
+
 export const deleteChatMessage = async (id: string) => {
   await ensureAuthenticated();
   await deleteDoc(doc(db, 'chat_messages', id));

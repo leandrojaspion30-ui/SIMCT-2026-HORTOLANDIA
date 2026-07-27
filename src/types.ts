@@ -292,5 +292,6 @@ export interface ChatMessage {
   created_at: string;
   recipient_id?: string; // 'ALL' or specific user ID
   read_by?: string[];
+  deleted_for?: string[];
 }
 
