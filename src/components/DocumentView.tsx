@@ -673,6 +673,37 @@ const DocumentView: React.FC<DocumentViewProps> = ({
               </div>
             </div>
 
+            {/* IDENTIFICAÇÃO FAMILIAR */}
+            <div className="p-6 bg-slate-50/80 rounded-3xl border border-slate-100 space-y-4">
+              <div className="flex items-center gap-2">
+                <UserRound className="w-4 h-4 text-blue-600" />
+                <span className="text-[11px] font-black uppercase text-slate-800 tracking-wider">Identificação do Núcleo Familiar</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="p-4 bg-white rounded-2xl border border-slate-200/80 flex flex-col gap-1">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Genitora / Genitor / Responsável</span>
+                  <span className="text-[12px] font-black text-slate-800 uppercase">{doc.genitora_nome || 'NÃO INFORMADO'}</span>
+                  {doc.cpf_genitora && <span className="text-[10px] font-bold text-slate-500 font-mono">CPF: {doc.cpf_genitora}</span>}
+                </div>
+
+                {doc.outro_membro_nome && (
+                  <div className="p-4 bg-blue-50/60 rounded-2xl border border-blue-200/60 flex flex-col gap-1">
+                    <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest">
+                      Outro Membro da Família ({doc.outro_membro_parentesco || 'FAMILIAR'})
+                    </span>
+                    <span className="text-[12px] font-black text-slate-800 uppercase">{doc.outro_membro_nome}</span>
+                    {doc.outro_membro_cpf && <span className="text-[10px] font-bold text-slate-600 font-mono">CPF: {doc.outro_membro_cpf}</span>}
+                  </div>
+                )}
+
+                <div className="p-4 bg-white rounded-2xl border border-slate-200/80 flex flex-col gap-1">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Bairro de Residência</span>
+                  <span className="text-[12px] font-black text-slate-800 uppercase">{doc.bairro || 'NÃO INFORMADO'}</span>
+                </div>
+              </div>
+            </div>
+
             <div className="p-6 bg-blue-50/50 rounded-3xl border border-blue-100 space-y-2">
               <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                 <LayoutList className="w-4 h-4" /> Relato Inicial / Objeto da Demanda

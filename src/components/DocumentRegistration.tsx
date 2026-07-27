@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check, Repeat } from 'lucide-react';
+import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check, Repeat, Lock } from 'lucide-react';
 import { Documento, User, ChildData, DocumentStatus, AgendaEntry, ScaleException } from '../types';
 import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, CANAIS_COMUNICADO_LIST, getEffectiveEscala, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade, getUnidadeByBairro, LOCAL_OCORRENCIA_OPTIONS } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
@@ -143,6 +143,10 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     genitora_nome: initialData?.genitora_nome || '',
     genitora_nao_informado: initialData?.genitora_nao_informado || false,
     cpf_genitora: initialData?.cpf_genitora || '',
+    outro_membro_nome: initialData?.outro_membro_nome || '',
+    outro_membro_parentesco: initialData?.outro_membro_parentesco || '',
+    outro_membro_cpf: initialData?.outro_membro_cpf || '',
+    tem_outro_membro: !!(initialData?.outro_membro_nome || initialData?.outro_membro_parentesco),
     bairro: initialData?.bairro || '',
     relato_inicial: initialData?.observacoes_iniciais || '',
     conselheiro_referencia_id: initialData?.conselheiro_referencia_id || '',
@@ -294,41 +298,114 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     }
   };
 
-  // DIRETRIZ 41/50/53: Reconhecimento por CPF e Auto-preenchimento
+  // DIRETRIZ 41/50/53: Reconhecimento por CPF, Nome, Documento e Pasta Familiar
   useEffect(() => {
+    // Lista de documentos excluindo o próprio documento caso esteja em edição
+    const availableDocs = initialData ? documents.filter(d => d.id !== initialData.id) : documents;
+
     const cpfGen = (formData.cpf_genitora || '').replace(/\D/g, '');
+    const cpfMembro = (formData.outro_membro_cpf || '').replace(/\D/g, '');
     const cpfsCriancas = formData.criancas.map(c => (c.cpf || '').replace(/\D/g, '')).filter(c => c.length === 11);
     
-    const findExisting = () => {
+    const genNomeClean = (formData.genitora_nome || '').trim().toUpperCase();
+    const membroNomeClean = (formData.outro_membro_nome || '').trim().toUpperCase();
+    const criancasNomesClean = formData.criancas
+      .map(c => (c.nome || '').trim().toUpperCase())
+      .filter(n => n && n !== 'NÃO INFORMADO' && n !== 'NAO INFORMADO' && n.length >= 3);
+
+    const numCom = (formData.numero_comunicado_violacao || '').trim().toUpperCase();
+    const numSipia = (formData.numero_sipia || '').trim().toUpperCase();
+
+    const findExisting = (): Documento[] => {
+      // 1. Busca por CPF da Genitora
       if (cpfGen.length === 11) {
-        return documents.filter(d => (d.cpf_genitora || '').replace(/\D/g, '') === cpfGen);
-      }
-      for (const cpf of cpfsCriancas) {
-        const found = documents.filter(d => d.criancas?.some(c => (c.cpf || '').replace(/\D/g, '') === cpf));
+        const found = availableDocs.filter(d => (d.cpf_genitora || '').replace(/\D/g, '') === cpfGen);
         if (found.length > 0) return found;
       }
+
+      // 2. Busca por CPF do Membro da Família
+      if (cpfMembro.length === 11) {
+        const found = availableDocs.filter(d => 
+          (d.outro_membro_cpf || '').replace(/\D/g, '') === cpfMembro ||
+          (d.cpf_genitora || '').replace(/\D/g, '') === cpfMembro
+        );
+        if (found.length > 0) return found;
+      }
+
+      // 3. Busca por CPF das Crianças
+      for (const cpf of cpfsCriancas) {
+        const found = availableDocs.filter(d => d.criancas?.some(c => (c.cpf || '').replace(/\D/g, '') === cpf));
+        if (found.length > 0) return found;
+      }
+
+      // 4. Busca por Nome da Genitora / Responsável
+      if (genNomeClean && genNomeClean !== 'NÃO INFORMADO' && genNomeClean !== 'NAO INFORMADO' && genNomeClean.length >= 3) {
+        const found = availableDocs.filter(d => (d.genitora_nome || '').trim().toUpperCase() === genNomeClean);
+        if (found.length > 0) return found;
+      }
+
+      // 5. Busca por Nome do Outro Membro da Família
+      if (membroNomeClean && membroNomeClean !== 'NÃO INFORMADO' && membroNomeClean.length >= 3) {
+        const found = availableDocs.filter(d => 
+          (d.outro_membro_nome || '').trim().toUpperCase() === membroNomeClean ||
+          (d.genitora_nome || '').trim().toUpperCase() === membroNomeClean
+        );
+        if (found.length > 0) return found;
+      }
+
+      // 6. Busca por Nome das Crianças
+      for (const cNome of criancasNomesClean) {
+        const found = availableDocs.filter(d => d.criancas?.some(c => (c.nome || '').trim().toUpperCase() === cNome));
+        if (found.length > 0) return found;
+      }
+
+      // 7. Busca por Nº do Comunicado / SIPIA
+      if (numCom && numCom.length >= 2) {
+        const found = availableDocs.filter(d => (d.numero_comunicado_violacao || '').trim().toUpperCase() === numCom);
+        if (found.length > 0) return found;
+      }
+
+      if (numSipia && numSipia.length >= 2) {
+        const found = availableDocs.filter(d => (d.numero_sipia || '').trim().toUpperCase() === numSipia);
+        if (found.length > 0) return found;
+      }
+
       return [];
     };
 
     const history = findExisting();
     if (history.length > 0) {
       const existingDoc = history[0];
-      setFormData(prev => ({
-        ...prev,
-        genitora_nome: existingDoc.genitora_nome,
-        bairro: existingDoc.bairro,
-        conselheiro_referencia_id: existingDoc.conselheiro_referencia_id,
-        unidade_id: existingDoc.unidade_id || prev.unidade_id,
-        criancas: existingDoc.criancas || prev.criancas
-      }));
+      if (!initialData) {
+        setFormData(prev => ({
+          ...prev,
+          genitora_nome: prev.genitora_nome || existingDoc.genitora_nome,
+          bairro: prev.bairro || existingDoc.bairro,
+          conselheiro_referencia_id: existingDoc.conselheiro_referencia_id,
+          unidade_id: existingDoc.unidade_id || prev.unidade_id
+        }));
+      }
       setIsReferenceLocked(true);
-      setIsManualReference(isADM);
+      if (!initialData) {
+        setIsManualReference(isADM);
+      }
       setFamilyHistory(history);
     } else {
       setIsReferenceLocked(false);
       setFamilyHistory([]);
     }
-  }, [formData.cpf_genitora, formData.criancas, documents, isADM]);
+  }, [
+    formData.cpf_genitora, 
+    formData.genitora_nome, 
+    formData.outro_membro_cpf, 
+    formData.outro_membro_nome, 
+    formData.criancas, 
+    formData.numero_comunicado_violacao, 
+    formData.numero_sipia, 
+    documents, 
+    isADM, 
+    initialData
+  ]);
 
   // DIRETRIZ 48: Escala baseada na data de Hoje para novos documentos (para não alterar a sequência ou sofrer interferência de data/hora retrativa)
   const trioNames = useMemo(() => {
@@ -573,9 +650,17 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
       const dCpfGen = (d.cpf_genitora || '').replace(/\D/g, '') || '';
       if (cpfGen && dCpfGen && cpfGen === dCpfGen) return true;
 
+      const cpfOutro = (formData.outro_membro_cpf || '').replace(/\D/g, '');
+      const dCpfOutro = (d.outro_membro_cpf || '').replace(/\D/g, '') || '';
+      if (cpfOutro && dCpfOutro && cpfOutro === dCpfOutro) return true;
+
       const nameGen = formData.genitora_nome?.trim().toUpperCase();
       const dNameGen = d.genitora_nome?.trim().toUpperCase();
       if (nameGen && dNameGen && nameGen !== 'NÃO INFORMADO' && nameGen.length >= 3 && nameGen === dNameGen) return true;
+
+      const nameOutro = formData.outro_membro_nome?.trim().toUpperCase();
+      const dNameOutro = d.outro_membro_nome?.trim().toUpperCase();
+      if (nameOutro && dNameOutro && nameOutro.length >= 3 && (nameOutro === dNameOutro || nameOutro === dNameGen)) return true;
 
       const cpfsCriancas = formData.criancas.map(c => (c.cpf || '').replace(/\D/g, '')).filter(c => c.length === 11);
       const dCpfsCriancas = d.criancas?.map(c => (c.cpf || '').replace(/\D/g, '')).filter(c => c && c.length === 11) || [];
@@ -635,6 +720,9 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     const finalData = {
       ...initialData,
       ...formData,
+      outro_membro_nome: formData.tem_outro_membro ? formData.outro_membro_nome : '',
+      outro_membro_parentesco: formData.tem_outro_membro ? formData.outro_membro_parentesco : '',
+      outro_membro_cpf: formData.tem_outro_membro ? formData.outro_membro_cpf : '',
       unidade_id: formData.unidade_id,
       informacoes_documento: formData.tipo_documento,
       numero_comunicado_violacao: formData.numero_comunicado_violacao,
@@ -647,10 +735,10 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
       data_recebimento: formData.data_aporte,
       hora_rece_bimento: formData.hora_aporte,
       periodo_rece_bimento: classifyTurno(formData.data_aporte, formData.hora_aporte),
-      conselheiro_referencia_id: finalRefId,
+      conselheiro_referencia_id: initialData ? initialData.conselheiro_referencia_id : finalRefId,
       is_manual_override: initialData ? initialData.is_manual_override : (isManualReference || isReferenceLocked),
-      conselheiro_providencia_id: assignedImediata?.id || '',
-      conselheiros_providencia_nomes: finalValidators,
+      conselheiro_providencia_id: initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || ''),
+      conselheiros_providencia_nomes: initialData ? initialData.conselheiros_providencia_nomes : finalValidators,
       is_family_persistence: isFamilyPersistence,
       is_manual_providencia: !!formData.providencia_imediata_manual,
       status: initialData ? initialData.status : (formData.notificacao ? [`NOTIFICACAO_${formData.notificacao.toUpperCase()}` as DocumentStatus] : ['AGUARDANDO_ANALISE']),
@@ -929,7 +1017,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   placeholder="000.000.000-00"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 md:col-span-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bairro da Criança *</label>
                 <SearchableSelect
                   disabled={isReadOnly}
@@ -947,6 +1035,81 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   }}
                 />
               </div>
+            </div>
+
+            {/* ADICIONAL: OUTRO MEMBRO DA FAMÍLIA (TIO, AVÔ, AVÓ, ETC.) */}
+            <div className="p-5 sm:p-6 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-blue-600" />
+                  <span className="text-[11px] font-black uppercase text-slate-800 tracking-wider">Outro Membro da Família Atendido / Familiar Referência</span>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer group">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    checked={formData.tem_outro_membro}
+                    onChange={e => {
+                      const checked = e.target.checked;
+                      setFormData(prev => ({
+                        ...prev,
+                        tem_outro_membro: checked,
+                        outro_membro_parentesco: checked ? (prev.outro_membro_parentesco || 'TIO / TIA') : '',
+                        outro_membro_nome: checked ? prev.outro_membro_nome : '',
+                        outro_membro_cpf: checked ? prev.outro_membro_cpf : ''
+                      }));
+                    }}
+                  />
+                  <span className="text-[9px] font-black uppercase text-blue-600 group-hover:text-blue-700 transition-colors">
+                    Incluir Outro Membro da Família (Tio, Avô, Avó, etc.)
+                  </span>
+                </label>
+              </div>
+
+              {formData.tem_outro_membro && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 animate-in slide-in-from-top-2 duration-200">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Grau de Parentesco / Vínculo *</label>
+                    <select 
+                      className="w-full p-3.5 bg-white border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500 cursor-pointer"
+                      value={formData.outro_membro_parentesco}
+                      onChange={e => setFormData({ ...formData, outro_membro_parentesco: e.target.value })}
+                    >
+                      <option value="TIO / TIA">TIO / TIA</option>
+                      <option value="AVÔ / AVÓ">AVÔ / AVÓ</option>
+                      <option value="IRMÃO / IRMÃ">IRMÃO / IRMÃ</option>
+                      <option value="PADRASTO / MADRASTA">PADRASTO / MADRASTA</option>
+                      <option value="PRIMO / PRIMA">PRIMO / PRIMA</option>
+                      <option value="PADRINHO / MADRINHA">PADRINHO / MADRINHA</option>
+                      <option value="CUIDADOR(A)">CUIDADOR(A) / RESPONSÁVEL DE FATO</option>
+                      <option value="OUTRO">OUTRO MEMBRO DA FAMÍLIA</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Nome do Membro da Família *</label>
+                    <input 
+                      type="text"
+                      required={formData.tem_outro_membro}
+                      placeholder="NOME COMPLETO DO FAMILIAR..."
+                      className="w-full p-3.5 bg-white border border-slate-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-blue-500"
+                      value={formData.outro_membro_nome}
+                      onChange={e => setFormData({ ...formData, outro_membro_nome: e.target.value.toUpperCase() })}
+                    />
+                  </div>
+
+                  <div className="space-y-1 sm:col-span-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">CPF do Membro da Família</label>
+                    <input 
+                      type="text"
+                      placeholder="000.000.000-00"
+                      className="w-full p-3.5 bg-white border border-slate-200 rounded-xl font-bold text-[11px] outline-none focus:border-blue-500"
+                      value={formData.outro_membro_cpf}
+                      onChange={e => setFormData({ ...formData, outro_membro_cpf: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </section>
 
@@ -1090,7 +1253,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-indigo-600" /> Conselheiro de Referência
                 </div>
-                {(!isReferenceLocked || isADM) && (
+                {!initialData && (!isReferenceLocked || isADM) && (
                   <button 
                     type="button" 
                     onClick={() => {
@@ -1101,12 +1264,12 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                     }}
                     className={`px-2 py-1 rounded text-[9px] font-bold uppercase transition-all ${isManualReference ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}
                   >
-                    {initialData ? (isManualReference ? 'Cancelar Alteração' : 'Alterar Referência') : 'Ajuste Histórico'}
+                    {isManualReference ? 'Cancelar Alteração' : 'Ajuste Histórico'}
                   </button>
                 )}
               </label>
               
-              {isManualReference ? (
+              {!initialData && isManualReference ? (
                 <select 
                   required
                   className="w-full p-4 bg-white border border-indigo-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-indigo-500 shadow-sm"
@@ -1130,15 +1293,16 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
               ) : (
                 <div className="p-4 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 flex items-center justify-between">
                   <span>{assignedReference?.nome || 'Aguardando...'}</span>
-                  <span className={`text-[9px] px-2 py-1 rounded-md uppercase ${initialData ? 'bg-slate-100 text-slate-500' : (isReferenceLocked ? 'bg-amber-50 text-amber-600' : (formData.notificacao ? 'bg-blue-50 text-blue-600' : 'bg-indigo-50 text-indigo-600'))}`}>
-                    {initialData ? 'Cadastrado' : (isReferenceLocked ? 'Vínculo Histórico' : (formData.notificacao ? 'Notificação (Isento do Rodízio)' : 'Rodízio Alfabético'))}
+                  <span className={`text-[9px] px-2 py-1 flex items-center gap-1 rounded-md uppercase font-black ${initialData ? 'bg-slate-200 text-slate-700 border border-slate-300' : (isReferenceLocked ? 'bg-amber-50 text-amber-600' : (formData.notificacao ? 'bg-blue-50 text-blue-600' : 'bg-indigo-50 text-indigo-600'))}`}>
+                    {initialData && <Lock className="w-3 h-3 text-slate-500" />}
+                    {initialData ? 'Cadastrado (Bloqueado)' : (isReferenceLocked ? 'Vínculo Histórico' : (formData.notificacao ? 'Notificação (Isento do Rodízio)' : 'Rodízio Alfabético'))}
                   </span>
                 </div>
               )}
               {isReferenceLocked && (
                 <div className="flex items-center gap-2 mt-1 px-2 py-1 bg-amber-50 rounded-lg border border-amber-100">
                   <AlertCircle className="w-3 h-3 text-amber-600" />
-                  <span className="text-[9px] font-bold text-amber-700 uppercase tracking-tighter">Referência Identificada: Atribuição bloqueada por vínculo familiar.</span>
+                  <span className="text-[9px] font-bold text-amber-700 uppercase tracking-tighter">Referência Identificada: Atribuição vinculada por histórico familiar.</span>
                   <button 
                     type="button"
                     onClick={() => setShowHistoryModal(true)}
@@ -1154,7 +1318,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-amber-600" /> Providência Imediata
                 </div>
-                {isADM && (
+                {!initialData && isADM && (
                   <button 
                     type="button" 
                     onClick={() => {
@@ -1170,7 +1334,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   </button>
                 )}
               </label>
-              {formData.providencia_imediata_manual && isADM ? (
+              {!initialData && formData.providencia_imediata_manual && isADM ? (
                 <select 
                   required
                   className="w-full p-4 bg-white border border-amber-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-amber-500 shadow-sm"
@@ -1193,9 +1357,10 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
               ) : (
                 <div className="p-4 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 flex items-center justify-between">
                   <span>{assignedImediata?.nome || 'Aguardando...'}</span>
-                  <span className={`text-[9px] px-2 py-1 rounded-md uppercase ${(initialData && !formData.notificacao && !formData.providencia_imediata_manual) ? 'bg-slate-100 text-slate-500' : 'bg-amber-50 text-amber-600'}`}>
-                    {(initialData && !formData.notificacao && !formData.providencia_imediata_manual) 
-                      ? 'Cadastrado' 
+                  <span className={`text-[9px] px-2 py-1 flex items-center gap-1 rounded-md uppercase font-black ${initialData ? 'bg-slate-200 text-slate-700 border border-slate-300' : 'bg-amber-50 text-amber-600'}`}>
+                    {initialData && <Lock className="w-3 h-3 text-slate-500" />}
+                    {initialData 
+                      ? 'Cadastrado (Bloqueado)' 
                       : (formData.providencia_imediata_manual 
                           ? 'Sobrescrita Manual' 
                           : (formData.notificacao ? 'Vínculo de Notificação' : 'Escala do Dia'))}

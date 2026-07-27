@@ -151,6 +151,9 @@ export interface Documento {
   genitora_nome: string;
   genitora_nao_informado?: boolean;
   cpf_genitora?: string; 
+  outro_membro_nome?: string;
+  outro_membro_parentesco?: string;
+  outro_membro_cpf?: string;
   cpf_crianca?: string;
   bairro: string; 
   endereco?: string;

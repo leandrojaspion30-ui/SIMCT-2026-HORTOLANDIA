@@ -34,7 +34,10 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ documents, users, curre
     return documents
       .filter(doc => {
         const matchCat = !filters.categoria || doc.origem?.includes(filters.categoria);
-        const matchGenitora = !filters.genitora_nome || doc.genitora_nome.toUpperCase().includes(filters.genitora_nome.toUpperCase());
+        const matchGenitora = !filters.genitora_nome || 
+          doc.genitora_nome.toUpperCase().includes(filters.genitora_nome.toUpperCase()) ||
+          (doc.outro_membro_nome && doc.outro_membro_nome.toUpperCase().includes(filters.genitora_nome.toUpperCase())) ||
+          (doc.outro_membro_parentesco && doc.outro_membro_parentesco.toUpperCase().includes(filters.genitora_nome.toUpperCase()));
         const matchCrianca = !filters.crianca_nome || 
           doc.crianca_nome.toUpperCase().includes(filters.crianca_nome.toUpperCase()) ||
           doc.criancas?.some(c => c.nome?.toUpperCase().includes(filters.crianca_nome.toUpperCase()));
@@ -45,6 +48,9 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ documents, users, curre
           
           const cleanGenitora = doc.cpf_genitora?.replace(/\D/g, '') || '';
           if (cleanGenitora.includes(cleanFilter)) return true;
+
+          const cleanOutro = doc.outro_membro_cpf?.replace(/\D/g, '') || '';
+          if (cleanOutro.includes(cleanFilter)) return true;
 
           const cleanCpfCrianca = doc.cpf_crianca?.replace(/\D/g, '') || '';
           if (cleanCpfCrianca.includes(cleanFilter)) return true;

@@ -118,6 +118,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
         const matchCpfInTerm = cleanTermOnlyDigits && (
           (doc.cpf_genitora?.replace(/\D/g, '') || '').includes(cleanTermOnlyDigits) ||
           (doc.cpf_crianca?.replace(/\D/g, '') || '').includes(cleanTermOnlyDigits) ||
+          (doc.outro_membro_cpf?.replace(/\D/g, '') || '').includes(cleanTermOnlyDigits) ||
           doc.criancas?.some(c => (c.cpf?.replace(/\D/g, '') || '').includes(cleanTermOnlyDigits))
         );
 
@@ -129,6 +130,8 @@ const DocumentList: React.FC<DocumentListProps> = ({
           checkInText(doc.id) ||
           checkInText(doc.crianca_nome) ||
           checkInText(doc.genitora_nome) ||
+          checkInText(doc.outro_membro_nome) ||
+          checkInText(doc.outro_membro_parentesco) ||
           checkInText(doc.origem) ||
           checkInText(doc.canal_comunicado) ||
           checkInText(doc.notificacao) ||
@@ -379,6 +382,11 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   )}
                   <div className="flex flex-wrap items-center gap-x-6 mt-2">
                      {!isNested && <div className="flex items-center gap-2 text-[11px] text-[#4B5563] font-bold uppercase"><UserRound className="w-3.5 h-3.5" /> RESPONSÁVEL: {doc.genitora_nome}</div>}
+                     {doc.outro_membro_nome && (
+                        <div className="flex items-center gap-2 text-[11px] text-blue-700 font-bold uppercase bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                           <Users className="w-3.5 h-3.5 text-blue-600" /> {doc.outro_membro_parentesco || 'FAMILIAR'}: {doc.outro_membro_nome}
+                        </div>
+                     )}
                      <div className="flex items-center gap-2 text-[11px] text-emerald-600 font-bold uppercase"><MapPin className="w-3.5 h-3.5" /> {doc.bairro}</div>
                   </div>
                </div>
