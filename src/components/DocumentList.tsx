@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, ChevronUp, Folder, FolderOpen, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database, Trash2, Timer, Calendar, GraduationCap, Stethoscope, HandHeart, Phone, Mail, Siren, PhoneCall } from 'lucide-react';
 import { Documento, User as UserType, DocumentStatus } from '../types';
-import { STATUS_LABELS, INITIAL_USERS, BAIRROS, getBairrosByUnidade } from '../constants';
+import { STATUS_LABELS, INITIAL_USERS, BAIRROS, getBairrosByUnidade, isSameCounselorName } from '../constants';
 import { formatLocalDateString, parseLocalDate, formatCadastroDateTime } from '../lib/dateUtils';
 
 export const getOrigemIconAndStyle = (origemRaw?: string) => {
@@ -158,6 +158,7 @@ interface DocumentListProps {
   documents: Documento[];
   users: UserType[];
   currentUser: UserType;
+  nameMap?: Record<string, string>;
   onSelectDoc: (id: string) => void;
   onEditDoc: (id: string) => void;
   onDeleteDoc: (id: string) => void;
@@ -181,6 +182,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
   documents, 
   users, 
   currentUser, 
+  nameMap,
   onSelectDoc, 
   onEditDoc, 
   onDeleteDoc, 
@@ -438,8 +440,15 @@ const DocumentList: React.FC<DocumentListProps> = ({
 
   const renderDocCard = (doc: Documento, isNested: boolean = false) => {
     const mainStatus = doc.status[doc.status.length - 1] || 'AGUARDANDO_ANALISE';
-    const refCouncilor = users.find(u => u.id === doc.conselheiro_referencia_id);
-    const provCouncilor = users.find(u => u.id === doc.conselheiro_providencia_id);
+    const rawRefCouncilor = users.find(u => u.id === doc.conselheiro_referencia_id);
+    const rawRefName = rawRefCouncilor?.nome || doc.conselheiro_referencia_nome;
+    const mappedRefName = (rawRefName && nameMap && nameMap[rawRefName.toUpperCase()]) ? nameMap[rawRefName.toUpperCase()] : rawRefName;
+    const refCouncilor = (mappedRefName && users.find(u => u.status === 'ATIVO' && isSameCounselorName(u.nome, mappedRefName))) || rawRefCouncilor;
+
+    const rawProvCouncilor = users.find(u => u.id === doc.conselheiro_providencia_id);
+    const rawProvName = rawProvCouncilor?.nome || doc.conselheiro_providencia_nome;
+    const mappedProvName = (rawProvName && nameMap && nameMap[rawProvName.toUpperCase()]) ? nameMap[rawProvName.toUpperCase()] : rawProvName;
+    const provCouncilor = (mappedProvName && users.find(u => u.status === 'ATIVO' && isSameCounselorName(u.nome, mappedProvName))) || rawProvCouncilor;
     const confirmacoes = doc.medidas_detalhadas?.[0]?.confirmacoes || [];
     const iValidated = confirmacoes.some(c => c.usuario_id === currentUser.id);
     const isInTrio = doc.conselheiros_providencia_nomes?.some(name => {

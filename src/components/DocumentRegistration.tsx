@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check, Repeat, Lock, ArrowLeft } from 'lucide-react';
 import { Documento, User, ChildData, DocumentStatus, AgendaEntry, ScaleException } from '../types';
-import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, CANAIS_COMUNICADO_LIST, getEffectiveEscala, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade, getUnidadeByBairro, LOCAL_OCORRENCIA_OPTIONS } from '../constants';
+import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, CANAIS_COMUNICADO_LIST, getEffectiveEscala, isSameCounselorName, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade, getUnidadeByBairro, LOCAL_OCORRENCIA_OPTIONS } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
 import { saveScaleException, deleteScaleException, saveLog } from '../lib/db';
 
@@ -462,10 +462,20 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
 
     // 1. PRIORIDADE ABSOLUTA: Notificação desbloqueia e define a imediata
     if (formData.notificacao) {
-      return allUsers.find(u => u.nome.toUpperCase() === formData.notificacao.toUpperCase() && u.unidade_id === formData.unidade_id);
+      const notifTargetName = (nameMap && nameMap[formData.notificacao.toUpperCase()]) || formData.notificacao;
+      return allUsers.find(u => u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, notifTargetName));
     }
 
-    if (initialData) return allUsers.find(u => u.id === initialData.conselheiro_providencia_id);
+    if (initialData) {
+      const origUser = allUsers.find(u => u.id === initialData.conselheiro_providencia_id);
+      const origName = origUser?.nome || initialData.conselheiro_providencia_nome;
+      const mappedName = (origName && nameMap && nameMap[origName.toUpperCase()]) ? nameMap[origName.toUpperCase()] : origName;
+      if (mappedName) {
+        const substituteUser = allUsers.find(u => u.status === 'ATIVO' && u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, mappedName));
+        if (substituteUser) return substituteUser;
+      }
+      return origUser;
+    }
     
     // Para novos documentos, a imediata é sempre baseada no dia real de hoje (todayDate) e usa a escala/trio de hoje
     const dateToUse = todayDate;
@@ -510,7 +520,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     const refUser = assignedReference;
     const refUserName = refUser?.nome?.toUpperCase();
     const mappedRefName = (refUserName && nameMap && nameMap[refUserName]) ? nameMap[refUserName] : refUserName;
-    const isRefUserInTrio = mappedRefName && trioNames.map(n => n.toUpperCase()).includes(mappedRefName.toUpperCase());
+    const isRefUserInTrio = mappedRefName && trioNames.some(n => isSameCounselorName(n, mappedRefName));
 
     if (isRefUserInTrio && refUser) {
       return refUser;
@@ -535,11 +545,11 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     const lastImediataNameRaw = lastImediataUser?.nome.toUpperCase();
     const lastImediataName = (lastImediataNameRaw && nameMap && nameMap[lastImediataNameRaw]) ? nameMap[lastImediataNameRaw] : lastImediataNameRaw;
     
-    const currentIndex = trioNames.indexOf(lastImediataName || '');
+    const currentIndex = trioNames.findIndex(n => isSameCounselorName(n, lastImediataName));
     const nextIndex = trioNames.length > 0 ? (currentIndex + 1) % trioNames.length : 0;
     const nextName = trioNames[nextIndex];
     
-    return allUsers.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === nextName && u.unidade_id === formData.unidade_id);
+    return allUsers.find(u => u.status === 'ATIVO' && u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, nextName));
   }, [trioNames, documents, todayDate, formData.notificacao, formData.providencia_imediata_manual, initialData, formData.unidade_id, allUsers, nameMap, familyHistory, formData.cpf_genitora, formData.genitora_nome, formData.criancas, assignedReference]);
 
   const handleChildChange = (index: number, field: keyof ChildData, value: any) => {
@@ -1415,7 +1425,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                       setSwapEndTime('08:00');
                       
                       const trio = getEffectiveEscala(todayDate, '12:00', formData.unidade_id, nameMap, scaleExceptions);
-                      const firstTrioUser = unitCounselors.find(u => trio.map(n => n.toUpperCase()).includes(u.nome.toUpperCase()));
+                      const firstTrioUser = unitCounselors.find(u => trio.some(n => isSameCounselorName(n, u.nome)));
                       const targetOrigId = firstTrioUser ? firstTrioUser.id : (unitCounselors[0]?.id || '');
                       setSwapOriginalId(targetOrigId);
                       
@@ -1533,7 +1543,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                     setSwapEndDate(nextDayStr);
                     
                     const trio = getEffectiveEscala(newDate, '12:00', formData.unidade_id, nameMap, scaleExceptions);
-                    const firstTrioUser = unitCounselors.find(u => trio.map(n => n.toUpperCase()).includes(u.nome.toUpperCase()));
+                    const firstTrioUser = unitCounselors.find(u => trio.some(n => isSameCounselorName(n, u.nome)));
                     const targetOrigId = firstTrioUser ? firstTrioUser.id : (unitCounselors[0]?.id || '');
                     setSwapOriginalId(targetOrigId);
                     

@@ -139,6 +139,24 @@ export const classifyTurno = (dateStr: string, timeStr: string): 'COMERCIAL' | '
   return (isWeekend || !isBusinessHours) ? 'PLANTAO' : 'COMERCIAL';
 };
 
+export const isSameCounselorName = (nameA: string | undefined | null, nameB: string | undefined | null): boolean => {
+  if (!nameA || !nameB) return false;
+  const cleanA = nameA.trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const cleanB = nameB.trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (cleanA === cleanB) return true;
+
+  const partsA = cleanA.split(' ').filter(p => p.length > 0);
+  const partsB = cleanB.split(' ').filter(p => p.length > 0);
+
+  const firstA = partsA[0] || '';
+  const firstB = partsB[0] || '';
+
+  if (firstA === firstB && firstA.length >= 3) return true;
+  if (cleanA.startsWith(cleanB) || cleanB.startsWith(cleanA)) return true;
+
+  return false;
+};
+
 export const getEffectiveEscala = (
   dateStr: string, 
   timeStr: string = "08:00", 
@@ -146,9 +164,10 @@ export const getEffectiveEscala = (
   nameMap?: Record<string, string>,
   scaleExceptions?: ScaleException[]
 ): string[] => {
-  const [hours] = timeStr.split(':').map(Number);
+  const safeTime = (timeStr && timeStr.trim().length >= 4) ? timeStr.trim() : "08:00";
+  const [hours] = safeTime.split(':').map(Number);
   let dt = new Date(`${dateStr}T12:00:00`);
-  if (hours < 8) dt.setDate(dt.getDate() - 1);
+  if (!isNaN(hours) && hours < 8) dt.setDate(dt.getDate() - 1);
   
   const mapName = (name: string) => (nameMap && nameMap[name]) ? nameMap[name] : name;
   
@@ -227,35 +246,40 @@ export const getEffectiveEscala = (
     ];
   }
 
-  // Se houver exceção/troca excepcional cadastrada para esse dia da escala e unidade
+  // Se houver exceções/trocas excepcionais cadastradas
   if (scaleExceptions && scaleExceptions.length > 0) {
-    const [qH, qM] = timeStr.split(':').map(Number);
-    const queryDateTime = new Date(`${dateStr}T${String(qH).padStart(2, '0')}:${String(qM || 0).padStart(2, '0')}:00`);
+    const [qH, qM] = safeTime.split(':').map(Number);
+    const queryDateTime = new Date(`${dateStr}T${String(qH || 0).padStart(2, '0')}:${String(qM || 0).padStart(2, '0')}:00`);
 
-    const exception = scaleExceptions.find(ex => {
+    const activeExceptions = scaleExceptions.filter(ex => {
       if (ex.unidade_id !== unidade_id) return false;
 
       // Se houver campos de início e fim personalizados
       if (ex.inicio_data && ex.inicio_hora && ex.fim_data && ex.fim_hora) {
         const startDateTime = new Date(`${ex.inicio_data}T${ex.inicio_hora}:00`);
         const endDateTime = new Date(`${ex.fim_data}T${ex.fim_hora}:00`);
-        return queryDateTime >= startDateTime && queryDateTime < endDateTime;
+        if (!isNaN(startDateTime.getTime()) && !isNaN(endDateTime.getTime())) {
+          const isInRange = queryDateTime >= startDateTime && queryDateTime < endDateTime;
+          if (isInRange) return true;
+        }
       }
 
-      // Fallback para comportamento padrão de dia inteiro (data inteira baseada no dutyDayStr)
-      return ex.data === dutyDayStr;
+      // Fallback para correspondência por data de plantão
+      return ex.data === dutyDayStr || ex.data === dateStr || ex.inicio_data === dutyDayStr || ex.inicio_data === dateStr;
     });
 
-    if (exception) {
-      const originalUpper = exception.conselheiro_original_nome.trim().toUpperCase();
-      const replacementUpper = exception.conselheiro_substituto_nome.trim().toUpperCase();
-      return rawTrio.map(name => {
-        if (name.toUpperCase() === originalUpper) {
-          return replacementUpper;
+    activeExceptions.forEach(exception => {
+      const originalName = exception.conselheiro_original_nome || '';
+      const replacementName = exception.conselheiro_substituto_nome || '';
+      const mappedReplacement = mapName(replacementName);
+
+      rawTrio = rawTrio.map(name => {
+        if (isSameCounselorName(name, originalName)) {
+          return mappedReplacement;
         }
         return name;
       });
-    }
+    });
   }
 
   return rawTrio;

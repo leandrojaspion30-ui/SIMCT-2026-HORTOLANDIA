@@ -16,7 +16,7 @@ import {
   STATUS_LABELS, INITIAL_USERS, 
   SIPIA_HIERARCHY, AGENTES_VIOLADORES_ESTRUTURA, 
   MEDIDAS_101_ECA, MEDIDAS_129_ECA,
-  ATRIBUICOES_136_ECA, REDE_HORTOLANDIA, getEffectiveEscala,
+  ATRIBUICOES_136_ECA, REDE_HORTOLANDIA, getEffectiveEscala, isSameCounselorName,
   LOCAL_OCORRENCIA_OPTIONS
 } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
@@ -101,11 +101,8 @@ const DocumentView: React.FC<DocumentViewProps> = ({
 
   const isUserInTrio = (nome: string) => {
     if (!nome) return false;
-    const upperNome = nome.toUpperCase();
-    if (upperNome === currentUser.nome.toUpperCase()) return true;
-    const cleanCurrentUserName = currentUser.nome.toUpperCase().split('(')[0].trim();
-    if (upperNome === cleanCurrentUserName) return true;
-    if (currentUser.is_suplente_active && currentUser.substituted_name && upperNome === currentUser.substituted_name.toUpperCase()) return true;
+    if (isSameCounselorName(nome, currentUser.nome)) return true;
+    if (currentUser.is_suplente_active && currentUser.substituted_name && isSameCounselorName(nome, currentUser.substituted_name)) return true;
     return false;
   };
 
@@ -509,8 +506,11 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     onAddLog(doc.id, `VALIDAÇÃO TÉCNICA: Assinatura confirmada pelo trio.`, 'VALIDAÇÃO');
   };
 
-  const provName = users.find(u => u.id === doc.conselheiro_providencia_id)?.nome || 'Não Encontrado';
-  const refName = users.find(u => u.id === doc.conselheiro_referencia_id)?.nome || 'Não Encontrado';
+  const rawProvName = users.find(u => u.id === doc.conselheiro_providencia_id)?.nome || doc.conselheiro_providencia_nome || 'Não Encontrado';
+  const provName = (rawProvName && nameMap && nameMap[rawProvName.toUpperCase()]) ? nameMap[rawProvName.toUpperCase()] : rawProvName;
+
+  const rawRefName = users.find(u => u.id === doc.conselheiro_referencia_id)?.nome || doc.conselheiro_referencia_nome || 'Não Encontrado';
+  const refName = (rawRefName && nameMap && nameMap[rawRefName.toUpperCase()]) ? nameMap[rawRefName.toUpperCase()] : rawRefName;
 
   const isLocalMandatory = tempViolacoes.length > 0 && tempAgentes.length > 0 && !tempAgentes.some(a => a.categoria === 'INEXISTENTE');
 

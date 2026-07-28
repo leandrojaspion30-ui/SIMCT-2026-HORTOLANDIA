@@ -21,7 +21,7 @@ import {
   Repeat
 } from 'lucide-react';
 import { Documento, User, ScaleException } from '../types';
-import { CONSELHEIROS_ALFABETICO_POR_UNIDADE, getEffectiveEscala } from '../constants';
+import { CONSELHEIROS_ALFABETICO_POR_UNIDADE, getEffectiveEscala, isSameCounselorName } from '../constants';
 import { saveDocument, deleteDocument, deleteScaleException, saveLog } from '../lib/db';
 
 interface DistributionSimulatorProps {
@@ -1243,10 +1243,12 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
                         if (ex.inicio_data && ex.inicio_hora && ex.fim_data && ex.fim_hora) {
                           const startDateTime = new Date(`${ex.inicio_data}T${ex.inicio_hora}:00`);
                           const endDateTime = new Date(`${ex.fim_data}T${ex.fim_hora}:00`);
-                          return queryDateTime >= startDateTime && queryDateTime < endDateTime;
+                          if (!isNaN(startDateTime.getTime()) && !isNaN(endDateTime.getTime())) {
+                            if (queryDateTime >= startDateTime && queryDateTime < endDateTime) return true;
+                          }
                         }
 
-                        return ex.data === dutyDayStr;
+                        return ex.data === dutyDayStr || ex.data === cDate || ex.inicio_data === dutyDayStr || ex.inicio_data === cDate;
                       });
                     })();
 
