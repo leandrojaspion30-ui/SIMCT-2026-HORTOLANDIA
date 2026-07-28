@@ -480,7 +480,19 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     // Para novos documentos, a imediata é sempre baseada no dia real de hoje (todayDate) e usa a escala/trio de hoje
     const dateToUse = todayDate;
 
-    // 2. Persistência Familiar no mesmo dia de recebimento/aporte real (Hoje)
+    // 2. SE O CONSELHEIRO DE REFERÊNCIA ESTÁ NO TRIO/PLANTÃO DE HOJE:
+    // O sistema DEVE SEMPRE reconhecer e atribuir a providência imediata para ele (ou para seu substituto de plantão).
+    const refUser = (formData.conselheiro_referencia_id ? allUsers.find(u => u.id === formData.conselheiro_referencia_id) : undefined) || assignedReference;
+    const refUserName = refUser?.nome?.toUpperCase();
+    const mappedRefName = (refUserName && nameMap && nameMap[refUserName]) ? nameMap[refUserName] : refUserName;
+    const isRefUserInTrio = mappedRefName && trioNames.some(n => isSameCounselorName(n, mappedRefName));
+
+    if (isRefUserInTrio && refUser) {
+      const activeSubstituteUser = mappedRefName ? allUsers.find(u => u.status === 'ATIVO' && u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, mappedRefName)) : undefined;
+      return activeSubstituteUser || refUser;
+    }
+
+    // 3. Persistência Familiar no mesmo dia de recebimento/aporte real (Hoje)
     // Procuramos documentos da mesma família cadastrados hoje
     const sameFamilyTodayDocs = documents.filter(d => {
       const isDocOfToday = d.data_aporte === dateToUse || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === dateToUse);
@@ -507,26 +519,14 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
       return false;
     });
 
-    // Filtro especial correspondente à regra do usuário:
-    // caso um conselheiro de providência imediata recebeu algum documento de referência que no dia não seja o próprio (d.conselheiro_providencia_id !== d.conselheiro_referencia_id)
     const sameFamilyTodayDiffProvRef = sameFamilyTodayDocs.find(d => d.conselheiro_providencia_id !== d.conselheiro_referencia_id);
     const sameFamilyTodayDirect = sameFamilyTodayDiffProvRef || sameFamilyTodayDocs[0];
 
     if (sameFamilyTodayDirect) {
       return allUsers.find(u => u.id === sameFamilyTodayDirect.conselheiro_providencia_id);
     }
-
-    // Novo requisito: se já tem conselheiro de referência e ele está na providência imediata do dia (trioNames), ele deve ser a providência imediata
-    const refUser = assignedReference;
-    const refUserName = refUser?.nome?.toUpperCase();
-    const mappedRefName = (refUserName && nameMap && nameMap[refUserName]) ? nameMap[refUserName] : refUserName;
-    const isRefUserInTrio = mappedRefName && trioNames.some(n => isSameCounselorName(n, mappedRefName));
-
-    if (isRefUserInTrio && refUser) {
-      return refUser;
-    }
     
-    // 3. Lógica de Distribuição Justa (Rodízio de Providência Imediata)
+    // 4. Lógica de Distribuição Justa (Rodízio de Providência Imediata)
     // Filtramos para ignorar documentos que foram atribuídos por persistência familiar ou manual para não quebrar a sequência de hoje
     const todayDocs = documents
       .filter(d => {
@@ -699,7 +699,7 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     
     const finalRefName = finalRefUser?.nome?.toUpperCase();
     const mappedFinalRefName = (finalRefName && nameMap && nameMap[finalRefName]) ? nameMap[finalRefName] : finalRefName;
-    const isRefUserInTrio = mappedFinalRefName && trioNames.map(n => n.toUpperCase()).includes(mappedFinalRefName.toUpperCase());
+    const isRefUserInTrio = mappedFinalRefName && trioNames.some(n => isSameCounselorName(n, mappedFinalRefName));
 
     const isFamilyPersistence = !!sameFamilyTodayDirect && !(isRefUserInTrio && finalRefUser);
     const isFamilyPersistenceDiffProvRef = !!sameFamilyTodayDiffProvRef && !(isRefUserInTrio && finalRefUser);

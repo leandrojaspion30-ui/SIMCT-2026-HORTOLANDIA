@@ -311,13 +311,13 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         const refUser = expectedRefs[i];
         const refUserName = refUser?.nome?.toUpperCase();
         const mappedRefName = (refUserName && nameMap && nameMap[refUserName]) ? nameMap[refUserName] : refUserName;
-        const isRefUserInTrio = mappedRefName && virtualTrio.map(n => n.toUpperCase()).includes(mappedRefName.toUpperCase());
+        const isRefUserInTrio = mappedRefName && virtualTrio.some(n => isSameCounselorName(n, mappedRefName));
 
         if (isRefUserInTrio && refUser) {
-          expectedSequenceImediata.push(refUserName);
-          currentProvName = refUserName;
+          expectedSequenceImediata.push(mappedRefName?.toUpperCase() || refUserName || 'N/A');
+          currentProvName = mappedRefName?.toUpperCase();
         } else {
-          const lastIdx = virtualTrio.findIndex(name => name.toUpperCase() === currentProvName);
+          const lastIdx = virtualTrio.findIndex(name => isSameCounselorName(name, currentProvName));
           const nextIdx = virtualTrio.length > 0 ? (lastIdx + 1) % virtualTrio.length : 0;
           const targetImediata = virtualTrio[nextIdx];
           expectedSequenceImediata.push(targetImediata?.toUpperCase() || 'N/A');
@@ -353,7 +353,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         // Lógica de Distribuição Justa (Rodízio de Providência Imediata)
         const refNameSim = assignedUser?.nome?.toUpperCase();
         const mappedRefNameSim = (refNameSim && nameMap && nameMap[refNameSim]) ? nameMap[refNameSim] : refNameSim;
-        const isRefSimInTrio = mappedRefNameSim && virtualTrio.map(n => n.toUpperCase()).includes(mappedRefNameSim.toUpperCase());
+        const isRefSimInTrio = mappedRefNameSim && virtualTrio.some(n => isSameCounselorName(n, mappedRefNameSim));
 
         const virtualTodayDocs = virtualDocsList
           .filter(d => {
@@ -362,7 +362,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
               const rUser = users.find(u => u.id === d.conselheiro_referencia_id);
               const rName = rUser?.nome?.toUpperCase();
               const mappedRName = (rName && nameMap && nameMap[rName]) ? nameMap[rName] : rName;
-              return mappedRName && virtualTrio.map(n => n.toUpperCase()).includes(mappedRName.toUpperCase());
+              return mappedRName && virtualTrio.some(n => isSameCounselorName(n, mappedRName));
             })();
             const isFamPersistence = d.is_family_persistence && !isRefOfDocInTrio;
             return isDocOfToday && d.unidade_id === selectedUnidade && !isFamPersistence && !d.notificacao && !d.is_manual_providencia;
@@ -377,13 +377,14 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         let assignedProvName: string = 'N/A';
 
         if (isRefSimInTrio && assignedUser) {
-          assignedProvUser = users.find(u => u.id === assignedUser.id);
-          assignedProvName = refNameSim;
+          const activeSubUser = mappedRefNameSim ? users.find(u => u.status === 'ATIVO' && u.unidade_id === selectedUnidade && isSameCounselorName(u.nome, mappedRefNameSim)) : undefined;
+          assignedProvUser = activeSubUser || users.find(u => u.id === assignedUser.id);
+          assignedProvName = assignedProvUser?.nome || mappedRefNameSim || refNameSim || 'N/A';
         } else {
-          const curProvIdx = virtualTrio.indexOf(lastProvName || '');
+          const curProvIdx = virtualTrio.findIndex(n => isSameCounselorName(n, lastProvName));
           const nxtProvIdx = virtualTrio.length > 0 ? (curProvIdx + 1) % virtualTrio.length : 0;
           assignedProvName = virtualTrio[nxtProvIdx] || 'N/A';
-          assignedProvUser = users.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === assignedProvName.toUpperCase() && u.unidade_id === selectedUnidade);
+          assignedProvUser = users.find(u => u.status === 'ATIVO' && isSameCounselorName(u.nome, assignedProvName) && u.unidade_id === selectedUnidade);
         }
 
         // Cria o registro temporário na lista para a próxima iteração simular a sincronização rápida
@@ -497,13 +498,13 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
       const refUser = testExpectedRefs[i];
       const refUserName = refUser?.nome?.toUpperCase();
       const mappedRefName = (refUserName && nameMap && nameMap[refUserName]) ? nameMap[refUserName] : refUserName;
-      const isRefUserInTrio = mappedRefName && liveTrio.map(n => n.toUpperCase()).includes(mappedRefName.toUpperCase());
+      const isRefUserInTrio = mappedRefName && liveTrio.some(n => isSameCounselorName(n, mappedRefName));
 
       if (isRefUserInTrio && refUser) {
-        expectedSequenceImediata.push(refUserName);
-        currentProvName = refUserName;
+        expectedSequenceImediata.push(mappedRefName?.toUpperCase() || refUserName || 'N/A');
+        currentProvName = mappedRefName?.toUpperCase();
       } else {
-        const lastIdx = liveTrio.findIndex(name => name.toUpperCase() === currentProvName);
+        const lastIdx = liveTrio.findIndex(name => isSameCounselorName(name, currentProvName));
         const nextIdx = liveTrio.length > 0 ? (lastIdx + 1) % liveTrio.length : 0;
         const target = liveTrio[nextIdx];
         expectedSequenceImediata.push(target?.toUpperCase() || 'N/A');
@@ -537,7 +538,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
               const rUser = users.find(u => u.id === d.conselheiro_referencia_id);
               const rName = rUser?.nome?.toUpperCase();
               const mappedRName = (rName && nameMap && nameMap[rName]) ? nameMap[rName] : rName;
-              return mappedRName && liveTrio.map(n => n.toUpperCase()).includes(mappedRName.toUpperCase());
+              return mappedRName && liveTrio.some(n => isSameCounselorName(n, mappedRName));
             })();
             const isFamPersistence = d.is_family_persistence && !isRefOfDocInTrio;
             return isDocOfToday && d.unidade_id === selectedUnidade && !isFamPersistence && !d.notificacao && !d.is_manual_providencia;
@@ -553,16 +554,17 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
 
         const refNameSim = assignedUser?.nome?.toUpperCase();
         const mappedRefNameSim = (refNameSim && nameMap && nameMap[refNameSim]) ? nameMap[refNameSim] : refNameSim;
-        const isRefSimInTrio = mappedRefNameSim && liveTrio.map(n => n.toUpperCase()).includes(mappedRefNameSim.toUpperCase());
+        const isRefSimInTrio = mappedRefNameSim && liveTrio.some(n => isSameCounselorName(n, mappedRefNameSim));
 
         if (isRefSimInTrio && assignedUser) {
-          assignedProvUser = users.find(u => u.id === assignedUser.id);
-          assignedProvName = refNameSim;
+          const activeSubUser = mappedRefNameSim ? users.find(u => u.status === 'ATIVO' && u.unidade_id === selectedUnidade && isSameCounselorName(u.nome, mappedRefNameSim)) : undefined;
+          assignedProvUser = activeSubUser || users.find(u => u.id === assignedUser.id);
+          assignedProvName = assignedProvUser?.nome || mappedRefNameSim || refNameSim || 'N/A';
         } else {
-          const curProvIdx = liveTrio.indexOf(lastProvName || '');
+          const curProvIdx = liveTrio.findIndex(n => isSameCounselorName(n, lastProvName));
           const nxtProvIdx = liveTrio.length > 0 ? (curProvIdx + 1) % liveTrio.length : 0;
           assignedProvName = liveTrio[nxtProvIdx] || 'N/A';
-          assignedProvUser = users.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === assignedProvName.toUpperCase() && u.unidade_id === selectedUnidade);
+          assignedProvUser = users.find(u => u.status === 'ATIVO' && isSameCounselorName(u.nome, assignedProvName) && u.unidade_id === selectedUnidade);
         }
 
         log(`[Gravando no Firestore] Documento de teste ${i + 1}/3...`, 'info');
