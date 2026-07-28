@@ -33,6 +33,7 @@ const AIStatisticsAnalyzer: React.FC<AIStatisticsAnalyzerProps> = ({ stats, tota
       - Total de Prontuários: ${totalDocs}
       - Total de Crianças: ${stats.totalCriancas}
       - Direitos Fundamentais Violados: ${JSON.stringify(stats.direitos)}
+      - Direitos Violados Ligados a Quem Comunicou (Origem): ${JSON.stringify(stats.direitosPorOrigem)}
       - Bairros (Ranking): ${JSON.stringify(stats.bairros)}
       - Agentes Violadores: ${JSON.stringify(stats.agentes)}
       - Origem das Denúncias: ${JSON.stringify(stats.origens)}

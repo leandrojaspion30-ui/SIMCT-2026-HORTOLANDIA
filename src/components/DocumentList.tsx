@@ -531,36 +531,6 @@ const DocumentList: React.FC<DocumentListProps> = ({
                      </span>
                   )}
 
-                  {/* CONTROLE DE ALTERAÇÃO DE STATUS DO CASO */}
-                  {!isReadOnly && (
-                     <div className="flex items-center gap-1.5 bg-slate-100/90 p-1 rounded-xl border border-slate-200 shadow-inner" onClick={(e) => e.stopPropagation()}>
-                       <span className="text-[9px] font-black uppercase text-slate-600 pl-1 flex items-center gap-1">
-                         <Tag className="w-3 h-3 text-indigo-600 shrink-0" /> Status:
-                       </span>
-                       <select
-                         value={mainStatus}
-                         onChange={(e) => {
-                           e.stopPropagation();
-                           const newS = e.target.value as DocumentStatus;
-                           if (newS) {
-                             onUpdateStatus(doc.id, [...doc.status.filter(s => s !== newS), newS]);
-                           }
-                         }}
-                         className="bg-white text-slate-800 border border-slate-300 text-[10px] font-black uppercase rounded-lg px-2 py-1 outline-none focus:border-indigo-500 shadow-sm cursor-pointer hover:border-indigo-400 transition-colors"
-                       >
-                         <option value="NOTIFICAR">🔔 NOTIFICAR</option>
-                         <option value="NOTIFICADO">🔕 NOTIFICADO</option>
-                         <option value="AVALIAR_EM_COLEGIADO">👥 AVALIAR EM COLEGIADO</option>
-                         <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
-                         <option value="CONCLUIDO">✅ CONCLUÍDO</option>
-                         <option value="ENCERRADO">🔒 ENCERRADO</option>
-                         <option value="AGUARDANDO_ANALISE">⏳ AGUARDANDO ANÁLISE</option>
-                         <option value="MONITORAMENTO">📊 EM MONITORAMENTO</option>
-                         <option value="ARQUIVADO">📁 ARQUIVADO</option>
-                       </select>
-                     </div>
-                  )}
-
                   <span className="text-[11px] font-mono font-bold text-slate-300 uppercase">#{doc.id}</span>
                </div>
                <div>
@@ -605,34 +575,65 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   </div>
                </div>
             </div>
-            <div className="shrink-0 flex items-center gap-3">
-               {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); onEditDoc(doc.id); }} className="p-3 bg-white border border-[#E5E7EB] text-[#4B5563] rounded-xl hover:bg-[#111827] hover:text-white transition-all" title="Editar Documento"><FileText className="w-4 h-4" /></button>}
-               {(hasCounselorActions => {
-                  const isCreatorAdmin = 
-                    (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome === 'LEANDRO');
-                  
-                  return isCreatorAdmin && !hasCounselorActions;
-                })(!!(
-                  (doc.ciência_registrada_por && doc.ciência_registrada_por.length > 0) ||
-                  doc.medidas_detalhadas?.some(m => m.confirmacoes && m.confirmacoes.length > 0) ||
-                  doc.status.some(s => s !== 'AGUARDANDO_ANALISE' && s !== 'EM_PREENCHIMENTO' && !s.startsWith('NOTIFICACAO_')) ||
-                  (doc.medidas_detalhadas && doc.medidas_detalhadas.length > 0) ||
-                  (doc.relato_providencias && doc.relato_providencias.trim() !== '') ||
-                  (doc.fundamentacao_tecnica && doc.fundamentacao_tecnica.trim() !== '') ||
-                  (doc.monitoramento?.requisicoes && doc.monitoramento.requisicoes.length > 0) ||
-                  (doc.historico_monitoramento && doc.historico_monitoramento.length > 0)
-                )) && (
-                  <button 
-                    onClick={(e) => { 
-                      e.stopPropagation(); 
-                      setDocToDelete(doc.id);
-                    }} 
-                    className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+            <div className="shrink-0 flex flex-col items-end gap-3 self-start md:self-center">
+               {!isReadOnly && (
+                  <div className="flex items-center gap-1.5 bg-slate-100/90 p-1.5 rounded-xl border border-slate-200 shadow-inner" onClick={(e) => e.stopPropagation()}>
+                    <span className="text-[9px] font-black uppercase text-slate-600 pl-1 flex items-center gap-1 shrink-0">
+                      <Tag className="w-3 h-3 text-indigo-600 shrink-0" /> Status:
+                    </span>
+                    <select
+                      value={mainStatus}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        const newS = e.target.value as DocumentStatus;
+                        if (newS) {
+                          onUpdateStatus(doc.id, [...doc.status.filter(s => s !== newS), newS]);
+                        }
+                      }}
+                      className="bg-white text-slate-800 border border-slate-300 text-[10px] font-black uppercase rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-500 shadow-sm cursor-pointer hover:border-indigo-400 transition-colors"
+                    >
+                      <option value="NOTIFICAR">🔔 NOTIFICAR</option>
+                      <option value="NOTIFICADO">🔕 NOTIFICADO</option>
+                      <option value="AVALIAR_EM_COLEGIADO">👥 AVALIAR EM COLEGIADO</option>
+                      <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
+                      <option value="CONCLUIDO">✅ CONCLUÍDO</option>
+                      <option value="ENCERRADO">🔒 ENCERRADO</option>
+                      <option value="AGUARDANDO_ANALISE">⏳ AGUARDANDO ANÁLISE</option>
+                      <option value="MONITORAMENTO">📊 EM MONITORAMENTO</option>
+                      <option value="ARQUIVADO">📁 ARQUIVADO</option>
+                    </select>
+                  </div>
                )}
-               <button className="p-3 bg-[#111827] text-white rounded-xl shadow-lg hover:bg-[#2563EB] transition-all"><Eye className="w-4 h-4" /></button>
+
+               <div className="flex items-center gap-3">
+                  {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); onEditDoc(doc.id); }} className="p-3 bg-white border border-[#E5E7EB] text-[#4B5563] rounded-xl hover:bg-[#111827] hover:text-white transition-all" title="Editar Documento"><FileText className="w-4 h-4" /></button>}
+                  {(hasCounselorActions => {
+                     const isCreatorAdmin = 
+                       (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome === 'LEANDRO');
+                     
+                     return isCreatorAdmin && !hasCounselorActions;
+                   })(!!(
+                     (doc.ciência_registrada_por && doc.ciência_registrada_por.length > 0) ||
+                     doc.medidas_detalhadas?.some(m => m.confirmacoes && m.confirmacoes.length > 0) ||
+                     doc.status.some(s => s !== 'AGUARDANDO_ANALISE' && s !== 'EM_PREENCHIMENTO' && !s.startsWith('NOTIFICACAO_')) ||
+                     (doc.medidas_detalhadas && doc.medidas_detalhadas.length > 0) ||
+                     (doc.relato_providencias && doc.relato_providencias.trim() !== '') ||
+                     (doc.fundamentacao_tecnica && doc.fundamentacao_tecnica.trim() !== '') ||
+                     (doc.monitoramento?.requisicoes && doc.monitoramento.requisicoes.length > 0) ||
+                     (doc.historico_monitoramento && doc.historico_monitoramento.length > 0)
+                   )) && (
+                     <button 
+                       onClick={(e) => { 
+                         e.stopPropagation(); 
+                         setDocToDelete(doc.id);
+                       }} 
+                       className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all"
+                     >
+                       <Trash2 className="w-4 h-4" />
+                     </button>
+                  )}
+                  <button className="p-3 bg-[#111827] text-white rounded-xl shadow-lg hover:bg-[#2563EB] transition-all"><Eye className="w-4 h-4" /></button>
+               </div>
             </div>
          </div>
       </div>
@@ -968,53 +969,20 @@ const DocumentList: React.FC<DocumentListProps> = ({
                     </div>
                   </div>
                   
-                  <div className="flex flex-col items-start sm:items-end gap-2.5 shrink-0 self-start sm:self-center" onClick={(e) => e.stopPropagation()}>
-                    {!isReadOnly && group.docs.length > 0 && (
-                      <div className="flex items-center gap-1.5 bg-slate-100/90 p-1.5 rounded-xl border border-slate-200 shadow-inner">
-                        <span className="text-[9px] font-black uppercase text-slate-600 pl-1 flex items-center gap-1 shrink-0">
-                          <Tag className="w-3 h-3 text-indigo-600 shrink-0" /> Status:
-                        </span>
-                        <select
-                          value={group.docs[0].status[group.docs[0].status.length - 1] || 'AGUARDANDO_ANALISE'}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            const newS = e.target.value as DocumentStatus;
-                            if (newS) {
-                              group.docs.forEach(doc => {
-                                onUpdateStatus(doc.id, [...doc.status.filter(s => s !== newS), newS]);
-                              });
-                            }
-                          }}
-                          className="bg-white text-slate-800 border border-slate-300 text-[10px] font-black uppercase rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-500 shadow-sm cursor-pointer hover:border-indigo-400 transition-colors"
-                        >
-                          <option value="NOTIFICAR">🔔 NOTIFICAR</option>
-                          <option value="NOTIFICADO">🔕 NOTIFICADO</option>
-                          <option value="AVALIAR_EM_COLEGIADO">👥 AVALIAR EM COLEGIADO</option>
-                          <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
-                          <option value="CONCLUIDO">✅ CONCLUÍDO</option>
-                          <option value="ENCERRADO">🔒 ENCERRADO</option>
-                          <option value="AGUARDANDO_ANALISE">⏳ AGUARDANDO ANÁLISE</option>
-                          <option value="MONITORAMENTO">📊 EM MONITORAMENTO</option>
-                          <option value="ARQUIVADO">📁 ARQUIVADO</option>
-                        </select>
-                      </div>
-                    )}
-
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleFolder(group.key);
-                      }}
-                      className={`w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all shrink-0 cursor-pointer ${
-                        hasAlert 
-                          ? 'bg-rose-100 text-rose-800 font-black hover:bg-rose-200' 
-                          : 'bg-indigo-50 text-indigo-700 group-hover:bg-indigo-600 group-hover:text-white'
-                      }`}
-                    >
-                      <span>{isExpanded ? 'Recolher Pasta' : 'Expandir Pasta'}</span>
-                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </button>
-                  </div>
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFolder(group.key);
+                    }}
+                    className={`w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all shrink-0 cursor-pointer ${
+                      hasAlert 
+                        ? 'bg-rose-100 text-rose-800 font-black hover:bg-rose-200' 
+                        : 'bg-indigo-50 text-indigo-700 group-hover:bg-indigo-600 group-hover:text-white'
+                    }`}
+                  >
+                    <span>{isExpanded ? 'Recolher Pasta' : 'Expandir Pasta'}</span>
+                    {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
                 </div>
 
                 {/* Conteúdo da Pasta */}

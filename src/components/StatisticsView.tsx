@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { Documento, AgendaEntry, User } from '../types';
 import { INITIAL_USERS, STATUS_LABELS, AGENDA_TIPOS } from '../constants';
-import { BarChart3, PieChart, TrendingUp, Users, FileText, ShieldAlert, Sparkles, UserCheck, Bell, PhoneCall, Activity, Download, Printer, X, Calendar } from 'lucide-react';
+import { BarChart3, PieChart, TrendingUp, Users, FileText, ShieldAlert, Sparkles, UserCheck, Bell, PhoneCall, Activity, Download, Printer, X, Calendar, Filter, BookOpen } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell } from 'recharts';
 import { formatLocalDateString } from '../lib/dateUtils';
 import AIStatisticsAnalyzer from './AIStatisticsAnalyzer';
@@ -142,6 +142,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
   const [selectedUnidadeFilter, setSelectedUnidadeFilter] = useState<'all' | 1 | 2>('all');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  const [selectedOrigemForDireitos, setSelectedOrigemForDireitos] = useState<string>('all');
 
   const filteredDocuments = useMemo(() => {
     let docs = documents;
@@ -181,6 +182,13 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
     const stats = {
       totalCriancas: filteredDocuments.reduce((acc, d) => acc + (d.criancas?.length || 0), 0),
       direitos: {} as Record<string, number>,
+      direitosFundamentais: {} as Record<string, number>,
+      direitosPorOrigem: {} as Record<string, {
+        totalCasos: number;
+        totalViolacoes: number;
+        violacoes: Record<string, number>;
+        fundamentais: Record<string, number>;
+      }>,
       bairros: {} as Record<string, number>,
       agentes: {} as Record<string, number>,
       origens: {} as Record<string, number>,
@@ -217,7 +225,8 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
 
     filteredDocuments.forEach(doc => {
       stats.bairros[doc.bairro] = (stats.bairros[doc.bairro] || 0) + 1;
-      stats.origens[doc.origem] = (stats.origens[doc.origem] || 0) + 1;
+      const orig = (doc.origem || 'NÃO INFORMADO').trim();
+      stats.origens[orig] = (stats.origens[orig] || 0) + 1;
       stats.canaisComunicado[doc.canal_comunicado] = (stats.canaisComunicado[doc.canal_comunicado] || 0) + 1;
       
       if (doc.local_ocorrencia) {
@@ -227,9 +236,38 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       const currentStatus = doc.status[doc.status.length - 1];
       stats.status[currentStatus] = (stats.status[currentStatus] || 0) + 1;
 
+      if (!stats.direitosPorOrigem[orig]) {
+        stats.direitosPorOrigem[orig] = {
+          totalCasos: 0,
+          totalViolacoes: 0,
+          violacoes: {},
+          fundamentais: {}
+        };
+      }
+      stats.direitosPorOrigem[orig].totalCasos += 1;
+
+      let docHasViolations = false;
       doc.violacoesSipia?.forEach(v => {
-        stats.direitos[v.especifico] = (stats.direitos[v.especifico] || 0) + 1;
+        docHasViolations = true;
+        const especifico = v.especifico ? v.especifico.trim() : 'VIOLAÇÃO NÃO ESPECIFICADA';
+        const fundamental = v.fundamental ? v.fundamental.trim() : 'DIREITO NÃO ESPECIFICADO';
+
+        stats.direitos[especifico] = (stats.direitos[especifico] || 0) + 1;
+        stats.direitosFundamentais[fundamental] = (stats.direitosFundamentais[fundamental] || 0) + 1;
+
+        stats.direitosPorOrigem[orig].totalViolacoes += 1;
+        stats.direitosPorOrigem[orig].violacoes[especifico] = (stats.direitosPorOrigem[orig].violacoes[especifico] || 0) + 1;
+        stats.direitosPorOrigem[orig].fundamentais[fundamental] = (stats.direitosPorOrigem[orig].fundamentais[fundamental] || 0) + 1;
       });
+
+      if (!docHasViolations && doc.violencias && doc.violencias.length > 0) {
+        doc.violencias.forEach(viol => {
+          const nomeViol = `VIOLÊNCIA ${viol}`;
+          stats.direitos[nomeViol] = (stats.direitos[nomeViol] || 0) + 1;
+          stats.direitosPorOrigem[orig].totalViolacoes += 1;
+          stats.direitosPorOrigem[orig].violacoes[nomeViol] = (stats.direitosPorOrigem[orig].violacoes[nomeViol] || 0) + 1;
+        });
+      }
 
       doc.agentesVioladores?.forEach(a => {
         stats.agentes[a.principal] = (stats.agentes[a.principal] || 0) + 1;
@@ -282,7 +320,67 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
     });
 
     return stats;
-  }, [filteredDocuments]);
+  }, [filteredDocuments, filteredAgenda, users]);
+
+  const origensComDireitosList = useMemo(() => {
+    return Object.entries(aiStats.direitosPorOrigem)
+      .map(([origem, data]) => ({
+        origem,
+        totalCasos: data.totalCasos,
+        totalViolacoes: data.totalViolacoes,
+        violacoes: data.violacoes,
+        topViolacao: Object.entries(data.violacoes).sort((a, b) => b[1] - a[1])[0]
+      }))
+      .sort((a, b) => b.totalViolacoes - a.totalViolacoes);
+  }, [aiStats]);
+
+  const direitosChartData = useMemo(() => {
+    if (selectedOrigemForDireitos === 'all') {
+      return Object.entries(aiStats.direitos)
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 15);
+    } else {
+      const origData = aiStats.direitosPorOrigem[selectedOrigemForDireitos];
+      if (!origData) return [];
+      return Object.entries(origData.violacoes)
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value);
+    }
+  }, [aiStats, selectedOrigemForDireitos]);
+
+  const selectedOrigemStats = useMemo(() => {
+    if (selectedOrigemForDireitos === 'all') {
+      const totalViol = Object.values(aiStats.direitos).reduce((a, b) => a + b, 0);
+      const topViol = Object.entries(aiStats.direitos).sort((a, b) => b[1] - a[1])[0];
+      return {
+        label: 'Todas as Origens (Visão Geral)',
+        totalCasos: filteredDocuments.length,
+        totalViolacoes: totalViol,
+        mediaPorCaso: filteredDocuments.length ? (totalViol / filteredDocuments.length).toFixed(1) : '0',
+        topViolacao: topViol ? `${topViol[0]} (${topViol[1]})` : 'Nenhum'
+      };
+    } else {
+      const origData = aiStats.direitosPorOrigem[selectedOrigemForDireitos];
+      if (!origData) {
+        return {
+          label: selectedOrigemForDireitos,
+          totalCasos: 0,
+          totalViolacoes: 0,
+          mediaPorCaso: '0',
+          topViolacao: 'Nenhum'
+        };
+      }
+      const topViol = Object.entries(origData.violacoes).sort((a, b) => b[1] - a[1])[0];
+      return {
+        label: selectedOrigemForDireitos,
+        totalCasos: origData.totalCasos,
+        totalViolacoes: origData.totalViolacoes,
+        mediaPorCaso: origData.totalCasos ? (origData.totalViolacoes / origData.totalCasos).toFixed(1) : '0',
+        topViolacao: topViol ? `${topViol[0]} (${topViol[1]})` : 'Nenhum'
+      };
+    }
+  }, [aiStats, selectedOrigemForDireitos, filteredDocuments]);
 
   const bairroData = useMemo(() => 
     Object.entries(aiStats.bairros).map(([name, value]) => ({ name, value }))
@@ -762,6 +860,189 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
           barColor="#dc2626"
           footerNote="Hortolândia • Canais e meios de comunicação formalizados no sistema"
         />
+      </div>
+
+      {/* SEÇÃO ESPECIAL: DIREITOS VIOLADOS VINCULADOS A QUEM COMUNICOU (ORIGEM) */}
+      <div className="bg-white p-6 sm:p-10 rounded-[2rem] sm:rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6 print:break-inside-avoid">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-6">
+          <div className="flex items-start sm:items-center gap-4">
+            <div className="p-3.5 bg-rose-50 border border-rose-100 rounded-2xl text-rose-600 shrink-0">
+              <ShieldAlert className="w-7 h-7" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-md bg-rose-100 text-rose-800 text-[9px] font-black uppercase tracking-wider">Análise Qualitativa e Quantitativa</span>
+              </div>
+              <h3 className="text-lg sm:text-xl font-black text-slate-900 uppercase tracking-tight mt-1">
+                Gráfico: Direitos Violados por Quem Comunicou (Origem)
+              </h3>
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mt-0.5">
+                Vincular e quantificar violações de direitos com base na origem da denúncia (Ex: Disque 100, Escolas, Saúde, CRAS, etc.)
+              </p>
+            </div>
+          </div>
+
+          {/* Atalhos Rápidos por Comunicador Principal */}
+          <div className="flex flex-wrap items-center gap-2 print:hidden">
+            <button
+              onClick={() => setSelectedOrigemForDireitos('all')}
+              className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase transition-all cursor-pointer ${
+                selectedOrigemForDireitos === 'all'
+                  ? 'bg-rose-600 text-white shadow-md'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Todas as Origens
+            </button>
+            {origensComDireitosList.slice(0, 5).map(item => (
+              <button
+                key={item.origem}
+                onClick={() => setSelectedOrigemForDireitos(item.origem)}
+                className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase transition-all cursor-pointer ${
+                  selectedOrigemForDireitos === item.origem
+                    ? 'bg-rose-600 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {item.origem}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Filtro de Seleção de Comunicador */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200/80 print:hidden">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Filter className="w-4 h-4 text-slate-500 shrink-0" />
+            <span className="text-[10px] font-black uppercase text-slate-600 whitespace-nowrap">Filtrar por Comunicador / Origem:</span>
+          </div>
+          <select
+            value={selectedOrigemForDireitos}
+            onChange={(e) => setSelectedOrigemForDireitos(e.target.value)}
+            className="w-full sm:w-auto bg-white border border-slate-300 text-slate-800 text-[11px] font-black uppercase rounded-xl px-4 py-2.5 outline-none focus:border-rose-500 shadow-sm cursor-pointer"
+          >
+            <option value="all">🔍 TODAS AS ORIGENS (VISÃO GERAL DO MUNICÍPIO)</option>
+            {origensComDireitosList.map(o => (
+              <option key={o.origem} value={o.origem}>
+                {o.origem} ({o.totalViolacoes} violações em {o.totalCasos} casos)
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* KPIs do Comunicador Selecionado */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+            <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block">Comunicador / Origem</span>
+            <span className="text-[12px] font-black text-rose-700 uppercase truncate block mt-1" title={selectedOrigemStats.label}>
+              {selectedOrigemStats.label}
+            </span>
+          </div>
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+            <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block">Total de Casos / Denúncias</span>
+            <span className="text-xl font-black text-slate-900 block mt-1">{selectedOrigemStats.totalCasos}</span>
+          </div>
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+            <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block">Total de Direitos Violados</span>
+            <span className="text-xl font-black text-rose-600 block mt-1">{selectedOrigemStats.totalViolacoes}</span>
+          </div>
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+            <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block">Violação Mais Frequente</span>
+            <span className="text-[11px] font-black text-slate-800 uppercase truncate block mt-1" title={selectedOrigemStats.topViolacao}>
+              {selectedOrigemStats.topViolacao}
+            </span>
+          </div>
+        </div>
+
+        {/* Gráfico das Violações para o Comunicador Selecionado */}
+        <ProfessionalHorizontalChart
+          title={`Direitos Violados Identificados — Origem: ${selectedOrigemStats.label}`}
+          data={direitosChartData}
+          total={selectedOrigemStats.totalViolacoes || 1}
+          barColor="#e11d48"
+          footerNote={`SIMCT Hortolândia • Quantificação e qualificação das violações vinculadas ao comunicador ${selectedOrigemStats.label}`}
+        />
+
+        {/* Tabela Qualitativa e Quantitativa */}
+        <div className="mt-8 space-y-4">
+          <div className="flex items-center justify-between">
+            <h4 className="text-[12px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-rose-600" />
+              Detalhamento de Quem Comunicou e Quais Violações Foram Registradas
+            </h4>
+            <span className="text-[9px] font-bold text-slate-400 uppercase">{origensComDireitosList.length} Comunicadores Catalogados</span>
+          </div>
+
+          <div className="overflow-x-auto border border-slate-200 rounded-2xl bg-white shadow-sm">
+            <table className="w-full text-left text-[11px]">
+              <thead className="bg-slate-100 text-slate-700 font-black uppercase text-[9px] tracking-wider border-b border-slate-200">
+                <tr>
+                  <th className="p-3.5">Quem Comunicou (Origem)</th>
+                  <th className="p-3.5 text-center">Procedimentos</th>
+                  <th className="p-3.5 text-center">Violações Registradas</th>
+                  <th className="p-3.5">Quais Violações Viveram Deste Comunicador (Qualificação)</th>
+                  <th className="p-3.5 text-right print:hidden">Ação</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {origensComDireitosList.map((item) => {
+                  const topViolationsArray = Object.entries(item.violacoes)
+                    .sort((a, b) => b[1] - a[1]);
+
+                  const isSelected = selectedOrigemForDireitos === item.origem;
+
+                  return (
+                    <tr 
+                      key={item.origem} 
+                      className={`hover:bg-rose-50/50 transition-colors ${isSelected ? 'bg-rose-50/80 font-bold' : ''}`}
+                    >
+                      <td className="p-3.5 font-bold text-slate-800 uppercase">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                          <span>{item.origem}</span>
+                        </div>
+                      </td>
+                      <td className="p-3.5 text-center font-mono font-bold text-slate-700">{item.totalCasos}</td>
+                      <td className="p-3.5 text-center font-mono font-black text-rose-600 bg-rose-50/30">{item.totalViolacoes}</td>
+                      <td className="p-3.5">
+                        <div className="flex flex-wrap gap-1.5 max-w-xl">
+                          {topViolationsArray.length === 0 ? (
+                            <span className="text-[10px] text-slate-400 italic">Nenhuma violação tipificada</span>
+                          ) : (
+                            topViolationsArray.map(([vNome, vQtd]) => (
+                              <span 
+                                key={vNome}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 text-slate-800 text-[10px] font-extrabold border border-slate-200/80"
+                              >
+                                <span>{vNome}</span>
+                                <span className="bg-rose-600 text-white rounded px-1 text-[9px] font-mono">{vQtd}</span>
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-3.5 text-right print:hidden">
+                        <button
+                          onClick={() => setSelectedOrigemForDireitos(item.origem)}
+                          className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[9px] font-black uppercase hover:bg-rose-600 transition-colors cursor-pointer"
+                        >
+                          Filtrar Gráfico
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {origensComDireitosList.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="p-6 text-center text-[10px] text-slate-400 uppercase font-black">
+                      Nenhum direito violado registrado no período selecionado.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       {/* QUEBRA DE PÁGINA PARA PÁGINA 6 */}
