@@ -11,7 +11,8 @@ import {
   deleteDoc,
   getDocs,
   writeBatch,
-  serverTimestamp 
+  serverTimestamp,
+  arrayUnion
 } from 'firebase/firestore';
 import { db, ensureAuthenticated } from './firebase';
 import { Documento, Log, AgendaEntry, User, ScaleException, ChatMessage } from '../types';
@@ -220,16 +221,9 @@ export const markChatMessageAsRead = async (msgId: string, userId: string) => {
   await ensureAuthenticated();
   const docRef = doc(db, 'chat_messages', msgId);
   try {
-    const docSnap = await getDocs(query(collection(db, 'chat_messages')));
-    const msgDoc = docSnap.docs.find(d => d.id === msgId);
-    if (msgDoc) {
-      const existingReads = (msgDoc.data().read_by || []).map((id: any) => String(id));
-      if (!existingReads.includes(uStr)) {
-        await updateDoc(docRef, {
-          read_by: [...existingReads, uStr]
-        });
-      }
-    }
+    await updateDoc(docRef, {
+      read_by: arrayUnion(uStr)
+    });
   } catch (err) {
     console.warn("Could not mark message as read:", err);
   }
@@ -252,16 +246,9 @@ export const hideChatMessageForUser = async (msgId: string, userId: string) => {
   await ensureAuthenticated();
   const docRef = doc(db, 'chat_messages', msgId);
   try {
-    const docSnap = await getDocs(query(collection(db, 'chat_messages')));
-    const msgDoc = docSnap.docs.find(d => d.id === msgId);
-    if (msgDoc) {
-      const existingDeleted = (msgDoc.data().deleted_for || []).map((id: any) => String(id));
-      if (!existingDeleted.includes(uStr)) {
-        await updateDoc(docRef, {
-          deleted_for: [...existingDeleted, uStr]
-        });
-      }
-    }
+    await updateDoc(docRef, {
+      deleted_for: arrayUnion(uStr)
+    });
   } catch (err) {
     console.warn("Could not hide message for user:", err);
   }
@@ -284,7 +271,12 @@ export const hideConversationForUser = async (msgIds: string[], userId: string) 
 
   await ensureAuthenticated();
   try {
-    await Promise.all(msgIds.map(id => hideChatMessageForUser(id, userId)));
+    await Promise.all(msgIds.map(async (id) => {
+      const docRef = doc(db, 'chat_messages', id);
+      await updateDoc(docRef, {
+        deleted_for: arrayUnion(uStr)
+      });
+    }));
   } catch (err) {
     console.warn("Could not hide conversation for user:", err);
   }

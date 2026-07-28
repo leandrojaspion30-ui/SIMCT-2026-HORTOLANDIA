@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, ArrowLeft, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart, Timer, Save, Eye, EyeOff, RefreshCw, MessageSquare } from 'lucide-react';
 import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada, ScaleException, ChatMessage } from './types';
-import { INITIAL_USERS, UserWithPassword, INITIAL_AGENDA, getUnidadeByBairro } from './constants';
+import { INITIAL_USERS, UserWithPassword, INITIAL_AGENDA, getUnidadeByBairro, STATUS_LABELS } from './constants';
 import { db, ensureAuthenticated } from './lib/firebase';
 import { syncCollection, saveDocument, saveLog, saveAgenda, deleteDocument, deleteAgenda, saveUser, deleteUser, deleteAllDocuments, saveScaleException, deleteScaleException } from './lib/db';
 import ConfidentialityTermModal from './components/ConfidentialityTermModal';
@@ -261,7 +261,7 @@ const App: React.FC = () => {
         }
         return merged;
       });
-    });
+    }, { limitCount: 300 });
     const unsubUsers = syncCollection<UserWithPassword>('users', (storedUsers) => {
       const baseUsers = INITIAL_USERS.map(u => ({ ...u, status: u.status || 'ATIVO', tentativas_login: 0 }));
       
@@ -1132,7 +1132,12 @@ const App: React.FC = () => {
                 await deleteDocument(id);
               }} 
               onScience={() => {}} 
-              onUpdateStatus={() => {}} 
+              onUpdateStatus={async (id, newStatus) => {
+                const lastS = newStatus[newStatus.length - 1];
+                const label = STATUS_LABELS[lastS] || lastS;
+                addLog(id, `STATUS: Situação do caso alterada para [${label}] no Painel.`, 'SISTEMA');
+                await saveDocument({ id, status: newStatus });
+              }} 
               viewMode={dashboardViewMode}
               onViewModeChange={setDashboardViewMode}
               filters={dashboardFilters}
