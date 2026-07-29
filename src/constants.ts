@@ -152,7 +152,7 @@ export const isSameCounselorName = (nameA: string | undefined | null, nameB: str
   const firstB = partsB[0] || '';
 
   if (firstA === firstB && firstA.length >= 3) return true;
-  if (cleanA.startsWith(cleanB) || cleanB.startsWith(cleanA)) return true;
+  if (cleanA.startsWith(cleanB + ' ') || cleanB.startsWith(cleanA + ' ')) return true;
 
   return false;
 };

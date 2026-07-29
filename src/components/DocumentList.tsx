@@ -443,12 +443,12 @@ const DocumentList: React.FC<DocumentListProps> = ({
     const rawRefCouncilor = users.find(u => u.id === doc.conselheiro_referencia_id);
     const rawRefName = rawRefCouncilor?.nome || doc.conselheiro_referencia_nome;
     const mappedRefName = (rawRefName && nameMap && nameMap[rawRefName.toUpperCase()]) ? nameMap[rawRefName.toUpperCase()] : rawRefName;
-    const refCouncilor = (mappedRefName && users.find(u => u.status === 'ATIVO' && isSameCounselorName(u.nome, mappedRefName))) || rawRefCouncilor;
+    const refCouncilor = (mappedRefName && (users.find(u => u.status === 'ATIVO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && isSameCounselorName(u.nome, mappedRefName)) || users.find(u => u.status === 'ATIVO' && isSameCounselorName(u.nome, mappedRefName)))) || rawRefCouncilor;
 
     const rawProvCouncilor = users.find(u => u.id === doc.conselheiro_providencia_id);
     const rawProvName = rawProvCouncilor?.nome || doc.conselheiro_providencia_nome;
     const mappedProvName = (rawProvName && nameMap && nameMap[rawProvName.toUpperCase()]) ? nameMap[rawProvName.toUpperCase()] : rawProvName;
-    const provCouncilor = (mappedProvName && users.find(u => u.status === 'ATIVO' && isSameCounselorName(u.nome, mappedProvName))) || rawProvCouncilor;
+    const provCouncilor = (mappedProvName && (users.find(u => u.status === 'ATIVO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && isSameCounselorName(u.nome, mappedProvName)) || users.find(u => u.status === 'ATIVO' && isSameCounselorName(u.nome, mappedProvName)))) || rawProvCouncilor;
     const confirmacoes = doc.medidas_detalhadas?.[0]?.confirmacoes || [];
     const iValidated = confirmacoes.some(c => c.usuario_id === currentUser.id);
     const isInTrio = doc.conselheiros_providencia_nomes?.some(name => {

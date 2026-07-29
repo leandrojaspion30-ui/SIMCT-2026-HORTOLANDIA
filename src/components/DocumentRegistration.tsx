@@ -463,7 +463,10 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     // 1. PRIORIDADE ABSOLUTA: Notificação desbloqueia e define a imediata
     if (formData.notificacao) {
       const notifTargetName = (nameMap && nameMap[formData.notificacao.toUpperCase()]) || formData.notificacao;
-      return allUsers.find(u => u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, notifTargetName));
+      return (
+        allUsers.find(u => u.unidade_id === formData.unidade_id && u.status === 'ATIVO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && isSameCounselorName(u.nome, notifTargetName)) ||
+        allUsers.find(u => u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, notifTargetName))
+      );
     }
 
     if (initialData) {
