@@ -474,9 +474,9 @@ const DocumentList: React.FC<DocumentListProps> = ({
     if (isAdminDespacho) {
       validationState = 'ADMIN_CONCLUDED';
       dynamicLabel = `✅ DESPACHO: ${STATUS_LABELS[mainStatus] || mainStatus}`;
-    } else if (doc.status.includes('MEDIDA_APLICADA')) {
+    } else if (doc.status.includes('MEDIDA_PENDENTE') || doc.status.includes('MEDIDA_APLICADA')) {
       validationState = 'COMPLETED';
-      dynamicLabel = "✅ MEDIDA APLICADA";
+      dynamicLabel = "📋 MEDIDA PENDENTE";
     } else if (doc.status.includes('AGUARDANDO_VALIDACAO')) {
       if (!iValidated && isInTrio) {
         validationState = 'PENDING_SELF';
@@ -487,10 +487,10 @@ const DocumentList: React.FC<DocumentListProps> = ({
       }
     }
 
-    const isAwaiting = doc.status.includes('AGUARDANDO_VALIDACAO') && !doc.status.includes('MEDIDA_APLICADA');
-    const isOficializado = doc.status.includes('MEDIDA_APLICADA');
+    const isAwaiting = doc.status.includes('AGUARDANDO_VALIDACAO') && !doc.status.includes('MEDIDA_PENDENTE') && !doc.status.includes('MEDIDA_APLICADA');
+    const isOficializado = doc.status.includes('MEDIDA_PENDENTE') || doc.status.includes('MEDIDA_APLICADA');
     const lastDispatch = [...doc.status].reverse().find(s => [
-      'ARQUIVADO', 'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
+      'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
       'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
       'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
       'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE',
@@ -508,7 +508,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                <div className="flex flex-wrap items-center gap-2">
                   {isOficializado && (
                      <span className="flex items-center gap-2 px-3 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest shadow-sm">
-                        <CheckCircle2 className="w-3 h-3" /> Medida Aplicada
+                        <CheckCircle2 className="w-3 h-3" /> Medida Pendente
                      </span>
                   )}
                   {isAwaiting && (
@@ -601,15 +601,17 @@ const DocumentList: React.FC<DocumentListProps> = ({
                       }}
                       className="bg-white text-slate-800 border border-slate-300 text-[10px] font-black uppercase rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-500 shadow-sm cursor-pointer hover:border-indigo-400 transition-colors"
                     >
-                      <option value="NOTIFICAR">🔔 NOTIFICAR</option>
-                      <option value="NOTIFICADO">🔕 NOTIFICADO</option>
-                      <option value="AVALIAR_EM_COLEGIADO">👥 AVALIAR EM COLEGIADO</option>
-                      <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
-                      <option value="CONCLUIDO">✅ CONCLUÍDO</option>
-                      <option value="ENCERRADO">🔒 ENCERRADO</option>
                       <option value="AGUARDANDO_ANALISE">⏳ AGUARDANDO ANÁLISE</option>
+                      <option value="AGUARDANDO_DOCUMENTO">📄 AGUARDANDO DOCUMENTO</option>
+                      <option value="AGUARDANDO_VALIDACAO">⚖️ AGUARDANDO VALIDAÇÃO</option>
+                      <option value="AVALIAR_EM_COLEGIADO">👥 AVALIAR EM COLEGIADO</option>
+                      <option value="CONCLUIDO">✅ CONCLUÍDO</option>
                       <option value="MONITORAMENTO">📊 EM MONITORAMENTO</option>
-                      <option value="ARQUIVADO">📁 ARQUIVADO</option>
+                      <option value="ENCERRADO">🔒 ENCERRADO</option>
+                      <option value="MEDIDA_PENDENTE">📋 MEDIDA PENDENTE</option>
+                      <option value="NOTIFICADO">🔕 NOTIFICADO</option>
+                      <option value="NOTIFICAR">🔔 NOTIFICAR</option>
+                      <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
                     </select>
                   </div>
                )}
@@ -670,17 +672,17 @@ const DocumentList: React.FC<DocumentListProps> = ({
           </div>
           <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-blue-500" value={filters.status} onChange={(e) => setFilters({...filters, status: e.target.value})}>
             <option value="">Qualquer Status</option>
-            <option value="NOTIFICAR">🔔 NOTIFICAR</option>
-            <option value="NOTIFICADO">🔕 NOTIFICADO</option>
-            <option value="AVALIAR_EM_COLEGIADO">👥 AVALIAR EM COLEGIADO</option>
-            <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
-            <option value="CONCLUIDO">✅ CONCLUÍDO</option>
-            <option value="ENCERRADO">🔒 ENCERRADO</option>
             <option value="AGUARDANDO_ANALISE">⏳ AGUARDANDO ANÁLISE</option>
+            <option value="AGUARDANDO_DOCUMENTO">📄 AGUARDANDO DOCUMENTO</option>
             <option value="AGUARDANDO_VALIDACAO">⚖️ AGUARDANDO VALIDAÇÃO</option>
+            <option value="AVALIAR_EM_COLEGIADO">👥 AVALIAR EM COLEGIADO</option>
+            <option value="CONCLUIDO">✅ CONCLUÍDO</option>
             <option value="MONITORAMENTO">📊 EM MONITORAMENTO</option>
-            <option value="MEDIDA_APLICADA">📋 MEDIDA APLICADA</option>
-            <option value="ARQUIVADO">📁 ARQUIVADO</option>
+            <option value="ENCERRADO">🔒 ENCERRADO</option>
+            <option value="MEDIDA_PENDENTE">📋 MEDIDA PENDENTE</option>
+            <option value="NOTIFICADO">🔕 NOTIFICADO</option>
+            <option value="NOTIFICAR">🔔 NOTIFICAR</option>
+            <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
           </select>
           <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-blue-500" value={filters.bairro} onChange={(e) => setFilters({...filters, bairro: e.target.value})}>
             <option value="">Qualquer Bairro</option>
@@ -780,16 +782,16 @@ const DocumentList: React.FC<DocumentListProps> = ({
                 return false;
               }) || false;
 
-              const isAwaitingValidation = doc.status.includes('AGUARDANDO_VALIDACAO') && !doc.status.includes('MEDIDA_APLICADA');
+              const isAwaitingValidation = doc.status.includes('AGUARDANDO_VALIDACAO') && !doc.status.includes('MEDIDA_PENDENTE') && !doc.status.includes('MEDIDA_APLICADA');
               
               const isAdminDespacho = [
-                'ARQUIVADO', 'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
+                'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
                 'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
                 'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
                 'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE'
               ].includes(mainStatus) || mainStatus.startsWith('NOTIFICACAO_');
 
-              const isOficializado = doc.status.includes('MEDIDA_APLICADA');
+              const isOficializado = doc.status.includes('MEDIDA_PENDENTE') || doc.status.includes('MEDIDA_APLICADA');
 
               if (isAwaitingValidation) {
                 pendingValidationCount++;
@@ -800,7 +802,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
               }
 
               const lastDispatch = [...doc.status].reverse().find(s => [
-                'ARQUIVADO', 'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
+                'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
                 'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
                 'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
                 'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE',
