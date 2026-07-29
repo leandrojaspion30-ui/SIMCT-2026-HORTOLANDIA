@@ -471,7 +471,7 @@ export const STATUS_LABELS: Record<string, string> = {
   'OFICIALIZADO': 'Medida Pendente',
   'EM_PREENCHIMENTO': 'Em Preenchimento (Rascunho)',
   'MONITORAMENTO': 'Em Monitoramento',
-  'MEDIDA_APLICADA': 'Medida Pendente',
+  'MEDIDA_APLICADA': 'Medida Aplicada',
   'MEDIDA_PENDENTE': 'Medida Pendente',
   'TIPIFICACAO_INCOMPLETA': 'Tipificação Incompleta',
   'AGENDAR_REUNIAO_REDE': 'Agendar Reunião de Rede',

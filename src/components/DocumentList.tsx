@@ -465,7 +465,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
     let dynamicLabel = STATUS_LABELS[mainStatus];
 
     const isAdminDespacho = [
-      'ARQUIVADO', 'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
+      'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
       'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
       'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
       'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE'
@@ -474,9 +474,17 @@ const DocumentList: React.FC<DocumentListProps> = ({
     if (isAdminDespacho) {
       validationState = 'ADMIN_CONCLUDED';
       dynamicLabel = `✅ DESPACHO: ${STATUS_LABELS[mainStatus] || mainStatus}`;
-    } else if (doc.status.includes('MEDIDA_PENDENTE') || doc.status.includes('MEDIDA_APLICADA')) {
+    } else if (doc.status.includes('MEDIDA_PENDENTE')) {
       validationState = 'COMPLETED';
       dynamicLabel = "📋 MEDIDA PENDENTE";
+    } else if (doc.status.includes('MEDIDA_APLICADA')) {
+      if (!iValidated && isInTrio) {
+        validationState = 'PENDING_SELF';
+        dynamicLabel = "📋 MEDIDA APLICADA - AGUARDANDO VALIDAÇÃO";
+      } else {
+        validationState = 'COMPLETED';
+        dynamicLabel = "✅ MEDIDA APLICADA";
+      }
     } else if (doc.status.includes('AGUARDANDO_VALIDACAO')) {
       if (!iValidated && isInTrio) {
         validationState = 'PENDING_SELF';
@@ -487,8 +495,9 @@ const DocumentList: React.FC<DocumentListProps> = ({
       }
     }
 
-    const isAwaiting = doc.status.includes('AGUARDANDO_VALIDACAO') && !doc.status.includes('MEDIDA_PENDENTE') && !doc.status.includes('MEDIDA_APLICADA');
-    const isOficializado = doc.status.includes('MEDIDA_PENDENTE') || doc.status.includes('MEDIDA_APLICADA');
+    const isAwaiting = (doc.status.includes('AGUARDANDO_VALIDACAO') || (doc.status.includes('MEDIDA_APLICADA') && !iValidated && isInTrio)) && !doc.status.includes('MEDIDA_PENDENTE');
+    const isMedidaAplicadaConcluded = doc.status.includes('MEDIDA_APLICADA') && (iValidated || !isInTrio);
+    const isOficializado = doc.status.includes('MEDIDA_PENDENTE') || isMedidaAplicadaConcluded;
     const lastDispatch = [...doc.status].reverse().find(s => [
       'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
       'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
@@ -506,9 +515,14 @@ const DocumentList: React.FC<DocumentListProps> = ({
          <div className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex-1 space-y-4">
                <div className="flex flex-wrap items-center gap-2">
-                  {isOficializado && (
+                  {doc.status.includes('MEDIDA_PENDENTE') && (
                      <span className="flex items-center gap-2 px-3 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest shadow-sm">
                         <CheckCircle2 className="w-3 h-3" /> Medida Pendente
+                     </span>
+                  )}
+                  {isMedidaAplicadaConcluded && (
+                     <span className="flex items-center gap-2 px-3 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest shadow-sm">
+                        <CheckCircle2 className="w-3 h-3" /> Medida Aplicada
                      </span>
                   )}
                   {isAwaiting && (
@@ -775,22 +789,18 @@ const DocumentList: React.FC<DocumentListProps> = ({
                 return false;
               }) || false;
 
-              const isAwaitingValidation = doc.status.includes('AGUARDANDO_VALIDACAO') && !doc.status.includes('MEDIDA_PENDENTE') && !doc.status.includes('MEDIDA_APLICADA');
-              
-              const isAdminDespacho = [
-                'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
-                'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
-                'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
-                'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE'
-              ].includes(mainStatus) || mainStatus.startsWith('NOTIFICACAO_');
+              const isMedidaAplicadaOrAwaitingVal = doc.status.includes('MEDIDA_APLICADA') || doc.status.includes('AGUARDANDO_VALIDACAO') || (doc.medidas_detalhadas && doc.medidas_detalhadas.length > 0);
 
-              const isOficializado = doc.status.includes('MEDIDA_PENDENTE') || doc.status.includes('MEDIDA_APLICADA');
-
-              if (isAwaitingValidation) {
+              if (isMedidaAplicadaOrAwaitingVal && isInTrio && !iValidated) {
                 pendingValidationCount++;
               }
 
-              if (doc.conselheiro_providencia_id === currentUser.id && !isOficializado && !isAdminDespacho) {
+              const isImediataUser = doc.conselheiro_providencia_id === currentUser.id ||
+                (currentUser.is_suplente_active && doc.conselheiro_providencia_id === currentUser.real_user_id);
+
+              const isInitialStatus = mainStatus === 'AGUARDANDO_ANALISE' || mainStatus === 'EM_PREENCHIMENTO';
+
+              if (isImediataUser && isInitialStatus) {
                 myImediataCount++;
               }
 
