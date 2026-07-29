@@ -265,14 +265,21 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   };
 
   const validationTracker = useMemo(() => {
-    const trioRaw = doc.conselheiros_providencia_nomes || [];
+    const trioRaw = (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.length > 0)
+      ? doc.conselheiros_providencia_nomes
+      : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap, scaleExceptions);
     const trio = trioRaw.map(n => (nameMap && nameMap[n.toUpperCase()]) ? nameMap[n.toUpperCase()] : n);
     
     const confirmacoes = doc.medidas_detalhadas?.[0]?.confirmacoes || [];
     return trio.map(name => {
       const match = confirmacoes.find(c => {
         const signatureName = c.usuario_nome.toUpperCase();
-        return signatureName.includes(name.toUpperCase()) || INITIAL_USERS.some(iu => iu.id === c.usuario_id && iu.nome.toUpperCase() === name.toUpperCase());
+        const upperName = name.toUpperCase();
+        if (signatureName.includes(upperName)) return true;
+        if (INITIAL_USERS.some(iu => iu.id === c.usuario_id && iu.nome.toUpperCase() === upperName)) return true;
+        const signingUser = users.find(u => u.id === c.usuario_id);
+        if (signingUser && isSameCounselorName(signingUser.nome, name)) return true;
+        return false;
       });
       return { 
         name, 
@@ -281,7 +288,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
         needsRevalidation: (doc.status.includes('AGUARDANDO_VALIDACAO') || doc.status.includes('MEDIDA_APLICADA')) && !match && confirmacoes.length > 0
       };
     });
-  }, [doc.conselheiros_providencia_nomes, doc.medidas_detalhadas, doc.status, nameMap]);
+  }, [doc.conselheiros_providencia_nomes, doc.medidas_detalhadas, doc.status, doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap, scaleExceptions, users]);
 
   const handleSave = (finalize: boolean) => {
     if (!canEditTechnicalFields) return;
@@ -488,17 +495,46 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const handleValidate = () => {
     const now = new Date();
     const formatted = `${currentUser.nome} - ${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`;
-    const updated = (doc.medidas_detalhadas || []).map(m => ({ 
-      ...m, 
-      confirmacoes: [
-        ...m.confirmacoes.filter(c => c.usuario_id !== currentUser.id),
-        { usuario_id: currentUser.id, usuario_nome: formatted, data_hora: now.toISOString() }
-      ] 
-    }));
-    const validatedCount = validationTracker.filter(v => v.validated || isUserInTrio(v.name)).length;
-    const trioSize = doc.conselheiros_providencia_nomes?.length || 3;
+    
+    const existingMedidas = (doc.medidas_detalhadas && doc.medidas_detalhadas.length > 0)
+      ? doc.medidas_detalhadas
+      : [{ artigo_inciso: 'Medida Aplicada / Providência Registrada', confirmacoes: [] }];
+
+    const updated = existingMedidas.map(m => {
+      const filteredConfirmations = (m.confirmacoes || []).filter(c => c.usuario_id !== currentUser.id);
+      return {
+        ...m,
+        confirmacoes: [
+          ...filteredConfirmations,
+          { usuario_id: currentUser.id, usuario_nome: formatted, data_hora: now.toISOString() }
+        ]
+      };
+    });
+
+    const trioRaw = (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.length > 0)
+      ? doc.conselheiros_providencia_nomes
+      : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap, scaleExceptions);
+
+    const trio = trioRaw.map(n => (nameMap && nameMap[n.toUpperCase()]) ? nameMap[n.toUpperCase()] : n);
+    const newConfirmacoes = updated[0]?.confirmacoes || [];
+
+    const validatedCount = trio.filter(trioMemberName => {
+      return newConfirmacoes.some(c => {
+        if (c.usuario_id === currentUser.id && isUserInTrio(trioMemberName)) return true;
+        const signatureName = c.usuario_nome.toUpperCase();
+        const upperTrioMember = trioMemberName.toUpperCase();
+        if (signatureName.includes(upperTrioMember)) return true;
+        const signingUser = users.find(u => u.id === c.usuario_id);
+        if (signingUser && isSameCounselorName(signingUser.nome, trioMemberName)) return true;
+        return false;
+      });
+    }).length;
+
+    const trioSize = trio.length > 0 ? trio.length : 3;
     let nextStatus = [...doc.status];
+
     if (validatedCount >= trioSize) { 
+      // Quando TODOS os conselheiros do trio de providência imediata validarem, atualiza automaticamente o status para "Medida Aplicada"
       nextStatus = nextStatus.filter(s => s !== 'AGUARDANDO_VALIDACAO'); 
       if (!nextStatus.includes('MEDIDA_APLICADA')) {
         nextStatus.push('MEDIDA_APLICADA');
@@ -517,7 +553,14 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       status: nextStatus,
       notificacoes_trio: nextNotificacoes
     });
-    onAddLog(doc.id, `VALIDAÇÃO TÉCNICA: Assinatura/Revalidação confirmada por ${currentUser.nome}.`, 'VALIDAÇÃO');
+
+    onAddLog(
+      doc.id, 
+      validatedCount >= trioSize 
+        ? `VALIDAÇÃO TÉCNICA CONCLUÍDA: Todos os 3 conselheiros do trio de imediata validaram. Status atualizado automaticamente para [Medida Aplicada] por ${currentUser.nome}.`
+        : `VALIDAÇÃO TÉCNICA: Assinatura/Revalidação confirmada por ${currentUser.nome} (${validatedCount}/${trioSize} validações).`, 
+      'VALIDAÇÃO'
+    );
   };
 
   const rawProvName = users.find(u => u.id === doc.conselheiro_providencia_id)?.nome || doc.conselheiro_providencia_nome || 'Não Encontrado';
