@@ -529,16 +529,9 @@ const DocumentList: React.FC<DocumentListProps> = ({
                         <Zap className="w-3 h-3" /> Revalidação Obrigatória
                      </span>
                   )}
-                  {lastDispatch && lastDispatch !== 'NENHUMA' && (
-                     <span className={`flex items-center gap-2 px-3 py-1 rounded-lg text-white text-[10px] font-black uppercase tracking-widest shadow-sm ${lastDispatch === 'DIREITO_NAO_VIOLADO' ? 'bg-emerald-600' : 'bg-blue-600'}`}>
-                        <Tag className="w-3 h-3" /> DESPACHO: {STATUS_LABELS[lastDispatch]}
-                     </span>
-                  )}
-                  {!isOficializado && !isAwaiting && !lastDispatch && (
-                     <span className={`flex items-center gap-2 px-3 py-1 rounded-lg text-white text-[10px] font-black uppercase tracking-widest ${style.color}`}>
-                        {style.icon} {dynamicLabel}
-                     </span>
-                  )}
+                  <span className={`flex items-center gap-2 px-3 py-1 rounded-lg text-white text-[10px] font-black uppercase tracking-widest shadow-sm ${mainStatus === 'DIREITO_NAO_VIOLADO' ? 'bg-emerald-600' : 'bg-blue-600'}`}>
+                     <Tag className="w-3 h-3" /> DESPACHO: {(STATUS_LABELS[mainStatus] || mainStatus).toUpperCase()}
+                  </span>
 
                   <span className="text-[11px] font-mono font-bold text-slate-300 uppercase">#{doc.id}</span>
                </div>
