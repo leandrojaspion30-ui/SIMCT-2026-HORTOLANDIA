@@ -278,7 +278,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
         name, 
         validated: !!match, 
         timestamp: match?.usuario_nome.split(' - ')[1] || null,
-        needsRevalidation: doc.status.includes('AGUARDANDO_VALIDACAO') && !match && confirmacoes.length > 0
+        needsRevalidation: (doc.status.includes('AGUARDANDO_VALIDACAO') || doc.status.includes('MEDIDA_APLICADA')) && !match && confirmacoes.length > 0
       };
     });
   }, [doc.conselheiros_providencia_nomes, doc.medidas_detalhadas, doc.status, nameMap]);
@@ -319,14 +319,16 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     const hasAgentesChanged = JSON.stringify([...tempAgentes].sort((a, b) => a.principal.localeCompare(b.principal))) !== 
                               JSON.stringify([...(doc.agentesVioladores || [])].sort((a, b) => a.principal.localeCompare(b.principal)));
 
-    const isTechnicalChange = hasMedidasChanged || hasAtribuicoesChanged || hasViolacoesChanged || hasAgentesChanged;
+    const wasMedidaAplicadaOrValidated = doc.status.includes('MEDIDA_APLICADA') || (doc.medidas_detalhadas?.[0]?.confirmacoes || []).length > 0;
 
-    // Se houver mudança técnica, resetamos as validações dos outros para forçar revalidação colegiada
+    const isTechnicalChange = hasMedidasChanged || hasAtribuicoesChanged || hasViolacoesChanged || hasAgentesChanged || (wasMedidaAplicadaOrValidated && isActualProvidenciaImediata);
+
+    // Se houver mudança técnica ou edição de medida, resetamos as validações dos outros para forçar revalidação colegiada
     let confirmacoes = doc.medidas_detalhadas?.[0]?.confirmacoes || [];
     let notificacoesTrio = doc.notificacoes_trio || [];
 
     if (isTechnicalChange && isActualProvidenciaImediata) {
-      // REFORÇO: Se houver mudança técnica, invalidamos assinaturas anteriores e notificamos o trio
+      // REFORÇO: Se houver mudança técnica / edição da Medida Aplicada, invalidamos assinaturas anteriores dos outros e notificamos o trio
       confirmacoes = confirmacoes.filter(c => c.usuario_id === currentUser.id);
       const escala = (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.length > 0)
         ? doc.conselheiros_providencia_nomes
@@ -486,13 +488,25 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const handleValidate = () => {
     const now = new Date();
     const formatted = `${currentUser.nome} - ${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`;
-    const updated = (doc.medidas_detalhadas || []).map(m => ({ ...m, confirmacoes: [...m.confirmacoes, { usuario_id: currentUser.id, usuario_nome: formatted, data_hora: now.toISOString() }] }));
-    const validatedCount = validationTracker.filter(v => v.validated).length + 1;
+    const updated = (doc.medidas_detalhadas || []).map(m => ({ 
+      ...m, 
+      confirmacoes: [
+        ...m.confirmacoes.filter(c => c.usuario_id !== currentUser.id),
+        { usuario_id: currentUser.id, usuario_nome: formatted, data_hora: now.toISOString() }
+      ] 
+    }));
+    const validatedCount = validationTracker.filter(v => v.validated || isUserInTrio(v.name)).length;
     const trioSize = doc.conselheiros_providencia_nomes?.length || 3;
     let nextStatus = [...doc.status];
     if (validatedCount >= trioSize) { 
       nextStatus = nextStatus.filter(s => s !== 'AGUARDANDO_VALIDACAO'); 
-      nextStatus.push('MEDIDA_APLICADA'); 
+      if (!nextStatus.includes('MEDIDA_APLICADA')) {
+        nextStatus.push('MEDIDA_APLICADA');
+      }
+    } else {
+      if (!nextStatus.includes('AGUARDANDO_VALIDACAO')) {
+        nextStatus.push('AGUARDANDO_VALIDACAO');
+      }
     }
     
     // Remove o próprio nome das notificações ao validar
@@ -503,7 +517,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       status: nextStatus,
       notificacoes_trio: nextNotificacoes
     });
-    onAddLog(doc.id, `VALIDAÇÃO TÉCNICA: Assinatura confirmada pelo trio.`, 'VALIDAÇÃO');
+    onAddLog(doc.id, `VALIDAÇÃO TÉCNICA: Assinatura/Revalidação confirmada por ${currentUser.nome}.`, 'VALIDAÇÃO');
   };
 
   const rawProvName = users.find(u => u.id === doc.conselheiro_providencia_id)?.nome || doc.conselheiro_providencia_nome || 'Não Encontrado';
@@ -1038,6 +1052,18 @@ const DocumentView: React.FC<DocumentViewProps> = ({
             <div id="validacao-trio" className="mt-8 pt-8 border-t bg-slate-50/50 rounded-[2.5rem] p-8 space-y-6 border border-slate-100 shadow-inner">
                <h4 className="text-[12px] font-black text-slate-800 uppercase flex items-center gap-2"><Users className="w-5 h-5 text-blue-600" /> Assinaturas Colegiadas (Trio de Imediata)</h4>
                
+               {validationTracker.some(v => v.needsRevalidation) && (
+                 <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl flex items-center gap-3 text-amber-900 shadow-sm animate-pulse">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                    <div>
+                       <span className="text-[11px] font-black uppercase block">⚠️ Medida Aplicada Editada - Revalidação Pendente</span>
+                       <span className="text-[10px] font-bold uppercase text-amber-800">
+                          A Medida Aplicada / conteúdo técnico deste procedimento foi editado pelo Conselheiro de Providência Imediata ({doc.conselheiro_providencia_nome || 'responsável'}). Os demais membros do Colegiado que já haviam validado precisam analisar e validar novamente.
+                       </span>
+                    </div>
+                 </div>
+               )}
+               
                {/* RESUMO TÉCNICO PARA VALIDAÇÃO */}
                <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-sm">
                   <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
@@ -1103,7 +1129,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                          {status.validated && status.timestamp && (
                            <span className="text-[8px] font-bold text-slate-400 uppercase">{status.timestamp}</span>
                          )}
-                         {!status.validated && isMe && doc.status.includes('AGUARDANDO_VALIDACAO') && (
+                         {!status.validated && isMe && (doc.status.includes('AGUARDANDO_VALIDACAO') || status.needsRevalidation || doc.status.includes('MEDIDA_APLICADA')) && (
                            <button onClick={handleValidate} className="mt-2 py-2 px-4 bg-emerald-600 text-white rounded-xl text-[9px] font-black uppercase shadow-lg hover:bg-emerald-700 transition-all">Validar & Assinar</button>
                          )}
                       </div>
