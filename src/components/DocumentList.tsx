@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, ChevronUp, Folder, FolderOpen, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database, Trash2, Timer, Calendar, GraduationCap, Stethoscope, HandHeart, Phone, Mail, Siren, PhoneCall } from 'lucide-react';
 import { Documento, User as UserType, DocumentStatus } from '../types';
@@ -12,7 +11,7 @@ export const getOrigemIconAndStyle = (origemRaw?: string) => {
     return {
       icon: <Users className="w-3.5 h-3.5 text-purple-600 shrink-0" />,
       label: `ORIGEM: ${origemRaw || 'FAMÍLIA'}`,
-      style: 'bg-purple-50 border-purple-200 text-purple-900',
+      style: 'bg-purple-50 border-purple-200/80 text-purple-900',
       category: 'FAMÍLIA'
     };
   }
@@ -20,7 +19,7 @@ export const getOrigemIconAndStyle = (origemRaw?: string) => {
     return {
       icon: <GraduationCap className="w-3.5 h-3.5 text-cyan-600 shrink-0" />,
       label: `ORIGEM: ${origemRaw || 'EDUCAÇÃO'}`,
-      style: 'bg-cyan-50 border-cyan-200 text-cyan-900',
+      style: 'bg-cyan-50 border-cyan-200/80 text-cyan-900',
       category: 'EDUCAÇÃO'
     };
   }
@@ -28,7 +27,7 @@ export const getOrigemIconAndStyle = (origemRaw?: string) => {
     return {
       icon: <Stethoscope className="w-3.5 h-3.5 text-rose-600 shrink-0" />,
       label: `ORIGEM: ${origemRaw || 'SAÚDE'}`,
-      style: 'bg-rose-50 border-rose-200 text-rose-900',
+      style: 'bg-rose-50 border-rose-200/80 text-rose-900',
       category: 'SAÚDE'
     };
   }
@@ -36,7 +35,7 @@ export const getOrigemIconAndStyle = (origemRaw?: string) => {
     return {
       icon: <Building2 className="w-3.5 h-3.5 text-amber-600 shrink-0" />,
       label: `ORIGEM: ${origemRaw || 'ASSISTÊNCIA SOCIAL'}`,
-      style: 'bg-amber-50 border-amber-200 text-amber-900',
+      style: 'bg-amber-50 border-amber-200/80 text-amber-900',
       category: 'ASSISTÊNCIA SOCIAL'
     };
   }
@@ -44,7 +43,7 @@ export const getOrigemIconAndStyle = (origemRaw?: string) => {
     return {
       icon: <ShieldAlert className="w-3.5 h-3.5 text-slate-700 shrink-0" />,
       label: `ORIGEM: ${origemRaw || 'SEGURANÇA'}`,
-      style: 'bg-slate-100 border-slate-300 text-slate-900',
+      style: 'bg-slate-100 border-slate-300/80 text-slate-900',
       category: 'SEGURANÇA'
     };
   }
@@ -52,7 +51,7 @@ export const getOrigemIconAndStyle = (origemRaw?: string) => {
     return {
       icon: <Scale className="w-3.5 h-3.5 text-indigo-600 shrink-0" />,
       label: `ORIGEM: ${origemRaw || 'PODER JUDICIÁRIO'}`,
-      style: 'bg-indigo-50 border-indigo-200 text-indigo-900',
+      style: 'bg-indigo-50 border-indigo-200/80 text-indigo-900',
       category: 'JUDICIÁRIO'
     };
   }
@@ -60,14 +59,14 @@ export const getOrigemIconAndStyle = (origemRaw?: string) => {
     return {
       icon: <Siren className="w-3.5 h-3.5 text-orange-600 shrink-0" />,
       label: `ORIGEM: ${origemRaw || 'DENÚNCIA / SIPIA'}`,
-      style: 'bg-orange-50 border-orange-200 text-orange-900',
+      style: 'bg-orange-50 border-orange-200/80 text-orange-900',
       category: 'DENÚNCIA'
     };
   }
   return {
     icon: <Building2 className="w-3.5 h-3.5 text-slate-600 shrink-0" />,
     label: `ORIGEM: ${origemRaw || 'N/A'}`,
-    style: 'bg-slate-50 border-slate-200 text-slate-800',
+    style: 'bg-slate-50 border-slate-200/80 text-slate-800',
     category: 'OUTROS'
   };
 };
@@ -78,48 +77,48 @@ export const getCanalIconAndStyle = (canalRaw?: string) => {
     return {
       icon: <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />,
       label: `CANAL: ${canalRaw}`,
-      style: 'bg-emerald-50 border-emerald-200 text-emerald-900'
+      style: 'bg-emerald-50 border-emerald-200/80 text-emerald-900'
     };
   }
   if (canal.includes('TELEFÔNICO') || canal.includes('TELEFONICO') || canal.includes('TELEFONE') || canal.includes('PLANTÃO') || canal.includes('PLANTAO') || canal.includes('LIGAÇÃO')) {
     return {
       icon: <Phone className="w-3.5 h-3.5 text-sky-600 shrink-0" />,
       label: `CANAL: ${canalRaw}`,
-      style: 'bg-sky-50 border-sky-200 text-sky-900'
+      style: 'bg-sky-50 border-sky-200/80 text-sky-900'
     };
   }
   if (canal.includes('EMAIL') || canal.includes('E-MAIL')) {
     return {
       icon: <Mail className="w-3.5 h-3.5 text-purple-600 shrink-0" />,
       label: `CANAL: ${canalRaw}`,
-      style: 'bg-purple-50 border-purple-200 text-purple-900'
+      style: 'bg-purple-50 border-purple-200/80 text-purple-900'
     };
   }
   if (canal.includes('DISQUE 100') || canal.includes('DISQUE')) {
     return {
       icon: <Siren className="w-3.5 h-3.5 text-red-600 shrink-0" />,
       label: `CANAL: ${canalRaw}`,
-      style: 'bg-red-50 border-red-200 text-red-900'
+      style: 'bg-red-50 border-red-200/80 text-red-900'
     };
   }
   if (canal.includes('SIPIA')) {
     return {
       icon: <Database className="w-3.5 h-3.5 text-teal-600 shrink-0" />,
       label: `CANAL: ${canalRaw}`,
-      style: 'bg-teal-50 border-teal-200 text-teal-900'
+      style: 'bg-teal-50 border-teal-200/80 text-teal-900'
     };
   }
   if (canal.includes('OFÍCIO') || canal.includes('OFICIO') || canal.includes('RELATÓRIO') || canal.includes('RELATORIO')) {
     return {
       icon: <FileText className="w-3.5 h-3.5 text-amber-700 shrink-0" />,
       label: `CANAL: ${canalRaw}`,
-      style: 'bg-amber-50 border-amber-200 text-amber-900'
+      style: 'bg-amber-50 border-amber-200/80 text-amber-900'
     };
   }
   return {
     icon: <FileText className="w-3.5 h-3.5 text-slate-600 shrink-0" />,
     label: `CANAL: ${canalRaw || 'N/A'}`,
-    style: 'bg-slate-50 border-slate-200 text-slate-800'
+    style: 'bg-slate-50 border-slate-200/80 text-slate-800'
   };
 };
 
@@ -226,7 +225,6 @@ const DocumentList: React.FC<DocumentListProps> = ({
   const filteredDocs = useMemo(() => {
     return documents
       .filter(doc => {
-        // Regra: Se for modo "Minha Referência", filtra. Se for "Painel Geral", vê tudo.
         const matchesUserOrSubstitutedId = (id: string | undefined | null) => {
           if (!id) return false;
           if (id === currentUser.id) return true;
@@ -352,7 +350,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
         const aTime = a.criado_em ? new Date(a.criado_em).getTime() : 0;
         const bTime = b.criado_em ? new Date(b.criado_em).getTime() : 0;
         if (aTime !== bTime) {
-          return aTime - bTime; // Oldest first
+          return aTime - bTime;
         }
         if (a.data_aporte !== b.data_aporte) {
           return a.data_aporte.localeCompare(b.data_aporte);
@@ -387,11 +385,9 @@ const DocumentList: React.FC<DocumentListProps> = ({
 
   const toggleFolder = (folderKey: string) => {
     if (focusedFolderKey === folderKey) {
-      // Se a pasta já está em foco, ao clicar em recolher, volta a mostrar todas as pastas
       setFocusedFolderKey(null);
       setExpandedFolders({});
     } else {
-      // Ao clicar na pasta, isola ela na tela (foco) e expande
       setFocusedFolderKey(folderKey);
       setExpandedFolders({ [folderKey]: true });
     }
@@ -497,7 +493,6 @@ const DocumentList: React.FC<DocumentListProps> = ({
 
     const isAwaiting = (doc.status.includes('AGUARDANDO_VALIDACAO') || (doc.status.includes('MEDIDA_APLICADA') && !iValidated && isInTrio)) && !doc.status.includes('MEDIDA_PENDENTE');
     const isMedidaAplicadaConcluded = doc.status.includes('MEDIDA_APLICADA') && (iValidated || !isInTrio);
-    const isOficializado = doc.status.includes('MEDIDA_PENDENTE') || isMedidaAplicadaConcluded;
     const lastDispatch = [...doc.status].reverse().find(s => [
       'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
       'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
@@ -511,174 +506,223 @@ const DocumentList: React.FC<DocumentListProps> = ({
     const canalInfo = getCanalIconAndStyle(doc.canal_comunicado);
 
     return (
-      <div key={doc.id} onClick={() => onSelectDoc(doc.id)} className={`bg-white rounded-2xl border border-[#E5E7EB] ${style.border} border-l-4 shadow-sm hover:shadow-md transition-all cursor-pointer group overflow-hidden ${isNested ? 'bg-slate-50/50' : ''}`}>
-         <div className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="flex-1 space-y-4">
-               <div className="flex flex-wrap items-center gap-2">
-                  {doc.status.includes('MEDIDA_PENDENTE') && (
-                     <span className="flex items-center gap-2 px-3 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest shadow-sm">
-                        <CheckCircle2 className="w-3 h-3" /> Medida Pendente
-                     </span>
-                  )}
-                  {isMedidaAplicadaConcluded && (
-                     <span className="flex items-center gap-2 px-3 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest shadow-sm">
-                        <CheckCircle2 className="w-3 h-3" /> Medida Aplicada
-                     </span>
-                  )}
-                  {isAwaiting && (
-                     <span className={`flex items-center gap-2 px-3 py-1 rounded-lg text-white text-[10px] font-black uppercase tracking-widest ${(!iValidated && isInTrio) ? 'bg-red-600 animate-pulse' : 'bg-red-500'}`}>
-                        <ShieldAlert className="w-3 h-3" /> Aguardando Validação do Colegiado
-                     </span>
-                  )}
-                  {(doc.notificacoes_trio || []).some(n => {
-                    if (!n) return false;
-                    const upper = n.toUpperCase();
-                    if (upper === currentUser.nome.toUpperCase()) return true;
-                    const cleanCurrentUserName = currentUser.nome.toUpperCase().split('(')[0].trim();
-                    if (upper === cleanCurrentUserName) return true;
-                    if (currentUser.is_suplente_active && currentUser.substituted_name && upper === currentUser.substituted_name.toUpperCase()) return true;
-                    return false;
-                  }) && (!lastDispatch || lastDispatch === 'NENHUMA') && (
-                     <span className="flex items-center gap-2 px-3 py-1 rounded-lg bg-red-100 text-red-600 text-[10px] font-black uppercase tracking-widest border border-red-200 animate-bounce">
-                        <Zap className="w-3 h-3" /> Revalidação Obrigatória
-                     </span>
-                  )}
-                  <span className={`flex items-center gap-2 px-3 py-1 rounded-lg text-white text-[10px] font-black uppercase tracking-widest shadow-sm ${mainStatus === 'DIREITO_NAO_VIOLADO' ? 'bg-emerald-600' : 'bg-blue-600'}`}>
-                     <Tag className="w-3 h-3" /> DESPACHO: {(STATUS_LABELS[mainStatus] || mainStatus).toUpperCase()}
-                  </span>
+      <div 
+        key={doc.id} 
+        onClick={() => onSelectDoc(doc.id)} 
+        className={`bg-white rounded-xl border border-slate-200/80 ${style.border} border-l-4 shadow-2xs hover:shadow-md transition-all cursor-pointer group p-4 md:p-5 ${isNested ? 'bg-white' : ''}`}
+      >
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-2.5 flex-1">
+            {/* Status Chips Row */}
+            <div className="flex flex-wrap items-center gap-2">
+              {doc.status.includes('MEDIDA_PENDENTE') && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200/80 text-emerald-700 text-[12px] font-medium">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Medida Pendente
+                </span>
+              )}
+              {isMedidaAplicadaConcluded && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200/80 text-emerald-700 text-[12px] font-medium">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Medida Aplicada
+                </span>
+              )}
+              {isAwaiting && (
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[12px] font-medium ${(!iValidated && isInTrio) ? 'bg-red-50 border border-red-200/80 text-red-700 animate-pulse' : 'bg-red-50 border border-red-200 text-red-600'}`}>
+                  <ShieldAlert className="w-3.5 h-3.5" /> Aguardando Validação do Colegiado
+                </span>
+              )}
+              {(doc.notificacoes_trio || []).some(n => {
+                if (!n) return false;
+                const upper = n.toUpperCase();
+                if (upper === currentUser.nome.toUpperCase()) return true;
+                const cleanCurrentUserName = currentUser.nome.toUpperCase().split('(')[0].trim();
+                if (upper === cleanCurrentUserName) return true;
+                if (currentUser.is_suplente_active && currentUser.substituted_name && upper === currentUser.substituted_name.toUpperCase()) return true;
+                return false;
+              }) && (!lastDispatch || lastDispatch === 'NENHUMA') && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-50 border border-red-200/80 text-red-700 text-[12px] font-medium">
+                  <Zap className="w-3.5 h-3.5" /> Revalidação Obrigatória
+                </span>
+              )}
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[12px] font-medium ${mainStatus === 'DIREITO_NAO_VIOLADO' ? 'bg-emerald-50 border border-emerald-200/80 text-emerald-700' : 'bg-blue-50 border border-blue-200/80 text-blue-700'}`}>
+                <Tag className="w-3.5 h-3.5" /> DESPACHO: {(STATUS_LABELS[mainStatus] || mainStatus)}
+              </span>
 
-                  <span className="text-[11px] font-mono font-bold text-slate-300 uppercase">#{doc.id}</span>
-               </div>
-               <div>
-                  <h3 className="text-[17px] font-black text-[#111827] uppercase group-hover:text-[#2563EB] transition-colors">{doc.crianca_nome || 'PRONTUÁRIO INCOMPLETO'}</h3>
-                  {doc.monitoramento && !doc.monitoramento.concluido && doc.monitoramento.requisicoes?.some(r => {
-                     if (r.concluido || (r as any).excluidoDoMonitoramento) return false;
-                     const deadline = parseLocalDate(r.dataFinal);
-                     deadline.setHours(0,0,0,0);
-                     return deadline.getTime() < new Date().setHours(0,0,0,0);
-                  }) && (
-                     <div className="mt-2 flex items-center gap-2 px-3 py-1 bg-amber-500 text-white text-[10px] font-bold uppercase rounded-lg w-fit animate-pulse shadow-sm">
-                        <Timer className="w-3.5 h-3.5" /> Atenção: Prazo de Monitoramento Expirado
-                     </div>
-                  )}
-                  <div className="flex flex-wrap items-center gap-x-6 mt-2">
-                     {!isNested && <div className="flex items-center gap-2 text-[11px] text-[#4B5563] font-bold uppercase"><UserRound className="w-3.5 h-3.5" /> RESPONSÁVEL: {doc.genitora_nome}</div>}
-                     {doc.outro_membro_nome && (
-                        <div className="flex items-center gap-2 text-[11px] text-blue-700 font-bold uppercase bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
-                           <Users className="w-3.5 h-3.5 text-blue-600" /> {doc.outro_membro_parentesco || 'FAMILIAR'}: {doc.outro_membro_nome}
-                        </div>
-                     )}
-                     <div className="flex items-center gap-2 text-[11px] text-emerald-600 font-bold uppercase"><MapPin className="w-3.5 h-3.5" /> {doc.bairro}</div>
-                  </div>
-               </div>
-               <div className="flex flex-wrap items-center gap-2 pt-2">
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-lg text-[10px] font-black text-[#2563EB] uppercase"><UserCheck className="w-3 h-3" /> Titular: {refCouncilor?.nome || 'N/A'}</div>
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[10px] font-black text-amber-700 uppercase"><ShieldCheck className="w-3 h-3" /> Imediata: {provCouncilor?.nome || 'N/A'}</div>
-                  {doc.origem && (
-                     <div className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-[10px] font-black uppercase ${origemInfo.style}`} title="Origem do Caso">
-                        {origemInfo.icon}
-                        <span>{origemInfo.label}</span>
-                     </div>
-                  )}
-                  {doc.canal_comunicado && (
-                     <div className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-[10px] font-black uppercase ${canalInfo.style}`} title="Canal do Comunicado">
-                        {canalInfo.icon}
-                        <span>{canalInfo.label}</span>
-                     </div>
-                  )}
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black text-slate-500 uppercase">
-                    <Timer className="w-3 h-3" /> Registro: {(() => { const r = formatCadastroDateTime(doc.criado_em, doc.data_aporte, doc.hora_aporte); return `${r.date} às ${r.time}`; })()}
-                  </div>
-               </div>
+              <span className="text-[12px] font-mono text-slate-400 font-medium">#{doc.id}</span>
             </div>
-            <div className="shrink-0 flex flex-col items-end gap-3 self-start md:self-center">
-               {!isReadOnly && (
-                  <div className="flex items-center gap-1.5 bg-slate-100/90 p-1.5 rounded-xl border border-slate-200 shadow-inner" onClick={(e) => e.stopPropagation()}>
-                    <span className="text-[9px] font-black uppercase text-slate-600 pl-1 flex items-center gap-1 shrink-0">
-                      <Tag className="w-3 h-3 text-indigo-600 shrink-0" /> Status:
-                    </span>
-                    <select
-                      value={mainStatus}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        const newS = e.target.value as DocumentStatus;
-                        if (newS) {
-                          onUpdateStatus(doc.id, [...doc.status.filter(s => s !== newS), newS]);
-                        }
-                      }}
-                      className="bg-white text-slate-800 border border-slate-300 text-[10px] font-black uppercase rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-500 shadow-sm cursor-pointer hover:border-indigo-400 transition-colors"
-                    >
-                      <option value="AGUARDANDO_ANALISE">⏳ AGUARDANDO ANÁLISE</option>
-                      <option value="AGUARDANDO_DOCUMENTO">📄 AGUARDANDO DOCUMENTO</option>
-                      <option value="AGUARDANDO_VALIDACAO">⚖️ AGUARDANDO VALIDAÇÃO</option>
-                      <option value="MEDIDA_APLICADA">✅ MEDIDA APLICADA</option>
-                      <option value="AVALIAR_EM_COLEGIADO">👥 AVALIAR EM COLEGIADO</option>
-                      <option value="CONCLUIDO">✅ CONCLUÍDO</option>
-                      <option value="MONITORAMENTO">📊 EM MONITORAMENTO</option>
-                      <option value="ENCERRADO">🔒 ENCERRADO</option>
-                      <option value="MEDIDA_PENDENTE">📋 MEDIDA PENDENTE</option>
-                      <option value="NOTIFICADO">🔕 NOTIFICADO</option>
-                      <option value="NOTIFICAR">🔔 NOTIFICAR</option>
-                      <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
-                    </select>
+
+            {/* Child Name (18px, font 600) */}
+            <div>
+              <h4 className="text-[18px] font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">
+                {doc.crianca_nome || 'PRONTUÁRIO INCOMPLETO'}
+              </h4>
+
+              {doc.monitoramento && !doc.monitoramento.concluido && doc.monitoramento.requisicoes?.some(r => {
+                 if (r.concluido || (r as any).excluidoDoMonitoramento) return false;
+                 const deadline = parseLocalDate(r.dataFinal);
+                 deadline.setHours(0,0,0,0);
+                 return deadline.getTime() < new Date().setHours(0,0,0,0);
+              }) && (
+                 <div className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200/80 text-amber-800 text-[12px] font-medium rounded-lg">
+                    <Timer className="w-3.5 h-3.5 text-amber-600" /> Atenção: Prazo de Monitoramento Expirado
+                 </div>
+              )}
+
+              {/* Informações Secundárias (14px, font 500) */}
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-1.5 text-[14px] font-medium text-slate-600">
+                 {!isNested && <div>RESPONSÁVEL: {doc.genitora_nome}</div>}
+                 {doc.outro_membro_nome && (
+                    <div className="text-blue-700">
+                       {doc.outro_membro_parentesco || 'FAMILIAR'}: {doc.outro_membro_nome}
+                    </div>
+                 )}
+                 <div className="text-emerald-700 flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 inline" /> {doc.bairro}
+                 </div>
+              </div>
+            </div>
+
+            {/* Bottom Chips (12px, font 500) */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 border border-blue-200/60 rounded-lg text-[12px] font-medium text-blue-700">
+                  <UserCheck className="w-3.5 h-3.5 text-blue-600" /> Titular: {refCouncilor?.nome || 'N/A'}
+               </div>
+               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-sky-50 border border-sky-200/60 rounded-lg text-[12px] font-medium text-sky-800">
+                  <ShieldCheck className="w-3.5 h-3.5 text-sky-600" /> Imediata: {provCouncilor?.nome || 'N/A'}
+               </div>
+               {doc.origem && (
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200/80 rounded-lg text-[12px] font-medium text-slate-700" title="Origem do Caso">
+                     {origemInfo.icon}
+                     <span>{origemInfo.label}</span>
                   </div>
                )}
-
-               <div className="flex items-center gap-3">
-                  {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); onEditDoc(doc.id); }} className="p-3 bg-white border border-[#E5E7EB] text-[#4B5563] rounded-xl hover:bg-[#111827] hover:text-white transition-all" title="Editar Documento"><FileText className="w-4 h-4" /></button>}
-                  {(hasCounselorActions => {
-                     const isCreatorAdmin = 
-                       (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome === 'LEANDRO');
-                     
-                     return isCreatorAdmin && !hasCounselorActions;
-                   })(!!(
-                     (doc.ciência_registrada_por && doc.ciência_registrada_por.length > 0) ||
-                     doc.medidas_detalhadas?.some(m => m.confirmacoes && m.confirmacoes.length > 0) ||
-                     doc.status.some(s => s !== 'AGUARDANDO_ANALISE' && s !== 'EM_PREENCHIMENTO' && !s.startsWith('NOTIFICACAO_')) ||
-                     (doc.medidas_detalhadas && doc.medidas_detalhadas.length > 0) ||
-                     (doc.relato_providencias && doc.relato_providencias.trim() !== '') ||
-                     (doc.fundamentacao_tecnica && doc.fundamentacao_tecnica.trim() !== '') ||
-                     (doc.monitoramento?.requisicoes && doc.monitoramento.requisicoes.length > 0) ||
-                     (doc.historico_monitoramento && doc.historico_monitoramento.length > 0)
-                   )) && (
-                     <button 
-                       onClick={(e) => { 
-                         e.stopPropagation(); 
-                         setDocToDelete(doc.id);
-                       }} 
-                       className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all"
-                     >
-                       <Trash2 className="w-4 h-4" />
-                     </button>
-                  )}
-                  <button className="p-3 bg-[#111827] text-white rounded-xl shadow-lg hover:bg-[#2563EB] transition-all"><Eye className="w-4 h-4" /></button>
+               {doc.canal_comunicado && (
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200/80 rounded-lg text-[12px] font-medium text-slate-700" title="Canal do Comunicado">
+                     {canalInfo.icon}
+                     <span>{canalInfo.label}</span>
+                  </div>
+               )}
+               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200/80 rounded-lg text-[12px] font-medium text-slate-500">
+                 <Timer className="w-3.5 h-3.5 text-slate-400" /> Registro: {(() => { const r = formatCadastroDateTime(doc.criado_em, doc.data_aporte, doc.hora_aporte); return `${r.date} às ${r.time}`; })()}
                </div>
             </div>
-         </div>
+          </div>
+
+          {/* Action buttons on right */}
+          <div className="shrink-0 flex md:flex-col items-end gap-2.5 self-start md:self-center">
+             {!isReadOnly && (
+                <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-200/80" onClick={(e) => e.stopPropagation()}>
+                  <span className="text-[11px] font-medium text-slate-500 pl-1 flex items-center gap-1 shrink-0">
+                    Status:
+                  </span>
+                  <select
+                    value={mainStatus}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      const newS = e.target.value as DocumentStatus;
+                      if (newS) {
+                        onUpdateStatus(doc.id, [...doc.status.filter(s => s !== newS), newS]);
+                      }
+                    }}
+                    className="bg-white text-slate-800 border border-slate-200 text-[11px] font-medium rounded-md px-2 py-1 outline-none focus:border-blue-500 cursor-pointer transition-colors"
+                  >
+                    <option value="AGUARDANDO_ANALISE">⏳ AGUARDANDO ANÁLISE</option>
+                    <option value="AGUARDANDO_DOCUMENTO">📄 AGUARDANDO DOCUMENTO</option>
+                    <option value="AGUARDANDO_VALIDACAO">⚖️ AGUARDANDO VALIDAÇÃO</option>
+                    <option value="MEDIDA_APLICADA">✅ MEDIDA APLICADA</option>
+                    <option value="AVALIAR_EM_COLEGIADO">👥 AVALIAR EM COLEGIADO</option>
+                    <option value="CONCLUIDO">✅ CONCLUÍDO</option>
+                    <option value="MONITORAMENTO">📊 EM MONITORAMENTO</option>
+                    <option value="ENCERRADO">🔒 ENCERRADO</option>
+                    <option value="MEDIDA_PENDENTE">📋 MEDIDA PENDENTE</option>
+                    <option value="NOTIFICADO">🔕 NOTIFICADO</option>
+                    <option value="NOTIFICAR">🔔 NOTIFICAR</option>
+                    <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
+                  </select>
+                </div>
+             )}
+
+             <div className="flex items-center gap-2">
+                {!isReadOnly && (
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); onEditDoc(doc.id); }} 
+                    className="p-2 bg-slate-50 hover:bg-slate-900 hover:text-white border border-slate-200/80 text-slate-600 rounded-lg transition-all cursor-pointer" 
+                    title="Editar Documento"
+                  >
+                    <FileText className="w-4 h-4" />
+                  </button>
+                )}
+                {(hasCounselorActions => {
+                   const isCreatorAdmin = 
+                     (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome === 'LEANDRO');
+                   
+                   return isCreatorAdmin && !hasCounselorActions;
+                 })(!!(
+                   (doc.ciência_registrada_por && doc.ciência_registrada_por.length > 0) ||
+                   doc.medidas_detalhadas?.some(m => m.confirmacoes && m.confirmacoes.length > 0) ||
+                   doc.status.some(s => s !== 'AGUARDANDO_ANALISE' && s !== 'EM_PREENCHIMENTO' && !s.startsWith('NOTIFICACAO_')) ||
+                   (doc.medidas_detalhadas && doc.medidas_detalhadas.length > 0) ||
+                   (doc.relato_providencias && doc.relato_providencias.trim() !== '') ||
+                   (doc.fundamentacao_tecnica && doc.fundamentacao_tecnica.trim() !== '') ||
+                   (doc.monitoramento?.requisicoes && doc.monitoramento.requisicoes.length > 0) ||
+                   (doc.historico_monitoramento && doc.historico_monitoramento.length > 0)
+                 )) && (
+                   <button 
+                     onClick={(e) => { 
+                       e.stopPropagation(); 
+                       setDocToDelete(doc.id);
+                     }} 
+                     className="p-2 bg-red-50 hover:bg-red-600 hover:text-white border border-red-200/60 text-red-600 rounded-lg transition-all cursor-pointer"
+                     title="Excluir Prontuário"
+                   >
+                     <Trash2 className="w-4 h-4" />
+                   </button>
+                )}
+                <button 
+                  className="p-2 bg-slate-900 hover:bg-blue-600 text-white rounded-lg transition-all cursor-pointer shadow-2xs"
+                  title="Visualizar"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
+             </div>
+          </div>
+        </div>
       </div>
     );
   };
 
   return (
     <div className="space-y-6">
-      {/* PAINEL DE BUSCA E FILTRO UNIFICADO */}
-      <div className="bg-white p-8 rounded-[2.5rem] border border-[#E5E7EB] shadow-sm space-y-6">
+      {/* 2. PAINEL DE BUSCA E FILTRO UNIFICADO */}
+      <div className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
         <div className="flex items-center justify-between">
-           <div className="flex items-center gap-3">
-              <Database className="w-6 h-6 text-blue-600" />
-              <h3 className="text-[14px] font-black uppercase text-slate-800 tracking-widest">Painel de Busca SIMCT</h3>
+           <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-200/60 flex items-center justify-center shrink-0">
+                <Database className="w-4 h-4 text-blue-600" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-800 tracking-tight">Painel de Busca SIMCT</h3>
            </div>
-           <button onClick={clearFilters} className="text-[10px] font-black uppercase text-red-500 hover:text-red-700 flex items-center gap-2">
-              <RefreshCw className="w-3 h-3" /> Resetar Busca
+           <button onClick={clearFilters} className="text-xs font-semibold text-red-600 hover:text-red-700 flex items-center gap-1.5 transition-colors cursor-pointer">
+              <RefreshCw className="w-3.5 h-3.5" /> Resetar Busca
            </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {/* 5 Filter inputs row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <input type="text" placeholder="NOME, PROTOCOLO OU CÓDIGO DO COMUNICADO..." className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-[11px] uppercase focus:border-blue-500" value={filters.term} onChange={(e) => setFilters({...filters, term: e.target.value})} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
+            <input 
+              type="text" 
+              placeholder="Pesquisar..." 
+              className="w-full h-10 pl-9 pr-3 bg-slate-50 border border-slate-200/80 rounded-xl outline-none font-medium text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all" 
+              value={filters.term} 
+              onChange={(e) => setFilters({...filters, term: e.target.value})} 
+            />
           </div>
-          <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-blue-500" value={filters.status} onChange={(e) => setFilters({...filters, status: e.target.value})}>
+          <select 
+            className="h-10 px-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer" 
+            value={filters.status} 
+            onChange={(e) => setFilters({...filters, status: e.target.value})}
+          >
             <option value="">Qualquer Status</option>
             <option value="AGUARDANDO_ANALISE">⏳ AGUARDANDO ANÁLISE</option>
             <option value="AGUARDANDO_DOCUMENTO">📄 AGUARDANDO DOCUMENTO</option>
@@ -693,60 +737,89 @@ const DocumentList: React.FC<DocumentListProps> = ({
             <option value="NOTIFICAR">🔔 NOTIFICAR</option>
             <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
           </select>
-          <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-blue-500" value={filters.bairro} onChange={(e) => setFilters({...filters, bairro: e.target.value})}>
+          <select 
+            className="h-10 px-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer" 
+            value={filters.bairro} 
+            onChange={(e) => setFilters({...filters, bairro: e.target.value})}
+          >
             <option value="">Qualquer Bairro</option>
             {getBairrosByUnidade(currentUser.unidade_id).map(b => <option key={b} value={b}>{b}</option>)}
           </select>
-          <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold uppercase outline-none focus:border-blue-500" value={filters.conselheiro_ref_id} onChange={(e) => setFilters({...filters, conselheiro_ref_id: e.target.value})}>
+          <select 
+            className="h-10 px-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer" 
+            value={filters.conselheiro_ref_id} 
+            onChange={(e) => setFilters({...filters, conselheiro_ref_id: e.target.value})}
+          >
             <option value="">Qualquer Conselheiro</option>
             {users.filter(u => u.status !== 'EXCLUIDO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === currentUser.unidade_id).map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
           </select>
           <div className="relative">
-            <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
             <input 
               type="date" 
-              className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-[11px] uppercase focus:border-blue-500 text-slate-700" 
+              className="w-full h-10 pl-9 pr-3 bg-slate-50 border border-slate-200/80 rounded-xl outline-none font-medium text-xs text-slate-800 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all" 
               value={filters.data_registro} 
               onChange={(e) => setFilters({...filters, data_registro: e.target.value})} 
             />
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
-           <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-100 rounded-2xl max-w-4xl border border-slate-200">
-              <button onClick={() => setMyViewMode('ALL')} className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'ALL' ? 'bg-[#111827] text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Visão Geral</button>
-              <button onClick={() => setMyViewMode('REF')} className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'REF' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Minha Titularidade</button>
-              <button onClick={() => setMyViewMode('IMED')} className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'IMED' ? 'bg-amber-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Minha Imediata</button>
-              <button onClick={() => setMyViewMode('VALID')} className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${myViewMode === 'VALID' ? 'bg-red-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Validação Colegiado</button>
+        {/* View mode tabs and grouping toggle button */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+           <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100/80 rounded-xl border border-slate-200/60">
+              <button 
+                onClick={() => setMyViewMode('ALL')} 
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${myViewMode === 'ALL' ? 'bg-slate-900 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'}`}
+              >
+                Visão Geral
+              </button>
+              <button 
+                onClick={() => setMyViewMode('REF')} 
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${myViewMode === 'REF' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'}`}
+              >
+                Minha Titularidade
+              </button>
+              <button 
+                onClick={() => setMyViewMode('IMED')} 
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${myViewMode === 'IMED' ? 'bg-amber-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'}`}
+              >
+                Minha Imediata
+              </button>
+              <button 
+                onClick={() => setMyViewMode('VALID')} 
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${myViewMode === 'VALID' ? 'bg-red-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'}`}
+              >
+                Validação Colegiado
+              </button>
            </div>
 
-           <div className="flex items-center gap-3">
-             <button 
-               onClick={() => {
-                 setIsGroupedByFamily(!isGroupedByFamily);
-                 setFocusedFolderKey(null);
-                 setExpandedFolders({});
-               }}
-               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-sm ${isGroupedByFamily ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'}`}
-             >
-               {isGroupedByFamily ? <FolderOpen className="w-4 h-4 text-amber-300 fill-amber-300" /> : <Folder className="w-4 h-4 text-slate-500" />}
-               <span>{isGroupedByFamily ? '📁 Agrupado por Pasta Familiar' : '📄 Lista Individual'}</span>
-             </button>
-           </div>
+           <button 
+             onClick={() => {
+               setIsGroupedByFamily(!isGroupedByFamily);
+               setFocusedFolderKey(null);
+               setExpandedFolders({});
+             }}
+             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer border shadow-2xs ${isGroupedByFamily ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'}`}
+           >
+             {isGroupedByFamily ? <FolderOpen className="w-4 h-4 text-amber-300 fill-amber-300 shrink-0" /> : <Folder className="w-4 h-4 text-slate-500 shrink-0" />}
+             <span>{isGroupedByFamily ? 'Agrupado por Pasta Familiar' : 'Lista Individual'}</span>
+           </button>
         </div>
       </div>
 
+      {/* 3. MODO ISOLADO */}
       {isGroupedByFamily && focusedFolderKey && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-amber-500/10 border-2 border-amber-400 rounded-2xl shadow-sm">
+        <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-amber-400 rounded-xl flex items-center justify-center shrink-0 shadow-sm">
-              <FolderOpen className="w-5 h-5 text-amber-950 fill-amber-100" />
+            <div className="w-9 h-9 bg-amber-100 border border-amber-200/80 rounded-xl flex items-center justify-center shrink-0">
+              <FolderOpen className="w-4 h-4 text-amber-800" />
             </div>
             <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 block">
+              <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
                 Modo Isolado Ativo
               </span>
-              <p className="text-xs font-bold text-slate-800 uppercase">
+              <p className="text-xs text-amber-800 font-medium mt-0.5">
                 Exibindo apenas a pasta da família selecionada para evitar contaminação visual.
               </p>
             </div>
@@ -756,13 +829,14 @@ const DocumentList: React.FC<DocumentListProps> = ({
               setFocusedFolderKey(null);
               setExpandedFolders({});
             }}
-            className="px-5 py-2.5 bg-slate-900 hover:bg-indigo-600 text-white rounded-xl font-bold text-[10px] uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer shadow-md shrink-0 self-stretch sm:self-auto justify-center"
+            className="px-4 py-2 bg-slate-900 hover:bg-indigo-600 text-white rounded-xl font-medium text-xs flex items-center gap-2 transition-all cursor-pointer shadow-xs shrink-0 self-stretch sm:self-auto justify-center"
           >
-            <span>⬅️ Ver Todas as Pastas ({familyGroups.length})</span>
+            <span>Ver Todas as Pastas ({familyGroups.length})</span>
           </button>
         </div>
       )}
 
+      {/* 4. LISTA / PASTAS FAMILIARES */}
       <div className="grid grid-cols-1 gap-4">
         {isGroupedByFamily ? (
           displayedFamilyGroups.map(group => {
@@ -770,7 +844,6 @@ const DocumentList: React.FC<DocumentListProps> = ({
             const firstDoc = group.docs[0];
             const refCouncilor = users.find(u => u.id === firstDoc?.conselheiro_referencia_id);
 
-            // Análise de alertas e providências pendentes na pasta
             let pendingValidationCount = 0;
             let myImediataCount = 0;
             let revalidacaoCount = 0;
@@ -861,151 +934,126 @@ const DocumentList: React.FC<DocumentListProps> = ({
             return (
               <div 
                 key={group.key} 
-                className={`rounded-[2rem] p-4 sm:p-5 space-y-3 transition-all ${
-                  hasAlert 
-                    ? 'bg-rose-50/70 border-2 border-rose-300 shadow-sm' 
-                    : 'bg-slate-50/80 border border-slate-200/90 shadow-sm'
-                }`}
+                className="bg-white rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all overflow-hidden relative"
               >
-                {/* Header da Pasta Familiar */}
-                <div 
-                  onClick={() => toggleFolder(group.key)}
-                  className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl cursor-pointer transition-all group ${
-                    hasAlert 
-                      ? 'bg-white text-slate-800 border-2 border-rose-300 hover:border-rose-400 hover:shadow-md' 
-                      : 'bg-white text-slate-800 border border-slate-200 hover:border-indigo-400 hover:shadow-md'
-                  }`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-md transition-all ${
-                      hasAlert ? 'bg-rose-500 text-white shadow-rose-200' : 'bg-amber-400 group-hover:bg-amber-500 text-amber-950 shadow-amber-200/60'
-                    }`}>
-                      {isExpanded ? (
-                        <FolderOpen className="w-6 h-6 text-amber-950 fill-amber-100" />
-                      ) : (
-                        <Folder className="w-6 h-6 text-amber-950 fill-amber-100" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`text-[10px] font-black uppercase tracking-wider ${hasAlert ? 'text-rose-600' : 'text-amber-700'}`}>
-                          PASTA FAMILIAR
-                        </span>
-                        <span className={`px-2.5 py-0.5 text-[10px] font-black rounded-full uppercase ${
-                          hasAlert ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'
-                        }`}>
-                          {group.docs.length} {group.docs.length === 1 ? 'Procedimento' : 'Procedimentos'}
-                        </span>
-                        
-                        {hasAlert && (
-                          <span className="px-3 py-0.5 bg-rose-600 text-white font-black text-[10px] rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-sm animate-pulse">
-                            <ShieldAlert className="w-3.5 h-3.5" />
-                            <span>
-                              {totalAlerts} {totalAlerts === 1 ? 'AÇÃO PENDENTE' : 'AÇÕES PENDENTES'}
-                            </span>
-                          </span>
-                        )}
-                      </div>
+                {/* 8px Colored Left Vertical Bar */}
+                <div className={`absolute left-0 top-0 bottom-0 w-2 ${hasAlert ? 'bg-red-500' : 'bg-indigo-500'}`}></div>
 
-                      <h3 className={`text-[16px] font-black uppercase tracking-wide mt-1 transition-colors ${
-                        hasAlert ? 'text-slate-900 group-hover:text-rose-600' : 'text-slate-800 group-hover:text-indigo-600'
-                      }`}>
-                        RESPONSÁVEL: {group.genitora_nome}
-                      </h3>
-
-                      {childNames.length > 0 && (
-                        <div className="flex items-center gap-1.5 mt-1 text-[12px] font-black uppercase tracking-wide text-indigo-900 bg-indigo-50/80 px-2.5 py-1 rounded-lg border border-indigo-100/80 w-fit">
-                          <Baby className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                          <span>
-                            {childNames.length === 1 ? 'CRIANÇA / ADOLESCENTE:' : 'CRIANÇAS / ADOLESCENTES:'}{' '}
-                            <span className="text-indigo-950 font-black">{childNames.join(', ')}</span>
-                          </span>
-                        </div>
-                      )}
-
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-bold text-slate-500 mt-1">
-                        {group.cpf_genitora && <span>CPF: {group.cpf_genitora}</span>}
-                        {group.bairro && (
-                          <span className="flex items-center gap-1 text-emerald-600">
-                            <MapPin className="w-3.5 h-3.5" /> {group.bairro}
-                          </span>
-                        )}
-                        {refCouncilor && (
-                          <span className="text-blue-600">
-                            <UserCheck className="w-3.5 h-3.5 inline mr-1" /> Titular: {refCouncilor.nome}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Origens e Canais presentes na Pasta Familiar */}
-                      <div className="flex flex-wrap items-center gap-2 mt-2 pt-1 border-t border-slate-100">
-                        {Array.from(new Set(group.docs.map(d => d.origem).filter(Boolean))).map(orig => {
-                          const info = getOrigemIconAndStyle(orig);
-                          return (
-                            <span key={orig} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[9px] font-black uppercase ${info.style}`} title="Origem do Caso">
-                              {info.icon} <span>{info.label}</span>
-                            </span>
-                          );
-                        })}
-                        {Array.from(new Set(group.docs.map(d => d.canal_comunicado).filter(Boolean))).map(canal => {
-                          const info = getCanalIconAndStyle(canal);
-                          return (
-                            <span key={canal} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[9px] font-black uppercase ${info.style}`} title="Canal do Comunicado">
-                              {info.icon} <span>{info.label}</span>
-                            </span>
-                          );
-                        })}
-                      </div>
-
-                      {/* Motivos de alerta resumidos */}
+                {/* Header Container */}
+                <div className="p-5 md:p-6 pl-6 sm:pl-7 flex flex-col md:flex-row md:items-center justify-between gap-5">
+                  <div className="space-y-3 flex-1">
+                    {/* Badge Row */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-medium px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200/60">
+                        Pasta Familiar
+                      </span>
+                      <span className="text-xs font-medium px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/60">
+                        {group.docs.length} {group.docs.length === 1 ? 'Procedimento' : 'Procedimentos'}
+                      </span>
+                      
                       {hasAlert && (
-                        <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-rose-200">
-                          {myImediataCount > 0 && (
-                            <span className="px-2 py-0.5 bg-rose-100 text-rose-800 border border-rose-200 text-[9px] font-black rounded-md uppercase">
-                              ⚠️ Sua Providência Imediata ({myImediataCount})
-                            </span>
-                          )}
-                          {pendingValidationCount > 0 && (
-                            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 text-[9px] font-black rounded-md uppercase">
-                              📋 Validação Colegiado ({pendingValidationCount})
-                            </span>
-                          )}
-                          {revalidacaoCount > 0 && (
-                            <span className="px-2 py-0.5 bg-red-100 text-red-800 border border-red-200 text-[9px] font-black rounded-md uppercase">
-                              ⚡ Revalidação ({revalidacaoCount})
-                            </span>
-                          )}
-                          {expiredMonitoramentoCount > 0 && (
-                            <span className="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-black rounded-md uppercase">
-                              ⏱️ Prazo Expirado ({expiredMonitoramentoCount})
-                            </span>
-                          )}
-                        </div>
+                        <span className="text-xs font-medium px-2.5 py-0.5 rounded-md bg-red-50 text-red-700 border border-red-200/60 flex items-center gap-1.5 animate-pulse">
+                          <ShieldAlert className="w-3.5 h-3.5" />
+                          <span>
+                            {totalAlerts} {totalAlerts === 1 ? 'Ação Pendente' : 'Ações Pendentes'}
+                          </span>
+                        </span>
                       )}
                     </div>
+
+                    {/* Responsável - 22px font weight 700 */}
+                    <h3 className="text-[22px] font-bold text-slate-900 tracking-tight leading-snug">
+                      RESPONSÁVEL: {group.genitora_nome}
+                    </h3>
+
+                    {/* Criança - 18px font weight 600 */}
+                    {childNames.length > 0 && (
+                      <div className="text-[18px] font-semibold text-slate-800 flex items-center gap-2">
+                        <Baby className="w-5 h-5 text-indigo-600 shrink-0" />
+                        <span>
+                          {childNames.length === 1 ? 'Criança / Adolescente:' : 'Crianças / Adolescentes:'}{' '}
+                          <span className="text-indigo-900 font-semibold">{childNames.join(', ')}</span>
+                        </span>
+                      </div>
+                    )}
+
+                    {/* CPF • Bairro • Titular - 14px font weight 500 */}
+                    <div className="text-[14px] font-medium text-slate-600 flex flex-wrap items-center gap-4">
+                      {group.cpf_genitora && <span>CPF: {group.cpf_genitora}</span>}
+                      {group.bairro && (
+                        <span className="flex items-center gap-1 text-emerald-700">
+                          <MapPin className="w-3.5 h-3.5" /> Bairro: {group.bairro}
+                        </span>
+                      )}
+                      {refCouncilor && (
+                        <span className="text-blue-700">
+                          <UserCheck className="w-3.5 h-3.5 inline mr-1" /> Titular: {refCouncilor.nome}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Etiquetas / Chips - 12px font weight 500 */}
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      {Array.from(new Set(group.docs.map(d => d.origem).filter(Boolean))).map(orig => {
+                        const info = getOrigemIconAndStyle(orig);
+                        return (
+                          <span key={orig} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200/80 text-slate-700 text-[12px] font-medium" title="Origem do Caso">
+                            {info.icon} <span>{info.label}</span>
+                          </span>
+                        );
+                      })}
+                      {Array.from(new Set(group.docs.map(d => d.canal_comunicado).filter(Boolean))).map(canal => {
+                        const info = getCanalIconAndStyle(canal);
+                        return (
+                          <span key={canal} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200/80 text-slate-700 text-[12px] font-medium" title="Canal do Comunicado">
+                            {info.icon} <span>{info.label}</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+
+                    {/* Motivos de alerta resumidos (12px) */}
+                    {hasAlert && (
+                      <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                        {myImediataCount > 0 && (
+                          <span className="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200/80 text-[12px] font-medium rounded-lg">
+                            ⚠️ Sua Providência Imediata ({myImediataCount})
+                          </span>
+                        )}
+                        {pendingValidationCount > 0 && (
+                          <span className="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200/80 text-[12px] font-medium rounded-lg">
+                            📋 Validação Colegiado ({pendingValidationCount})
+                          </span>
+                        )}
+                        {revalidacaoCount > 0 && (
+                          <span className="px-2.5 py-1 bg-red-50 text-red-800 border border-red-200/80 text-[12px] font-medium rounded-lg">
+                            ⚡ Revalidação ({revalidacaoCount})
+                          </span>
+                        )}
+                        {expiredMonitoramentoCount > 0 && (
+                          <span className="px-2.5 py-1 bg-amber-50 text-amber-900 border border-amber-200/80 text-[12px] font-medium rounded-lg">
+                            ⏱️ Prazo Expirado ({expiredMonitoramentoCount})
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFolder(group.key);
-                    }}
-                    className={`w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all shrink-0 cursor-pointer ${
-                      hasAlert 
-                        ? 'bg-rose-100 text-rose-800 font-black hover:bg-rose-200' 
-                        : 'bg-indigo-50 text-indigo-700 group-hover:bg-indigo-600 group-hover:text-white'
-                    }`}
-                  >
-                    <span>{isExpanded ? 'Recolher Pasta' : 'Expandir Pasta'}</span>
-                    {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </button>
+                  {/* Botão Abrir / Recolher Pasta */}
+                  <div className="shrink-0 self-start md:self-center">
+                    <button 
+                      onClick={() => toggleFolder(group.key)}
+                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl font-medium text-xs flex items-center gap-2 transition-all cursor-pointer border border-slate-200/60"
+                    >
+                      <span>{isExpanded ? 'Recolher Pasta' : 'Abrir Pasta'}</span>
+                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
 
-                {/* Conteúdo da Pasta */}
+                {/* Conteúdo da Pasta (Procedimentos) */}
                 {isExpanded && (
-                  <div className={`pl-1 sm:pl-3 space-y-3 pt-1 ${
-                    hasAlert ? 'border-l-2 border-rose-300' : 'border-l-2 border-indigo-200/80'
-                  }`}>
+                  <div className="p-4 md:p-5 pl-6 sm:pl-7 bg-slate-50/50 border-t border-slate-100 space-y-3">
                     {group.docs.map(doc => renderDocCard(doc, true))}
                   </div>
                 )}
@@ -1017,37 +1065,37 @@ const DocumentList: React.FC<DocumentListProps> = ({
         )}
 
         {filteredDocs.length === 0 && (
-          <div className="py-20 text-center bg-white rounded-3xl border-4 border-dashed border-slate-100 flex flex-col items-center gap-4">
-             <Database className="w-12 h-12 text-slate-200" />
-             <p className="text-[14px] font-black text-slate-300 uppercase tracking-widest">Nenhum registro localizado no Painel Geral.</p>
+          <div className="py-16 text-center bg-white rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center gap-3">
+             <Database className="w-10 h-10 text-slate-300" />
+             <p className="text-sm font-semibold text-slate-400 uppercase tracking-wide">Nenhum registro localizado no Painel Geral.</p>
           </div>
         )}
       </div>
 
       {docToDelete && (
-        <div id="delete-confirm-modal" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-2xl max-w-md w-full p-8 animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <TriangleAlert className="w-8 h-8" />
+        <div id="delete-confirm-modal" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 bg-red-50 text-red-500 rounded-xl flex items-center justify-center mx-auto mb-4 border border-red-100">
+              <TriangleAlert className="w-6 h-6" />
             </div>
-            <h3 className="text-[20px] font-black uppercase text-slate-800 text-center tracking-tight mb-2">Excluir Prontuário?</h3>
-            <p className="text-[13px] font-medium text-slate-500 text-center mb-6 leading-relaxed">
+            <h3 className="text-lg font-bold text-slate-900 text-center tracking-tight mb-2">Excluir Prontuário?</h3>
+            <p className="text-xs font-medium text-slate-500 text-center mb-6 leading-relaxed">
               Você está prestes a excluir permanentemente o prontuário <span className="font-bold text-slate-900">#{docToDelete}</span>. 
-              O sistema reverterá a escala e a distribuição de providência imediata para o estado anterior. Esta ação é <span className="font-bold text-red-600">irreversível</span>.
+              O sistema reverterá a escala e a distribuição de providência imediata para o estado anterior. Esta ação é <span className="font-semibold text-red-600">irreversível</span>.
             </p>
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2.5">
               <button
                 onClick={() => {
                   onDeleteDoc(docToDelete);
                   setDocToDelete(null);
                 }}
-                className="w-full py-4 bg-red-600 text-white rounded-xl font-black uppercase text-[11px] tracking-widest shadow-lg shadow-red-100 hover:bg-red-700 transition-all text-center cursor-pointer"
+                className="w-full py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold text-xs tracking-wide transition-all text-center cursor-pointer shadow-xs"
               >
                 Sim, Excluir Agora
               </button>
               <button
                 onClick={() => setDocToDelete(null)}
-                className="w-full py-4 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-xl font-black uppercase text-[11px] tracking-widest transition-all text-center cursor-pointer"
+                className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-semibold text-xs transition-all text-center cursor-pointer"
               >
                 Cancelar
               </button>

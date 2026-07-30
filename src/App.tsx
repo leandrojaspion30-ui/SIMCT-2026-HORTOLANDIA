@@ -1081,43 +1081,67 @@ const App: React.FC = () => {
       case 'dashboard': 
         return (
           <div className="space-y-6">
-            {pendingValidations.length > 0 && (
-              <div 
-                className="p-6 bg-red-600 rounded-[2rem] border-4 border-red-500 shadow-2xl animate-pulse flex items-center justify-between group hover:scale-[1.01] transition-all cursor-pointer" 
-                onClick={() => handleOpenDocument(pendingValidations[0].id, true)}
-              >
-                 <div className="flex items-center gap-6">
-                    <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center">
-                       <BellRing className="w-8 h-8 text-white" />
+            {/* CENTRAL DE ALERTAS UNIFICADA */}
+            {(pendingValidations.length > 0 || expiredMonitoringItems.length > 0) && (
+              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 transition-all">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 border border-amber-200/80 flex items-center justify-center shrink-0 shadow-2xs">
+                      <BellRing className="w-5 h-5 text-amber-600" />
                     </div>
                     <div>
-                       <h3 className="text-white font-black text-[18px] uppercase tracking-tight">Validação Pendente no Colegiado!</h3>
-                       <p className="text-white/80 text-[12px] font-bold uppercase tracking-widest mt-1">Você possui {pendingValidations.length} {pendingValidations.length === 1 ? 'procedimento aguardando' : 'procedimentos aguardando'} sua assinatura técnica.</p>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-bold text-slate-900 tracking-tight">Central de Alertas</h3>
+                        <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[11px] font-bold">
+                          {pendingValidations.length + expiredMonitoringItems.length}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 mt-1 text-xs font-medium text-slate-600">
+                        {pendingValidations.length > 0 && (
+                          <span className="flex items-center gap-1.5 text-red-600 font-medium">
+                            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                            {pendingValidations.length} {pendingValidations.length === 1 ? 'procedimento aguardando validação' : 'procedimentos aguardando validação'}
+                          </span>
+                        )}
+                        {pendingValidations.length > 0 && expiredMonitoringItems.length > 0 && (
+                          <span className="text-slate-300">•</span>
+                        )}
+                        {expiredMonitoringItems.length > 0 && (
+                          <span className="flex items-center gap-1.5 text-amber-700 font-medium">
+                            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                            {expiredMonitoringItems.length} {expiredMonitoringItems.length === 1 ? 'monitoramento vencido' : 'monitoramentos vencidos'}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                 </div>
-                 <div className="px-6 py-3 bg-white text-red-600 rounded-xl font-black text-[11px] uppercase tracking-widest flex items-center gap-2">
-                    Validar Agora <ArrowRight className="w-4 h-4" />
-                 </div>
-              </div>
-            )}
+                  </div>
 
-            {expiredMonitoringItems.length > 0 && (
-              <div 
-                className="p-6 bg-amber-500 rounded-[2rem] border-4 border-amber-400 shadow-xl flex items-center justify-between group hover:scale-[1.01] transition-all cursor-pointer" 
-                onClick={() => navigateTo('monitoring')}
-              >
-                 <div className="flex items-center gap-6">
-                    <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center">
-                       <Timer className="w-8 h-8 text-white" />
-                    </div>
-                    <div>
-                       <h3 className="text-white font-black text-[18px] uppercase tracking-tight">Monitoramento com Prazo Vencido!</h3>
-                       <p className="text-white/80 text-[12px] font-bold uppercase tracking-widest mt-1">Existem {expiredMonitoringItems.length} {expiredMonitoringItems.length === 1 ? 'requisição de serviço' : 'requisições de serviços'} com prazo expirado sob sua responsabilidade.</p>
-                    </div>
-                 </div>
-                 <div className="px-6 py-3 bg-white text-amber-600 rounded-xl font-black text-[11px] uppercase tracking-widest flex items-center gap-2">
-                    Ver Monitoramento <ArrowRight className="w-4 h-4" />
-                 </div>
+                  <div className="flex flex-wrap items-center gap-2 self-start md:self-center shrink-0">
+                    {pendingValidations.length > 0 && (
+                      <button 
+                        onClick={() => {
+                          setDashboardViewMode('VALID');
+                          if (pendingValidations[0]) {
+                            handleOpenDocument(pendingValidations[0].id, true);
+                          }
+                        }}
+                        className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <span>Validar Agora ({pendingValidations.length})</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {expiredMonitoringItems.length > 0 && (
+                      <button 
+                        onClick={() => navigateTo('monitoring')}
+                        className="px-4 py-2.5 bg-amber-50 border border-amber-200/80 text-amber-800 hover:bg-amber-100 rounded-xl font-semibold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <span>Ver Monitoramento ({expiredMonitoringItems.length})</span>
+                        <ArrowRight className="w-3.5 h-3.5 text-amber-700" />
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
             <DocumentList 
