@@ -6,11 +6,12 @@ import {
   CheckCircle, CheckCircle2, ChevronDown, Play, Users, Tag, FileCheck2,
   Database, Fingerprint, MapPin, Building2, UserCog, Search, LayoutList,
   ChevronRight, Timer, ArrowUpRight, ShieldCheck, Box, FileText, Baby,
-  AlertTriangle, Trash2, Zap
+  AlertTriangle, Trash2, Zap, Bell, BellRing
 } from 'lucide-react';
 import { 
   Documento, Log, User as UserType, DocumentStatus, 
-  MedidaAplicada, SipiaViolation, AgenteVioladorEntry, LogType, AgendaEntry, ScaleException
+  MedidaAplicada, SipiaViolation, AgenteVioladorEntry, LogType, AgendaEntry, ScaleException,
+  AlertaStatusReferencia
 } from '../types';
 import { 
   STATUS_LABELS, INITIAL_USERS, 
@@ -39,7 +40,7 @@ interface DocumentViewProps {
   onUpdateStatus: (id: string, status: DocumentStatus[]) => void;
   onUpdateDocument: (id: string, fields: Partial<Documento>) => void;
   onAddLog: (docId: string, acao: string, tipo?: LogType) => void;
-  onScience: (id: string) => void;
+  onScience: (id: string, alertId?: string) => void;
   nameMap?: Record<string, string>;
   scaleExceptions?: ScaleException[];
 }
@@ -133,6 +134,14 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const isConselheiro = currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE';
   const canEditTechnicalFields = isActualProvidenciaImediata && !isADM;
   const canEditIdentifiers = isResponsible || isADM;
+
+  const isReferenceCounselor = doc.conselheiro_referencia_id === currentUser.id ||
+    (currentUser.is_suplente_active && currentUser.real_user_id && doc.conselheiro_referencia_id === currentUser.real_user_id);
+
+  const unreadRefAlerts = useMemo(() => {
+    if (!isReferenceCounselor) return [];
+    return (doc.alertas_status_referencia || []).filter(a => !a.lido);
+  }, [isReferenceCounselor, doc.alertas_status_referencia]);
 
   // INTELIGÊNCIA SIMCT: Dossiê Familiar Cruzado
   const familyDossier = useMemo(() => {
@@ -257,11 +266,29 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     nextStatus = nextStatus.filter(s => s !== newStatus);
     nextStatus.push(newStatus);
 
+    let updatedAlerts = [...(doc.alertas_status_referencia || [])];
+    if (doc.conselheiro_referencia_id && currentUser.id !== doc.conselheiro_referencia_id) {
+      const prevStatus = doc.status[doc.status.length - 1] || 'AGUARDANDO_ANALISE';
+      const newAlert: AlertaStatusReferencia = {
+        id: `alerta_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        documento_id: doc.id,
+        conselheiro_referencia_id: doc.conselheiro_referencia_id,
+        alterado_por_id: currentUser.id,
+        alterado_por_nome: currentUser.nome,
+        status_anterior: prevStatus,
+        status_novo: newStatus,
+        data_hora: new Date().toISOString(),
+        lido: false
+      };
+      updatedAlerts.push(newAlert);
+    }
+
     onUpdateDocument(doc.id, { 
       status: nextStatus,
+      alertas_status_referencia: updatedAlerts,
       medidas_detalhadas: (newStatus === 'ARQUIVADO' || newStatus === 'CONCLUIDO') ? [] : doc.medidas_detalhadas
     });
-    onAddLog(doc.id, `MOVIMENTAÇÃO ADMINISTRATIVA: Situação alterada para [${STATUS_LABELS[newStatus]}]. Validação automática por autonomia.`, 'DOCUMENTO');
+    onAddLog(doc.id, `MOVIMENTAÇÃO ADMINISTRATIVA: Situação alterada para [${STATUS_LABELS[newStatus] || newStatus}]. Alerta enviado ao Conselheiro de Referência.`, 'DOCUMENTO');
   };
 
   const hasEcaMeasuresInDoc = (doc.medidas_detalhadas || []).some(m => 
@@ -467,6 +494,23 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       }
     }
 
+    const prevLatest = doc.status[doc.status.length - 1];
+    const newLatest = statusFinal[statusFinal.length - 1];
+    let updatedAlerts = [...(doc.alertas_status_referencia || [])];
+    if (newLatest && prevLatest !== newLatest && doc.conselheiro_referencia_id && currentUser.id !== doc.conselheiro_referencia_id) {
+      updatedAlerts.push({
+        id: `alerta_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        documento_id: doc.id,
+        conselheiro_referencia_id: doc.conselheiro_referencia_id,
+        alterado_por_id: currentUser.id,
+        alterado_por_nome: currentUser.nome,
+        status_anterior: prevLatest || 'AGUARDANDO_ANALISE',
+        status_novo: newLatest,
+        data_hora: new Date().toISOString(),
+        lido: false
+      });
+    }
+
     onUpdateDocument(doc.id, { 
       violacoesSipia: isImprocedente ? [] : tempViolacoes, 
       agentesVioladores: isImprocedente ? [{ categoria: 'INEXISTENTE', principal: 'FATO NÃO COMPROVADO', tipo: 'PRINCIPAL' }] : tempAgentes, 
@@ -474,6 +518,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       atribuicoes_136: selectedAtribuicoes,
       atribuicoes_136_detalhadas: atribuicoesDetalhadas,
       status: statusFinal,
+      alertas_status_referencia: updatedAlerts,
       relato_providencias: relatoProvidencias,
       despacho_situacao: despachoSituacao,
       is_improcedente: isImprocedente,
@@ -575,9 +620,27 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       !slotsToValidate.some(slotName => isSameCounselorName(nome, slotName) || isSameCounselorName(nome, currentUser.nome))
     );
 
+    const prevLatest = doc.status[doc.status.length - 1];
+    const newLatest = nextStatus[nextStatus.length - 1];
+    let updatedAlerts = [...(doc.alertas_status_referencia || [])];
+    if (newLatest && prevLatest !== newLatest && doc.conselheiro_referencia_id && currentUser.id !== doc.conselheiro_referencia_id) {
+      updatedAlerts.push({
+        id: `alerta_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        documento_id: doc.id,
+        conselheiro_referencia_id: doc.conselheiro_referencia_id,
+        alterado_por_id: currentUser.id,
+        alterado_por_nome: currentUser.nome,
+        status_anterior: prevLatest || 'AGUARDANDO_ANALISE',
+        status_novo: newLatest,
+        data_hora: new Date().toISOString(),
+        lido: false
+      });
+    }
+
     onUpdateDocument(doc.id, { 
       medidas_detalhadas: updated, 
       status: nextStatus,
+      alertas_status_referencia: updatedAlerts,
       notificacoes_trio: nextNotificacoes
     });
 
@@ -659,6 +722,43 @@ const DocumentView: React.FC<DocumentViewProps> = ({
               </div>
            </div>
         </div>
+
+        {/* ALERTA DE CIÊNCIA AO CONSELHEIRO DE REFERÊNCIA */}
+        {unreadRefAlerts.length > 0 && (
+          <div className="bg-amber-500/10 border-b border-amber-300 p-5 md:p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-start gap-4 text-amber-950">
+              <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
+                <BellRing className="w-5 h-5 animate-bounce" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-black uppercase tracking-tight text-amber-950">
+                    Alerta para o Conselheiro de Referência
+                  </h4>
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-200 border border-amber-300 text-amber-900 text-[10px] font-bold uppercase">
+                    Ciência Pendente
+                  </span>
+                </div>
+                <div className="space-y-1 mt-1 text-xs text-amber-900 font-medium">
+                  {unreadRefAlerts.map(a => (
+                    <p key={a.id}>
+                      O conselheiro de providência imediata <strong>{a.alterado_por_nome}</strong> alterou a situação deste prontuário de <span className="underline font-bold">[{STATUS_LABELS[a.status_anterior as DocumentStatus] || a.status_anterior}]</span> para <strong className="text-amber-950 bg-amber-200/80 px-1.5 py-0.5 rounded font-bold">[{STATUS_LABELS[a.status_novo as DocumentStatus] || a.status_novo}]</strong> em {new Date(a.data_hora).toLocaleString('pt-BR')}.
+                    </p>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                unreadRefAlerts.forEach(a => onScience(doc.id, a.id));
+              }}
+              className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2 shrink-0 cursor-pointer self-end md:self-center"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Registrar Ciência</span>
+            </button>
+          </div>
+        )}
 
         {/* ALERTA DE REVALIDAÇÃO OBRIGATÓRIA OU VALIDAÇÃO PENDENTE */}
         {showCollegiateValidation && (((doc.notificacoes_trio || []).some(n => isUserInTrio(n) || (nameMap && isUserInTrio(nameMap[n.toUpperCase()]))) || doc.status.includes('AGUARDANDO_VALIDACAO'))) && (

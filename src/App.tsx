@@ -576,6 +576,47 @@ const App: React.FC = () => {
     });
   }, [documents, currentUser]);
 
+  const unreadReferenceAlerts = useMemo(() => {
+    if (!currentUser) return [];
+    return documents.filter(d => {
+      const isRef = d.conselheiro_referencia_id === currentUser.id ||
+        (currentUser.is_suplente_active && currentUser.real_user_id && d.conselheiro_referencia_id === currentUser.real_user_id);
+      return isRef && (d.alertas_status_referencia || []).some(a => !a.lido);
+    });
+  }, [documents, currentUser]);
+
+  const handleScience = async (docId: string, alertId?: string) => {
+    const targetDoc = documents.find(d => d.id === docId);
+    if (!targetDoc || !currentUser) return;
+
+    const currentScience = targetDoc.ciência_registrada_por || [];
+    const updatedScience = currentScience.includes(currentUser.nome) 
+      ? currentScience 
+      : [...currentScience, currentUser.nome];
+
+    let updatedAlerts = targetDoc.alertas_status_referencia || [];
+    if (alertId) {
+      updatedAlerts = updatedAlerts.map(a => 
+        a.id === alertId ? { ...a, lido: true, ciência_data_hora: new Date().toISOString() } : a
+      );
+    } else {
+      updatedAlerts = updatedAlerts.map(a => 
+        (a.conselheiro_referencia_id === currentUser.id || 
+         (currentUser.is_suplente_active && currentUser.real_user_id && a.conselheiro_referencia_id === currentUser.real_user_id))
+          ? { ...a, lido: true, ciência_data_hora: new Date().toISOString() }
+          : a
+      );
+    }
+
+    await saveDocument({
+      id: docId,
+      ciência_registrada_por: updatedScience,
+      alertas_status_referencia: updatedAlerts
+    });
+
+    addLog(docId, `CIÊNCIA REGISTRADA: Conselheiro de Referência [${currentUser.nome}] registrou ciência sobre movimentação de situação no prontuário.`, 'DOCUMENTO');
+  };
+
   const handleLogout = () => {
     setIsLogoutModalOpen(true);
   };
@@ -1086,7 +1127,7 @@ const App: React.FC = () => {
       }} onUpdateStatus={async (id, s) => {
           addLog(id, `STATUS: Documento alterado para a situação [${s[s.length-1]}].`, 'SISTEMA');
           await saveDocument({ id, status: s });
-      }} onUpdateDocument={async (id, fields) => await saveDocument({ ...fields, id })} onAddLog={addLog} onScience={() => {}} nameMap={userNameMap} scaleExceptions={scaleExceptions} />;
+      }} onUpdateDocument={async (id, fields) => await saveDocument({ ...fields, id })} onAddLog={addLog} onScience={handleScience} nameMap={userNameMap} scaleExceptions={scaleExceptions} />;
     }
 
     if (activeTab === 'logs' && !(isSuperAdmin || isAdministrative)) {
@@ -1099,7 +1140,7 @@ const App: React.FC = () => {
         return (
           <div className="space-y-6">
             {/* CENTRAL DE ALERTAS UNIFICADA */}
-            {(pendingValidations.length > 0 || expiredMonitoringItems.length > 0) && (
+            {(pendingValidations.length > 0 || expiredMonitoringItems.length > 0 || unreadReferenceAlerts.length > 0) && (
               <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 transition-all">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-center gap-3.5">
@@ -1110,7 +1151,7 @@ const App: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <h3 className="text-sm font-bold text-slate-900 tracking-tight">Central de Alertas</h3>
                         <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[11px] font-bold">
-                          {pendingValidations.length + expiredMonitoringItems.length}
+                          {pendingValidations.length + expiredMonitoringItems.length + unreadReferenceAlerts.length}
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-3 mt-1 text-xs font-medium text-slate-600">
@@ -1120,7 +1161,7 @@ const App: React.FC = () => {
                             {pendingValidations.length} {pendingValidations.length === 1 ? 'procedimento aguardando validação' : 'procedimentos aguardando validação'}
                           </span>
                         )}
-                        {pendingValidations.length > 0 && expiredMonitoringItems.length > 0 && (
+                        {pendingValidations.length > 0 && (expiredMonitoringItems.length > 0 || unreadReferenceAlerts.length > 0) && (
                           <span className="text-slate-300">•</span>
                         )}
                         {expiredMonitoringItems.length > 0 && (
@@ -1129,11 +1170,34 @@ const App: React.FC = () => {
                             {expiredMonitoringItems.length} {expiredMonitoringItems.length === 1 ? 'monitoramento vencido' : 'monitoramentos vencidos'}
                           </span>
                         )}
+                        {expiredMonitoringItems.length > 0 && unreadReferenceAlerts.length > 0 && (
+                          <span className="text-slate-300">•</span>
+                        )}
+                        {unreadReferenceAlerts.length > 0 && (
+                          <span className="flex items-center gap-1.5 text-amber-800 font-bold">
+                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-bounce"></span>
+                            {unreadReferenceAlerts.length} {unreadReferenceAlerts.length === 1 ? 'alerta de ciência (referência)' : 'alertas de ciência (referência)'}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 self-start md:self-center shrink-0">
+                    {unreadReferenceAlerts.length > 0 && (
+                      <button 
+                        onClick={() => {
+                          setDashboardViewMode('REF');
+                          if (unreadReferenceAlerts[0]) {
+                            handleOpenDocument(unreadReferenceAlerts[0].id, true);
+                          }
+                        }}
+                        className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <span>Minha Referência ({unreadReferenceAlerts.length})</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     {pendingValidations.length > 0 && (
                       <button 
                         onClick={() => {
@@ -1174,7 +1238,7 @@ const App: React.FC = () => {
                 addLog(id, `EXCLUSÃO: Documento removido permanentemente via Painel Geral.`, 'DOCUMENTO');
                 await deleteDocument(id);
               }} 
-              onScience={() => {}} 
+              onScience={handleScience} 
               onUpdateStatus={async (id, newStatus) => {
                 const lastS = newStatus[newStatus.length - 1];
                 const label = STATUS_LABELS[lastS] || lastS;
@@ -1233,8 +1297,13 @@ const App: React.FC = () => {
               addLog(id, `EXCLUSÃO: Documento removido permanentemente via Minha Referência.`, 'DOCUMENTO');
               await deleteDocument(id);
             }} 
-            onScience={() => {}} 
-            onUpdateStatus={() => {}} 
+            onScience={handleScience} 
+            onUpdateStatus={async (id, newStatus) => {
+              const lastS = newStatus[newStatus.length - 1];
+              const label = STATUS_LABELS[lastS] || lastS;
+              addLog(id, `STATUS: Situação do caso alterada para [${label}] na Minha Referência.`, 'SISTEMA');
+              await saveDocument({ id, status: newStatus });
+            }}  
             isMyReferenceView={true} 
             expandedFolders={myDocsExpandedFolders}
             onExpandedFoldersChange={setMyDocsExpandedFolders}

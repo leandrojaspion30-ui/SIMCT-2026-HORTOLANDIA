@@ -141,6 +141,19 @@ export interface SnapshotComparativo {
   observacao_monitoramento: string;
 }
 
+export interface AlertaStatusReferencia {
+  id: string;
+  documento_id: string;
+  conselheiro_referencia_id: string;
+  alterado_por_id: string;
+  alterado_por_nome: string;
+  status_anterior: string;
+  status_novo: string;
+  data_hora: string;
+  lido: boolean;
+  ciência_data_hora?: string;
+}
+
 export interface Documento {
   id: string;
   unidade_id: number;
@@ -201,6 +214,7 @@ export interface Documento {
   is_manual_providencia?: boolean;
   providencia_imediata_manual?: string;
   local_ocorrencia?: string;
+  alertas_status_referencia?: AlertaStatusReferencia[];
 }
 
 export interface Atribuicao136Entry {

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, ChevronUp, Folder, FolderOpen, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database, Trash2, Timer, Calendar, GraduationCap, Stethoscope, HandHeart, Phone, Mail, Siren, PhoneCall } from 'lucide-react';
+import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, ChevronUp, Folder, FolderOpen, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database, Trash2, Timer, Calendar, GraduationCap, Stethoscope, HandHeart, Phone, Mail, Siren, PhoneCall, Bell, BellRing } from 'lucide-react';
 import { Documento, User as UserType, DocumentStatus, ScaleException } from '../types';
 import { STATUS_LABELS, INITIAL_USERS, BAIRROS, getBairrosByUnidade, isSameCounselorName, getEffectiveEscala } from '../constants';
 import { formatLocalDateString, parseLocalDate, formatCadastroDateTime } from '../lib/dateUtils';
@@ -162,7 +162,7 @@ interface DocumentListProps {
   onSelectDoc: (id: string) => void;
   onEditDoc: (id: string) => void;
   onDeleteDoc: (id: string) => void;
-  onScience: (id: string) => void;
+  onScience: (id: string, alertId?: string) => void;
   onUpdateStatus: (id: string, status: DocumentStatus[]) => void;
   isReadOnly?: boolean;
   isMyReferenceView?: boolean;
@@ -187,6 +187,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
   onSelectDoc, 
   onEditDoc, 
   onDeleteDoc, 
+  onScience = () => {},
   onUpdateStatus,
   isReadOnly, 
   isMyReferenceView,
@@ -553,6 +554,13 @@ const DocumentList: React.FC<DocumentListProps> = ({
     const origemInfo = getOrigemIconAndStyle(doc.origem);
     const canalInfo = getCanalIconAndStyle(doc.canal_comunicado);
 
+    const isReferenceCounselor = doc.conselheiro_referencia_id === currentUser.id ||
+      (currentUser.is_suplente_active && currentUser.real_user_id && doc.conselheiro_referencia_id === currentUser.real_user_id);
+
+    const unreadRefAlerts = isReferenceCounselor 
+      ? (doc.alertas_status_referencia || []).filter(a => !a.lido)
+      : [];
+
     return (
       <div 
         key={doc.id} 
@@ -597,6 +605,38 @@ const DocumentList: React.FC<DocumentListProps> = ({
 
               <span className="text-[12px] font-mono text-slate-400 font-medium">#{doc.id}</span>
             </div>
+
+            {/* ALERTA DE CIÊNCIA AO CONSELHEIRO DE REFERÊNCIA NO CARD */}
+            {unreadRefAlerts.length > 0 && (
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                className="w-full p-2.5 bg-amber-50 border border-amber-300 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-amber-900 my-2 shadow-2xs"
+              >
+                <div className="flex items-center gap-2">
+                  <Bell className="w-4 h-4 text-amber-600 shrink-0 animate-bounce" />
+                  <div>
+                    <span className="font-bold text-amber-950">Alerta (Conselheiro de Referência):</span>{' '}
+                    {unreadRefAlerts.map((a, idx) => (
+                      <span key={a.id}>
+                        {idx > 0 && ' | '}
+                        O conselheiro de providência imediata <strong>{a.alterado_por_nome}</strong> alterou a situação para <strong className="text-amber-950 font-bold">[{STATUS_LABELS[a.status_novo as DocumentStatus] || a.status_novo}]</strong>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    unreadRefAlerts.forEach(a => onScience(doc.id, a.id));
+                  }}
+                  className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-[11px] shrink-0 transition-all cursor-pointer shadow-2xs flex items-center gap-1.5 self-end sm:self-center"
+                  title="Registrar ciência da alteração de status"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Dar Ciência</span>
+                </button>
+              </div>
+            )}
 
             {/* Child Name (18px, font 600) */}
             <div>
@@ -974,6 +1014,12 @@ const DocumentList: React.FC<DocumentListProps> = ({
                 return deadline.getTime() < new Date().setHours(0,0,0,0);
               })) {
                 expiredMonitoramentoCount++;
+              }
+
+              const isRef = doc.conselheiro_referencia_id === currentUser.id ||
+                (currentUser.is_suplente_active && currentUser.real_user_id && doc.conselheiro_referencia_id === currentUser.real_user_id);
+              if (isRef && (doc.alertas_status_referencia || []).some(a => !a.lido)) {
+                revalidacaoCount++;
               }
             });
 
