@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, ArrowLeft, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart, Timer, Save, Eye, EyeOff, RefreshCw, MessageSquare } from 'lucide-react';
 import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada, ScaleException, ChatMessage } from './types';
-import { INITIAL_USERS, UserWithPassword, INITIAL_AGENDA, getUnidadeByBairro, STATUS_LABELS } from './constants';
+import { INITIAL_USERS, UserWithPassword, INITIAL_AGENDA, getUnidadeByBairro, STATUS_LABELS, getEffectiveEscala, isSameCounselorName } from './constants';
 import { db, ensureAuthenticated } from './lib/firebase';
 import { syncCollection, saveDocument, saveLog, saveAgenda, deleteDocument, deleteAgenda, saveUser, deleteUser, deleteAllDocuments, saveScaleException, deleteScaleException } from './lib/db';
 import ConfidentialityTermModal from './components/ConfidentialityTermModal';
@@ -512,24 +512,36 @@ const App: React.FC = () => {
   }, [users]);
 
   const pendingValidations = useMemo(() => {
-    if (!currentUser || (currentUser.perfil !== 'CONSELHEIRO' && currentUser.perfil !== 'SUPLENTE')) return [];
+    if (!currentUser) return [];
     return documents.filter(d => {
        const isAwaiting = d.status.includes('AGUARDANDO_VALIDACAO');
-       const inTrio = d.conselheiros_providencia_nomes?.some(name => {
-         if (!name) return false;
-         const upper = name.toUpperCase();
-         if (upper === currentUser.nome.toUpperCase()) return true;
-         const cleanCurrentUserName = currentUser.nome.toUpperCase().split('(')[0].trim();
-         if (upper === cleanCurrentUserName) return true;
-         if (currentUser.is_suplente_active && currentUser.substituted_name && upper === currentUser.substituted_name.toUpperCase()) return true;
-         return false;
-       }) || false;
-       const alreadyValidated = d.medidas_detalhadas?.some(m => 
-         m.confirmacoes?.some(c => c.usuario_id === currentUser.id || c.usuario_id === currentUser.real_user_id)
+       const hasNotif = (d.notificacoes_trio || []).some(n => 
+         isSameCounselorName(n, currentUser.nome) || 
+         (currentUser.is_suplente_active && currentUser.substituted_name && isSameCounselorName(n, currentUser.substituted_name))
        );
-       return isAwaiting && inTrio && !alreadyValidated;
+
+       const trioRaw = (d.conselheiros_providencia_nomes && d.conselheiros_providencia_nomes.length > 0)
+         ? d.conselheiros_providencia_nomes
+         : getEffectiveEscala(d.data_aporte, d.hora_aporte, d.unidade_id, userNameMap, scaleExceptions);
+
+       const inTrio = hasNotif || trioRaw.some(name => {
+         if (!name) return false;
+         if (isSameCounselorName(name, currentUser.nome)) return true;
+         if (currentUser.is_suplente_active && currentUser.substituted_name && isSameCounselorName(name, currentUser.substituted_name)) return true;
+         if (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO') return true;
+         return false;
+       });
+
+       const confirmacoes = d.medidas_detalhadas?.[0]?.confirmacoes || [];
+       const iValidated = !hasNotif && confirmacoes.some(c => 
+         c.usuario_id === currentUser.id || 
+         c.usuario_id === currentUser.real_user_id ||
+         isSameCounselorName(c.usuario_nome, currentUser.nome)
+       );
+
+       return (isAwaiting || hasNotif) && inTrio && !iValidated;
     });
-  }, [documents, currentUser]);
+  }, [documents, currentUser, userNameMap, scaleExceptions]);
 
   // DIRETRIZ: Alertas de Monitoramento Vencido
   const expiredMonitoringItems = useMemo(() => {
@@ -1148,6 +1160,8 @@ const App: React.FC = () => {
               documents={documents} 
               users={users} 
               currentUser={currentUser} 
+              nameMap={userNameMap}
+              scaleExceptions={scaleExceptions}
               isReadOnly={false} 
               onSelectDoc={handleOpenDocument} 
               onEditDoc={(id) => navigateTo('edit', { editId: id })} 
@@ -1205,6 +1219,8 @@ const App: React.FC = () => {
             documents={myReferencedDocs} 
             users={users} 
             currentUser={currentUser} 
+            nameMap={userNameMap}
+            scaleExceptions={scaleExceptions}
             isReadOnly={false} 
             onSelectDoc={(id) => handleOpenDocument(id, true)} 
             onEditDoc={(id) => navigateTo('edit', { editId: id })} 

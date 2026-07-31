@@ -271,24 +271,27 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     const trio = trioRaw.map(n => (nameMap && nameMap[n.toUpperCase()]) ? nameMap[n.toUpperCase()] : n);
     
     const confirmacoes = doc.medidas_detalhadas?.[0]?.confirmacoes || [];
+    const notificacoes = doc.notificacoes_trio || [];
+
     return trio.map(name => {
-      const match = confirmacoes.find(c => {
+      const isNotified = notificacoes.some(n => isSameCounselorName(n, name));
+      const match = !isNotified && confirmacoes.find(c => {
         const signatureName = c.usuario_nome.toUpperCase();
         const upperName = name.toUpperCase();
         if (signatureName.includes(upperName)) return true;
         if (INITIAL_USERS.some(iu => iu.id === c.usuario_id && iu.nome.toUpperCase() === upperName)) return true;
         const signingUser = users.find(u => u.id === c.usuario_id);
         if (signingUser && isSameCounselorName(signingUser.nome, name)) return true;
-        return false;
+        return isSameCounselorName(c.usuario_nome, name);
       });
       return { 
         name, 
         validated: !!match, 
-        timestamp: match?.usuario_nome.split(' - ')[1] || null,
-        needsRevalidation: (doc.status.includes('AGUARDANDO_VALIDACAO') || doc.status.includes('MEDIDA_APLICADA')) && !match && confirmacoes.length > 0
+        timestamp: match ? match.usuario_nome.split(' - ')[1] || null : null,
+        needsRevalidation: isNotified || ((doc.status.includes('AGUARDANDO_VALIDACAO') || doc.status.includes('MEDIDA_APLICADA')) && !match)
       };
     });
-  }, [doc.conselheiros_providencia_nomes, doc.medidas_detalhadas, doc.status, doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap, scaleExceptions, users]);
+  }, [doc.conselheiros_providencia_nomes, doc.medidas_detalhadas, doc.status, doc.data_aporte, doc.hora_aporte, doc.unidade_id, doc.notificacoes_trio, nameMap, scaleExceptions, users]);
 
   const handleSave = (finalize: boolean) => {
     if (!canEditTechnicalFields) return;
@@ -633,25 +636,34 @@ const DocumentView: React.FC<DocumentViewProps> = ({
            </div>
         </div>
 
-        {/* ALERTA DE REVALIDAÇÃO OBRIGATÓRIA */}
-        {(doc.notificacoes_trio || []).some(n => isUserInTrio(n) || (nameMap && isUserInTrio(nameMap[n.toUpperCase()]))) && (
-          <div className="bg-red-600 p-6 flex items-center justify-between animate-pulse">
+        {/* ALERTA DE REVALIDAÇÃO OBRIGATÓRIA OU VALIDAÇÃO PENDENTE */}
+        {((doc.notificacoes_trio || []).some(n => isUserInTrio(n) || (nameMap && isUserInTrio(nameMap[n.toUpperCase()]))) || doc.status.includes('AGUARDANDO_VALIDACAO')) && (
+          <div className="bg-gradient-to-r from-amber-600 to-red-600 p-6 flex flex-col md:flex-row items-center justify-between gap-4 animate-pulse">
             <div className="flex items-center gap-4 text-white">
-              <ShieldAlert className="w-8 h-8" />
+              <ShieldAlert className="w-8 h-8 shrink-0" />
               <div>
-                <h4 className="text-[14px] font-black uppercase tracking-tighter">Atenção: Revalidação Obrigatória</h4>
-                <p className="text-[11px] font-bold uppercase opacity-90">Houve uma edição técnica neste prontuário. Você precisa validar as novas medidas/atribuições.</p>
+                <h4 className="text-[14px] font-black uppercase tracking-tighter">Atenção: Validação / Revalidação Pendente</h4>
+                <p className="text-[11px] font-bold uppercase opacity-90">Este prontuário possui medidas/atribuições aguardando validação do colegiado.</p>
               </div>
             </div>
-            <button 
-              onClick={() => {
-                const section = document.getElementById('validacao-trio');
-                if (section) section.scrollIntoView({ behavior: 'smooth' });
-              }}
-              className="px-6 py-3 bg-white text-red-600 rounded-xl text-[10px] font-black uppercase hover:bg-slate-100 transition-all shadow-lg"
-            >
-              Ir para Validação
-            </button>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={handleValidate}
+                className="px-6 py-3 bg-white text-emerald-700 hover:bg-emerald-50 rounded-xl text-[11px] font-black uppercase transition-all shadow-lg flex items-center gap-2 cursor-pointer shrink-0"
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>Validar & Assinar Agora</span>
+              </button>
+              <button 
+                onClick={() => {
+                  const section = document.getElementById('validacao-trio');
+                  if (section) section.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="px-4 py-3 bg-black/20 hover:bg-black/30 text-white rounded-xl text-[10px] font-black uppercase transition-all border border-white/20 cursor-pointer shrink-0"
+              >
+                Ver Detalhes
+              </button>
+            </div>
           </div>
         )}
 
@@ -1160,20 +1172,27 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                   </div>
                </div>
 
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-6" id="validacao-trio">
                   {validationTracker.map((status, idx) => {
-                    const isMe = isUserInTrio(status.name);
+                    const isMe = isUserInTrio(status.name) || currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
+                    const isUserNotified = (doc.notificacoes_trio || []).some(n => isUserInTrio(n) || isSameCounselorName(n, status.name));
+                    const canValidateThisSlot = isMe;
+                    const isPending = !status.validated || isUserNotified || status.needsRevalidation || doc.status.includes('AGUARDANDO_VALIDACAO');
+
                     return (
-                      <div key={idx} className={`p-6 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${status.validated ? 'bg-white border-emerald-500 shadow-md' : status.needsRevalidation ? 'bg-red-50 border-red-300 animate-pulse' : 'bg-slate-100 border-slate-200 opacity-60'}`}>
+                      <div key={idx} className={`p-6 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${status.validated && !isUserNotified ? 'bg-white border-emerald-500 shadow-md' : (status.needsRevalidation || isUserNotified) ? 'bg-red-50 border-red-300 animate-pulse' : 'bg-slate-100 border-slate-200 opacity-60'}`}>
                          <span className="text-[12px] font-black uppercase text-slate-700">{status.name}</span>
-                         <div className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase ${status.validated ? 'bg-emerald-500 text-white' : status.needsRevalidation ? 'bg-red-500 text-white' : 'bg-slate-200 text-slate-500'}`}>
-                            {status.validated ? `VALIDADO` : status.needsRevalidation ? 'REVALIDAÇÃO NECESSÁRIA' : 'AGUARDANDO'}
+                         <div className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase ${status.validated && !isUserNotified ? 'bg-emerald-500 text-white' : (status.needsRevalidation || isUserNotified) ? 'bg-red-500 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                            {status.validated && !isUserNotified ? `VALIDADO` : (status.needsRevalidation || isUserNotified) ? 'REVALIDAÇÃO NECESSÁRIA' : 'AGUARDANDO'}
                          </div>
-                         {status.validated && status.timestamp && (
+                         {status.validated && status.timestamp && !isUserNotified && (
                            <span className="text-[8px] font-bold text-slate-400 uppercase">{status.timestamp}</span>
                          )}
-                         {!status.validated && isMe && (doc.status.includes('AGUARDANDO_VALIDACAO') || status.needsRevalidation || doc.status.includes('MEDIDA_APLICADA')) && (
-                           <button onClick={handleValidate} className="mt-2 py-2 px-4 bg-emerald-600 text-white rounded-xl text-[9px] font-black uppercase shadow-lg hover:bg-emerald-700 transition-all">Validar & Assinar</button>
+                         {canValidateThisSlot && isPending && (
+                           <button onClick={handleValidate} className="mt-2 py-2.5 px-5 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-emerald-700 transition-all cursor-pointer flex items-center gap-1.5">
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span>Validar & Assinar</span>
+                           </button>
                          )}
                       </div>
                     );

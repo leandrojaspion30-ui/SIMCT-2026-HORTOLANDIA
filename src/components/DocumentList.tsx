@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, ChevronUp, Folder, FolderOpen, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database, Trash2, Timer, Calendar, GraduationCap, Stethoscope, HandHeart, Phone, Mail, Siren, PhoneCall } from 'lucide-react';
-import { Documento, User as UserType, DocumentStatus } from '../types';
-import { STATUS_LABELS, INITIAL_USERS, BAIRROS, getBairrosByUnidade, isSameCounselorName } from '../constants';
+import { Documento, User as UserType, DocumentStatus, ScaleException } from '../types';
+import { STATUS_LABELS, INITIAL_USERS, BAIRROS, getBairrosByUnidade, isSameCounselorName, getEffectiveEscala } from '../constants';
 import { formatLocalDateString, parseLocalDate, formatCadastroDateTime } from '../lib/dateUtils';
 
 export const getOrigemIconAndStyle = (origemRaw?: string) => {
@@ -158,6 +158,7 @@ interface DocumentListProps {
   users: UserType[];
   currentUser: UserType;
   nameMap?: Record<string, string>;
+  scaleExceptions?: ScaleException[];
   onSelectDoc: (id: string) => void;
   onEditDoc: (id: string) => void;
   onDeleteDoc: (id: string) => void;
@@ -182,6 +183,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
   users, 
   currentUser, 
   nameMap,
+  scaleExceptions,
   onSelectDoc, 
   onEditDoc, 
   onDeleteDoc, 
@@ -446,16 +448,27 @@ const DocumentList: React.FC<DocumentListProps> = ({
     const mappedProvName = (rawProvName && nameMap && nameMap[rawProvName.toUpperCase()]) ? nameMap[rawProvName.toUpperCase()] : rawProvName;
     const provCouncilor = (mappedProvName && (users.find(u => u.status === 'ATIVO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && isSameCounselorName(u.nome, mappedProvName)) || users.find(u => u.status === 'ATIVO' && isSameCounselorName(u.nome, mappedProvName)))) || rawProvCouncilor;
     const confirmacoes = doc.medidas_detalhadas?.[0]?.confirmacoes || [];
-    const iValidated = confirmacoes.some(c => c.usuario_id === currentUser.id);
-    const isInTrio = doc.conselheiros_providencia_nomes?.some(name => {
+    const isNotified = (doc.notificacoes_trio || []).some(n => 
+      isSameCounselorName(n, currentUser.nome) || 
+      (currentUser.is_suplente_active && currentUser.substituted_name && isSameCounselorName(n, currentUser.substituted_name))
+    );
+    const trioRaw = (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.length > 0)
+      ? doc.conselheiros_providencia_nomes
+      : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap, scaleExceptions);
+
+    const isInTrio = isNotified || trioRaw.some(name => {
       if (!name) return false;
-      const upper = name.toUpperCase();
-      if (upper === currentUser.nome.toUpperCase()) return true;
-      const cleanCurrentUserName = currentUser.nome.toUpperCase().split('(')[0].trim();
-      if (upper === cleanCurrentUserName) return true;
-      if (currentUser.is_suplente_active && currentUser.substituted_name && upper === currentUser.substituted_name.toUpperCase()) return true;
+      if (isSameCounselorName(name, currentUser.nome)) return true;
+      if (currentUser.is_suplente_active && currentUser.substituted_name && isSameCounselorName(name, currentUser.substituted_name)) return true;
+      if (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO') return true;
       return false;
-    }) || false;
+    });
+
+    const iValidated = !isNotified && confirmacoes.some(c => 
+      c.usuario_id === currentUser.id || 
+      c.usuario_id === currentUser.real_user_id || 
+      isSameCounselorName(c.usuario_nome, currentUser.nome)
+    );
 
     let validationState: 'PENDING_SELF' | 'PENDING_OTHERS' | 'COMPLETED' | 'ADMIN_CONCLUDED' | undefined;
     let dynamicLabel = STATUS_LABELS[mainStatus];
