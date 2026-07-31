@@ -264,13 +264,19 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     onAddLog(doc.id, `MOVIMENTAÇÃO ADMINISTRATIVA: Situação alterada para [${STATUS_LABELS[newStatus]}]. Validação automática por autonomia.`, 'DOCUMENTO');
   };
 
+  const hasEcaMeasuresInDoc = (doc.medidas_detalhadas || []).some(m => 
+    m.artigo_inciso.startsWith('Art. 101') || m.artigo_inciso.startsWith('Art. 129')
+  );
+  const hasEcaMeasuresInEdit = selectedMedidas101.length > 0 || selectedMedidas129.length > 0;
+  const showCollegiateValidation = hasEcaMeasuresInDoc || (canEditTechnicalFields && hasEcaMeasuresInEdit);
+
   const validationTracker = useMemo(() => {
     const trioRaw = (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.length > 0)
       ? doc.conselheiros_providencia_nomes
       : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap, scaleExceptions);
     const trio = trioRaw.map(n => (nameMap && nameMap[n.toUpperCase()]) ? nameMap[n.toUpperCase()] : n);
     
-    const confirmacoes = doc.medidas_detalhadas?.[0]?.confirmacoes || [];
+    const confirmacoes = (doc.medidas_detalhadas || []).flatMap(m => m.confirmacoes || []);
     const notificacoes = doc.notificacoes_trio || [];
 
     return trio.map(name => {
@@ -337,13 +343,14 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     let confirmacoes = doc.medidas_detalhadas?.[0]?.confirmacoes || [];
     let notificacoesTrio = doc.notificacoes_trio || [];
 
+    const preservedTrio = (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.length > 0)
+      ? doc.conselheiros_providencia_nomes
+      : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap, scaleExceptions);
+
     if (isTechnicalChange && isActualProvidenciaImediata) {
-      // REFORÇO: Se houver mudança técnica / edição da Medida Aplicada, invalidamos assinaturas anteriores dos outros e notificamos o trio
+      // REFORÇO: Se houver mudança técnica / edição da Medida Aplicada, invalidamos assinaturas anteriores dos outros e notificamos o trio original
       confirmacoes = confirmacoes.filter(c => c.usuario_id === currentUser.id);
-      const escala = (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.length > 0)
-        ? doc.conselheiros_providencia_nomes
-        : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap, scaleExceptions);
-      notificacoesTrio = escala.filter(nome => !isUserInTrio(nome));
+      notificacoesTrio = preservedTrio.filter(nome => !isUserInTrio(nome));
     }
     
     const mySignature = { usuario_id: currentUser.id, usuario_nome: `${currentUser.nome} - ${formattedDate}`, data_hora: now.toISOString() };
@@ -361,7 +368,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
         autor_id: currentUser.id, 
         autor_nome: currentUser.nome, 
         data_lancamento: now.toISOString(), 
-        conselheiros_requeridos: doc.conselheiros_providencia_nomes, 
+        conselheiros_requeridos: preservedTrio, 
         confirmacoes 
       })),
       ...selectedMedidas129.map(id => ({ 
@@ -371,24 +378,10 @@ const DocumentView: React.FC<DocumentViewProps> = ({
         autor_id: currentUser.id, 
         autor_nome: currentUser.nome, 
         data_lancamento: now.toISOString(), 
-        conselheiros_requeridos: doc.conselheiros_providencia_nomes, 
+        conselheiros_requeridos: preservedTrio, 
         confirmacoes 
       }))
     ];
-
-    // Se houver violação ou atribuição mas nenhuma medida selecionada, criamos uma entrada de controle para as assinaturas
-    if (combinedMedidas.length === 0 && (tempViolacoes.length > 0 || selectedAtribuicoes.length > 0)) {
-      combinedMedidas = [{
-        id: `val-tech-${Date.now()}`,
-        artigo_inciso: 'CONTROLE_VALIDACAO',
-        texto: 'Validação Técnica de Direitos/Atribuições',
-        autor_id: currentUser.id,
-        autor_nome: currentUser.nome,
-        data_lancamento: now.toISOString(),
-        conselheiros_requeridos: doc.conselheiros_providencia_nomes,
-        confirmacoes
-      }];
-    }
 
     // DIRETRIZ 93: Sincronização automática com Monitoramento
     const novasRequisicoesMonitoramento = atribuicoesDetalhadas.flatMap(attr => 
@@ -430,26 +423,31 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     const currentStatus = doc.status[doc.status.length - 1];
     const isInformative = informativeStatusOptions.includes(currentStatus);
     
-    const hasTechnicalContent = tempViolacoes.length > 0 || combinedMedidas.length > 0 || selectedAtribuicoes.length > 0 || (tempAgentes.length > 0 && tempAgentes[0]?.categoria !== 'INEXISTENTE');
+    const hasEcaMeasuresInCombined = combinedMedidas.some(m => 
+      m.artigo_inciso.startsWith('Art. 101') || m.artigo_inciso.startsWith('Art. 129')
+    );
 
     let statusFinal: DocumentStatus[] = [...doc.status];
     
-    if (finalize) {
+    if (!hasEcaMeasuresInCombined) {
+      // REGRA EXPLICITA: A validação do colegiado só deve APLICAR/APARECER se houver MEDIDA ECA selecionada e confirmada.
+      statusFinal = statusFinal.filter(s => s !== 'AGUARDANDO_VALIDACAO' && s !== 'MEDIDA_APLICADA');
+      if (finalize && !isInformative && !statusFinal.includes('CONCLUIDO')) {
+        statusFinal.push('CONCLUIDO');
+      }
+      notificacoesTrio = [];
+    } else if (finalize) {
       if (isImprocedente) {
         statusFinal = [...doc.status.filter(s => s !== 'AGUARDANDO_VALIDACAO' && s !== 'MEDIDA_APLICADA'), 'DIREITO_NAO_VIOLADO'];
       } else if (isTechnicalChange) {
-        // REGRA: Apenas edições técnicas obrigam a validação colegiada
+        // REGRA: Edições técnicas em Medidas ECA obrigam revalidação pelo MESMO trio original
         statusFinal = statusFinal.filter(s => s !== 'MEDIDA_APLICADA');
         if (!statusFinal.includes('AGUARDANDO_VALIDACAO')) {
           statusFinal.push('AGUARDANDO_VALIDACAO');
         }
 
-        // Notificar automaticamente os outros membros do trio de imediata
-        const escala = (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.length > 0)
-          ? doc.conselheiros_providencia_nomes
-          : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap, scaleExceptions);
-        const outrosDoTrio = escala.filter(nome => !isUserInTrio(nome));
-        
+        // Notificar automaticamente os outros membros do trio original
+        const outrosDoTrio = preservedTrio.filter(nome => !isUserInTrio(nome));
         const novasNotificacoes = [...notificacoesTrio];
         outrosDoTrio.forEach(nome => {
           if (!novasNotificacoes.includes(nome)) novasNotificacoes.push(nome);
@@ -457,18 +455,10 @@ const DocumentView: React.FC<DocumentViewProps> = ({
         notificacoesTrio = novasNotificacoes;
 
       } else if (isInformative) {
-        // DIRETRIZ: Se houver despacho administrativo SEM mudança técnica, a validação colegiada é proibida
         statusFinal = statusFinal.filter(s => s !== 'AGUARDANDO_VALIDACAO');
-      } else if (hasTechnicalContent) {
-        // Se houver conteúdo técnico mas sem mudança agora, mantém o fluxo atual
+      } else {
         if (!statusFinal.includes('AGUARDANDO_VALIDACAO') && !statusFinal.includes('MEDIDA_APLICADA')) {
           statusFinal.push('AGUARDANDO_VALIDACAO');
-        }
-      } else {
-        // Se não houver conteúdo técnico nem despacho, conclui
-        statusFinal = statusFinal.filter(s => s !== 'AGUARDANDO_VALIDACAO' && s !== 'MEDIDA_APLICADA');
-        if (!isInformative && !statusFinal.includes('CONCLUIDO')) {
-          statusFinal.push('CONCLUIDO');
         }
       }
     } else {
@@ -488,7 +478,8 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       despacho_situacao: despachoSituacao,
       is_improcedente: isImprocedente,
       monitoramento: monitoramentoAtualizado,
-      notificacoes_trio: notificacoesTrio
+      notificacoes_trio: notificacoesTrio,
+      conselheiros_providencia_nomes: preservedTrio
     });
     
     onAddLog(doc.id, finalize ? `EDIÇÃO TÉCNICA: Medidas/Atribuições alteradas. REVALIDAÇÃO COLEGIADA OBRIGATÓRIA.` : `RASCUNHO TÉCNICO: Prontuário atualizado.`, 'DOCUMENTO');
@@ -670,7 +661,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
         </div>
 
         {/* ALERTA DE REVALIDAÇÃO OBRIGATÓRIA OU VALIDAÇÃO PENDENTE */}
-        {((doc.notificacoes_trio || []).some(n => isUserInTrio(n) || (nameMap && isUserInTrio(nameMap[n.toUpperCase()]))) || doc.status.includes('AGUARDANDO_VALIDACAO')) && (
+        {showCollegiateValidation && (((doc.notificacoes_trio || []).some(n => isUserInTrio(n) || (nameMap && isUserInTrio(nameMap[n.toUpperCase()]))) || doc.status.includes('AGUARDANDO_VALIDACAO'))) && (
           <div className="bg-gradient-to-r from-amber-600 to-red-600 p-6 flex flex-col md:flex-row items-center justify-between gap-4 animate-pulse">
             <div className="flex items-center gap-4 text-white">
               <ShieldAlert className="w-8 h-8 shrink-0" />
@@ -1135,102 +1126,104 @@ const DocumentView: React.FC<DocumentViewProps> = ({
               </div>
             )
           )}
-          <div id="validacao-trio" className="mt-8 pt-8 border-t bg-slate-50/50 rounded-[2.5rem] p-8 space-y-6 border border-slate-100 shadow-inner">
-             <h4 className="text-[12px] font-black text-slate-800 uppercase flex items-center gap-2"><Users className="w-5 h-5 text-blue-600" /> Assinaturas Colegiadas (Trio de Imediata)</h4>
-               
-               {validationTracker.some(v => v.needsRevalidation) && (
-                 <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl flex items-center gap-3 text-amber-900 shadow-sm animate-pulse">
-                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
-                    <div>
-                       <span className="text-[11px] font-black uppercase block">⚠️ Medida Aplicada Editada - Revalidação Pendente</span>
-                       <span className="text-[10px] font-bold uppercase text-amber-800">
-                          A Medida Aplicada / conteúdo técnico deste procedimento foi editado pelo Conselheiro de Providência Imediata ({doc.conselheiro_providencia_nome || 'responsável'}). Os demais membros do Colegiado que já haviam validado precisam analisar e validar novamente.
-                       </span>
+          {showCollegiateValidation && (
+            <div id="validacao-trio" className="mt-8 pt-8 border-t bg-slate-50/50 rounded-[2.5rem] p-8 space-y-6 border border-slate-100 shadow-inner">
+               <h4 className="text-[12px] font-black text-slate-800 uppercase flex items-center gap-2"><Users className="w-5 h-5 text-blue-600" /> Assinaturas Colegiadas (Trio de Imediata)</h4>
+                 
+                 {validationTracker.some(v => v.needsRevalidation) && (
+                   <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl flex items-center gap-3 text-amber-900 shadow-sm animate-pulse">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                      <div>
+                         <span className="text-[11px] font-black uppercase block">⚠️ Medida Aplicada Editada - Revalidação Pendente</span>
+                         <span className="text-[10px] font-bold uppercase text-amber-800">
+                            A Medida Aplicada / conteúdo técnico deste procedimento foi editado pelo Conselheiro de Providência Imediata ({doc.conselheiro_providencia_nome || 'responsável'}). Os demais membros do Colegiado que já haviam validado precisam analisar e validar novamente.
+                         </span>
+                      </div>
+                   </div>
+                 )}
+                 
+                 {/* RESUMO TÉCNICO PARA VALIDAÇÃO */}
+                 <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-sm">
+                    <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                       <ClipboardList className="w-4 h-4 text-indigo-600" />
+                       <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Resumo Técnico do Prontuário</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                       {/* Direitos e Agentes */}
+                       <div className="space-y-4">
+                          <div>
+                             <span className="text-[8px] font-black text-blue-600 uppercase block mb-1 tracking-tighter">Direitos Violados</span>
+                             <div className="flex flex-wrap gap-1">
+                                {doc.violacoesSipia && doc.violacoesSipia.length > 0 ? doc.violacoesSipia.map((v, i) => (
+                                   <span key={i} className="px-2 py-1 bg-blue-50 text-blue-700 text-[9px] font-bold rounded-lg border border-blue-100 uppercase leading-none">{v.especifico}</span>
+                                )) : <span className="text-[9px] text-slate-400 italic">Nenhum direito selecionado</span>}
+                             </div>
+                          </div>
+                          <div>
+                             <span className="text-[8px] font-black text-orange-600 uppercase block mb-1 tracking-tighter">Agentes Violadores</span>
+                             <div className="flex flex-wrap gap-1">
+                                {doc.agentesVioladores && doc.agentesVioladores.length > 0 ? doc.agentesVioladores.map((a, i) => (
+                                   <span key={i} className="px-2 py-1 bg-orange-50 text-orange-700 text-[9px] font-bold rounded-lg border border-orange-100 uppercase leading-none">{a.principal}</span>
+                                )) : <span className="text-[9px] text-slate-400 italic">Nenhum agente selecionado</span>}
+                             </div>
+                          </div>
+                       </div>
+
+                       {/* Medidas e Atribuições */}
+                       <div className="space-y-4">
+                          <div>
+                             <span className="text-[8px] font-black text-emerald-600 uppercase block mb-1 tracking-tighter">Medidas Aplicadas (Art. 101/129)</span>
+                             <div className="flex flex-wrap gap-1">
+                                {doc.medidas_detalhadas && doc.medidas_detalhadas.length > 0 ? doc.medidas_detalhadas.filter(m => m.artigo_inciso.startsWith('Art. 101') || m.artigo_inciso.startsWith('Art. 129')).map((m, i) => (
+                                   <span key={i} className="px-2 py-1 bg-emerald-50 text-emerald-700 text-[9px] font-bold rounded-lg border border-emerald-100 uppercase leading-none">{m.artigo_inciso}</span>
+                                )) : <span className="text-[9px] text-slate-400 italic">Nenhuma medida selecionada</span>}
+                             </div>
+                          </div>
+                          <div>
+                             <span className="text-[8px] font-black text-purple-600 uppercase block mb-1 tracking-tighter">Atribuições e Serviços (Art. 136)</span>
+                             <div className="flex flex-col gap-1">
+                                {doc.atribuicoes_136_detalhadas && doc.atribuicoes_136_detalhadas.length > 0 ? doc.atribuicoes_136_detalhadas.map((a, i) => (
+                                   <div key={i} className="p-2 bg-purple-50 rounded-lg border border-purple-100">
+                                      <span className="text-[9px] font-bold text-purple-700 uppercase block leading-tight">{a.inciso}: {a.servicos?.[0]?.servico || a.texto}</span>
+                                      {a.servicos?.[0]?.area && <span className="text-[8px] text-purple-400 uppercase font-black">Área: {a.servicos[0].area}</span>}
+                                   </div>
+                                )) : <span className="text-[9px] text-slate-400 italic">Nenhuma atribuição selecionada</span>}
+                             </div>
+                          </div>
+                       </div>
                     </div>
                  </div>
-               )}
-               
-               {/* RESUMO TÉCNICO PARA VALIDAÇÃO */}
-               <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-sm">
-                  <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-                     <ClipboardList className="w-4 h-4 text-indigo-600" />
-                     <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Resumo Técnico do Prontuário</span>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                     {/* Direitos e Agentes */}
-                     <div className="space-y-4">
-                        <div>
-                           <span className="text-[8px] font-black text-blue-600 uppercase block mb-1 tracking-tighter">Direitos Violados</span>
-                           <div className="flex flex-wrap gap-1">
-                              {doc.violacoesSipia && doc.violacoesSipia.length > 0 ? doc.violacoesSipia.map((v, i) => (
-                                 <span key={i} className="px-2 py-1 bg-blue-50 text-blue-700 text-[9px] font-bold rounded-lg border border-blue-100 uppercase leading-none">{v.especifico}</span>
-                              )) : <span className="text-[9px] text-slate-400 italic">Nenhum direito selecionado</span>}
-                           </div>
-                        </div>
-                        <div>
-                           <span className="text-[8px] font-black text-orange-600 uppercase block mb-1 tracking-tighter">Agentes Violadores</span>
-                           <div className="flex flex-wrap gap-1">
-                              {doc.agentesVioladores && doc.agentesVioladores.length > 0 ? doc.agentesVioladores.map((a, i) => (
-                                 <span key={i} className="px-2 py-1 bg-orange-50 text-orange-700 text-[9px] font-bold rounded-lg border border-orange-100 uppercase leading-none">{a.principal}</span>
-                              )) : <span className="text-[9px] text-slate-400 italic">Nenhum agente selecionado</span>}
-                           </div>
-                        </div>
-                     </div>
 
-                     {/* Medidas e Atribuições */}
-                     <div className="space-y-4">
-                        <div>
-                           <span className="text-[8px] font-black text-emerald-600 uppercase block mb-1 tracking-tighter">Medidas Aplicadas (Art. 101/129)</span>
-                           <div className="flex flex-wrap gap-1">
-                              {doc.medidas_detalhadas && doc.medidas_detalhadas.length > 0 ? doc.medidas_detalhadas.filter(m => m.artigo_inciso.startsWith('Art. 101') || m.artigo_inciso.startsWith('Art. 129')).map((m, i) => (
-                                 <span key={i} className="px-2 py-1 bg-emerald-50 text-emerald-700 text-[9px] font-bold rounded-lg border border-emerald-100 uppercase leading-none">{m.artigo_inciso}</span>
-                              )) : <span className="text-[9px] text-slate-400 italic">Nenhuma medida selecionada</span>}
-                           </div>
-                        </div>
-                        <div>
-                           <span className="text-[8px] font-black text-purple-600 uppercase block mb-1 tracking-tighter">Atribuições e Serviços (Art. 136)</span>
-                           <div className="flex flex-col gap-1">
-                              {doc.atribuicoes_136_detalhadas && doc.atribuicoes_136_detalhadas.length > 0 ? doc.atribuicoes_136_detalhadas.map((a, i) => (
-                                 <div key={i} className="p-2 bg-purple-50 rounded-lg border border-purple-100">
-                                    <span className="text-[9px] font-bold text-purple-700 uppercase block leading-tight">{a.inciso}: {a.servicos?.[0]?.servico || a.texto}</span>
-                                    {a.servicos?.[0]?.area && <span className="text-[8px] text-purple-400 uppercase font-black">Área: {a.servicos[0].area}</span>}
-                                 </div>
-                              )) : <span className="text-[9px] text-slate-400 italic">Nenhuma atribuição selecionada</span>}
-                           </div>
-                        </div>
-                     </div>
-                  </div>
-               </div>
+                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6" id="validacao-trio">
+                    {validationTracker.map((status, idx) => {
+                      const isUserNotified = (doc.notificacoes_trio || []).some(n => isSameCounselorName(n, status.name));
+                      const isValidated = status.validated && !isUserNotified;
 
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-6" id="validacao-trio">
-                  {validationTracker.map((status, idx) => {
-                    const isUserNotified = (doc.notificacoes_trio || []).some(n => isSameCounselorName(n, status.name));
-                    const isValidated = status.validated && !isUserNotified;
-
-                    return (
-                      <div key={idx} className={`p-6 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${isValidated ? 'bg-white border-emerald-500 shadow-md' : 'bg-red-50 border-red-300 animate-pulse'}`}>
-                         <span className="text-[12px] font-black uppercase text-slate-700">{status.name}</span>
-                         <div className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase ${isValidated ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
-                            {isValidated ? 'VALIDADO' : (isUserNotified ? 'REVALIDAÇÃO NECESSÁRIA' : 'AGUARDANDO VALIDAÇÃO')}
-                         </div>
-                         {isValidated && status.timestamp && (
-                           <span className="text-[8px] font-bold text-slate-400 uppercase">{status.timestamp}</span>
-                         )}
-                         {!isValidated && (
-                           <button 
-                             onClick={() => handleValidate(status.name)} 
-                             className="mt-2 py-2.5 px-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase shadow-lg transition-all cursor-pointer flex items-center gap-1.5"
-                           >
-                              <CheckCircle2 className="w-4 h-4" />
-                              <span>Validar & Assinar</span>
-                           </button>
-                         )}
-                      </div>
-                    );
-                  })}
-               </div>
-            </div>
+                      return (
+                        <div key={idx} className={`p-6 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${isValidated ? 'bg-white border-emerald-500 shadow-md' : 'bg-red-50 border-red-300 animate-pulse'}`}>
+                           <span className="text-[12px] font-black uppercase text-slate-700">{status.name}</span>
+                           <div className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase ${isValidated ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
+                              {isValidated ? 'VALIDADO' : (isUserNotified ? 'REVALIDAÇÃO NECESSÁRIA' : 'AGUARDANDO VALIDAÇÃO')}
+                           </div>
+                           {isValidated && status.timestamp && (
+                             <span className="text-[8px] font-bold text-slate-400 uppercase">{status.timestamp}</span>
+                           )}
+                           {!isValidated && (
+                             <button 
+                               onClick={() => handleValidate(status.name)} 
+                               className="mt-2 py-2.5 px-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase shadow-lg transition-all cursor-pointer flex items-center gap-1.5"
+                             >
+                                <CheckCircle2 className="w-4 h-4" />
+                                <span>Validar & Assinar</span>
+                             </button>
+                           )}
+                        </div>
+                      );
+                    })}
+                 </div>
+              </div>
+          )}
          </div>
       </div>
 

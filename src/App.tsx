@@ -514,6 +514,11 @@ const App: React.FC = () => {
   const pendingValidations = useMemo(() => {
     if (!currentUser) return [];
     return documents.filter(d => {
+       const hasEcaMeasures = (d.medidas_detalhadas || []).some(m => 
+         m.artigo_inciso.startsWith('Art. 101') || m.artigo_inciso.startsWith('Art. 129')
+       );
+       if (!hasEcaMeasures) return false;
+
        const isAwaiting = d.status.includes('AGUARDANDO_VALIDACAO');
        const hasNotif = (d.notificacoes_trio || []).some(n => 
          isSameCounselorName(n, currentUser.nome) || 
@@ -532,7 +537,7 @@ const App: React.FC = () => {
          return false;
        });
 
-       const confirmacoes = d.medidas_detalhadas?.[0]?.confirmacoes || [];
+       const confirmacoes = (d.medidas_detalhadas || []).flatMap(m => m.confirmacoes || []);
        const iValidated = !hasNotif && confirmacoes.some(c => 
          c.usuario_id === currentUser.id || 
          c.usuario_id === currentUser.real_user_id ||

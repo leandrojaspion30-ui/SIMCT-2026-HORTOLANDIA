@@ -247,10 +247,41 @@ const DocumentList: React.FC<DocumentListProps> = ({
         if (myViewMode === 'REF' && !matchesUserOrSubstitutedId(doc.conselheiro_referencia_id)) return false;
         if (myViewMode === 'IMED' && !matchesUserOrSubstitutedId(doc.conselheiro_providencia_id)) return false;
         if (myViewMode === 'VALID') {
-          const isRef = matchesUserOrSubstitutedId(doc.conselheiro_referencia_id);
-          const isInTrio = doc.conselheiros_providencia_nomes?.some(name => matchesUserOrSubstitutedName(name));
-          const isPending = doc.status.includes('AGUARDANDO_VALIDACAO');
-          if (!isPending || (!isRef && !isInTrio)) return false;
+          const hasEcaMeasures = (doc.medidas_detalhadas || []).some(m => 
+            m.artigo_inciso.startsWith('Art. 101') || m.artigo_inciso.startsWith('Art. 129')
+          );
+          if (!hasEcaMeasures) return false;
+
+          const isNotified = (doc.notificacoes_trio || []).some(n => 
+            isSameCounselorName(n, currentUser.nome) || 
+            (currentUser.is_suplente_active && currentUser.substituted_name && isSameCounselorName(n, currentUser.substituted_name))
+          );
+
+          const trioRaw = (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.length > 0)
+            ? doc.conselheiros_providencia_nomes
+            : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap, scaleExceptions);
+
+          const inTrio = isNotified || trioRaw.some(name => {
+            if (!name) return false;
+            if (isSameCounselorName(name, currentUser.nome)) return true;
+            if (currentUser.is_suplente_active && currentUser.substituted_name && isSameCounselorName(name, currentUser.substituted_name)) return true;
+            if (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO') return true;
+            return false;
+          });
+
+          if (!inTrio) return false;
+
+          const confirmacoes = (doc.medidas_detalhadas || []).flatMap(m => m.confirmacoes || []);
+          const iValidated = !isNotified && confirmacoes.some(c => 
+            c.usuario_id === currentUser.id || 
+            c.usuario_id === currentUser.real_user_id || 
+            isSameCounselorName(c.usuario_nome, currentUser.nome)
+          );
+
+          if (iValidated) return false;
+
+          const isPending = doc.status.includes('AGUARDANDO_VALIDACAO') || doc.status.includes('MEDIDA_APLICADA') || isNotified;
+          if (!isPending) return false;
         }
 
         const termUpper = filters.term.trim().toUpperCase();
@@ -359,7 +390,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
         }
         return a.hora_aporte.localeCompare(b.hora_aporte);
       });
-  }, [documents, filters, myViewMode, currentUser]);
+  }, [documents, filters, myViewMode, currentUser, nameMap, scaleExceptions]);
 
   const [localIsGroupedByFamily, setLocalIsGroupedByFamily] = useState(true);
   const isGroupedByFamily = propIsGroupedByFamily !== undefined ? propIsGroupedByFamily : localIsGroupedByFamily;
@@ -447,8 +478,12 @@ const DocumentList: React.FC<DocumentListProps> = ({
     const rawProvName = rawProvCouncilor?.nome || doc.conselheiro_providencia_nome;
     const mappedProvName = (rawProvName && nameMap && nameMap[rawProvName.toUpperCase()]) ? nameMap[rawProvName.toUpperCase()] : rawProvName;
     const provCouncilor = (mappedProvName && (users.find(u => u.status === 'ATIVO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && isSameCounselorName(u.nome, mappedProvName)) || users.find(u => u.status === 'ATIVO' && isSameCounselorName(u.nome, mappedProvName)))) || rawProvCouncilor;
+    const hasEcaMeasures = (doc.medidas_detalhadas || []).some(m => 
+      m.artigo_inciso.startsWith('Art. 101') || m.artigo_inciso.startsWith('Art. 129')
+    );
+
     const confirmacoes = (doc.medidas_detalhadas || []).flatMap(m => m.confirmacoes || []);
-    const isNotified = (doc.notificacoes_trio || []).some(n => 
+    const isNotified = hasEcaMeasures && (doc.notificacoes_trio || []).some(n => 
       isSameCounselorName(n, currentUser.nome) || 
       (currentUser.is_suplente_active && currentUser.substituted_name && isSameCounselorName(n, currentUser.substituted_name))
     );
@@ -486,7 +521,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
     } else if (doc.status.includes('MEDIDA_PENDENTE')) {
       validationState = 'COMPLETED';
       dynamicLabel = "📋 MEDIDA PENDENTE";
-    } else if (doc.status.includes('MEDIDA_APLICADA')) {
+    } else if (hasEcaMeasures && doc.status.includes('MEDIDA_APLICADA')) {
       if (!iValidated && isInTrio) {
         validationState = 'PENDING_SELF';
         dynamicLabel = "📋 MEDIDA APLICADA - AGUARDANDO VALIDAÇÃO";
@@ -494,7 +529,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
         validationState = 'COMPLETED';
         dynamicLabel = "✅ MEDIDA APLICADA";
       }
-    } else if (doc.status.includes('AGUARDANDO_VALIDACAO')) {
+    } else if (hasEcaMeasures && doc.status.includes('AGUARDANDO_VALIDACAO')) {
       if (!iValidated && isInTrio) {
         validationState = 'PENDING_SELF';
         dynamicLabel = "📋 AGUARDANDO VALIDAÇÃO DO COLEGIADO";
@@ -504,7 +539,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
       }
     }
 
-    const isAwaiting = (doc.status.includes('AGUARDANDO_VALIDACAO') || (doc.status.includes('MEDIDA_APLICADA') && !iValidated && isInTrio)) && !doc.status.includes('MEDIDA_PENDENTE');
+    const isAwaiting = hasEcaMeasures && (doc.status.includes('AGUARDANDO_VALIDACAO') || (doc.status.includes('MEDIDA_APLICADA') && !iValidated && isInTrio)) && !doc.status.includes('MEDIDA_PENDENTE');
     const isMedidaAplicadaConcluded = doc.status.includes('MEDIDA_APLICADA') && (iValidated || !isInTrio);
     const lastDispatch = [...doc.status].reverse().find(s => [
       'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
@@ -543,7 +578,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   <ShieldAlert className="w-3.5 h-3.5" /> Aguardando Validação do Colegiado
                 </span>
               )}
-              {(doc.notificacoes_trio || []).some(n => {
+              {hasEcaMeasures && (doc.notificacoes_trio || []).some(n => {
                 if (!n) return false;
                 const upper = n.toUpperCase();
                 if (upper === currentUser.nome.toUpperCase()) return true;
@@ -864,22 +899,38 @@ const DocumentList: React.FC<DocumentListProps> = ({
 
             group.docs.forEach(doc => {
               const mainStatus = doc.status[doc.status.length - 1] || 'AGUARDANDO_ANALISE';
-              const confirmacoes = doc.medidas_detalhadas?.[0]?.confirmacoes || [];
-              const iValidated = confirmacoes.some(c => c.usuario_id === currentUser.id);
+              
+              const hasEcaMeasuresVal = (doc.medidas_detalhadas || []).some(m => 
+                m.artigo_inciso.startsWith('Art. 101') || m.artigo_inciso.startsWith('Art. 129')
+              );
 
-              const isInTrio = doc.conselheiros_providencia_nomes?.some(name => {
+              const isNotifiedVal = hasEcaMeasuresVal && (doc.notificacoes_trio || []).some(n => 
+                isSameCounselorName(n, currentUser.nome) || 
+                (currentUser.is_suplente_active && currentUser.substituted_name && isSameCounselorName(n, currentUser.substituted_name))
+              );
+
+              const trioRawVal = (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.length > 0)
+                ? doc.conselheiros_providencia_nomes
+                : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap, scaleExceptions);
+
+              const isInTrioVal = isNotifiedVal || trioRawVal.some(name => {
                 if (!name) return false;
-                const upper = name.toUpperCase();
-                if (upper === currentUser.nome.toUpperCase()) return true;
-                const cleanCurrentUserName = currentUser.nome.toUpperCase().split('(')[0].trim();
-                if (upper === cleanCurrentUserName) return true;
-                if (currentUser.is_suplente_active && currentUser.substituted_name && upper === currentUser.substituted_name.toUpperCase()) return true;
+                if (isSameCounselorName(name, currentUser.nome)) return true;
+                if (currentUser.is_suplente_active && currentUser.substituted_name && isSameCounselorName(name, currentUser.substituted_name)) return true;
+                if (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO') return true;
                 return false;
-              }) || false;
+              });
 
-              const isMedidaAplicadaOrAwaitingVal = doc.status.includes('MEDIDA_APLICADA') || doc.status.includes('AGUARDANDO_VALIDACAO') || (doc.medidas_detalhadas && doc.medidas_detalhadas.length > 0);
+              const confirmacoesVal = (doc.medidas_detalhadas || []).flatMap(m => m.confirmacoes || []);
+              const iValidatedVal = !isNotifiedVal && confirmacoesVal.some(c => 
+                c.usuario_id === currentUser.id || 
+                c.usuario_id === currentUser.real_user_id || 
+                isSameCounselorName(c.usuario_nome, currentUser.nome)
+              );
 
-              if (isMedidaAplicadaOrAwaitingVal && isInTrio && !iValidated) {
+              const isMedidaAplicadaOrAwaitingVal = doc.status.includes('MEDIDA_APLICADA') || doc.status.includes('AGUARDANDO_VALIDACAO') || isNotifiedVal;
+
+              if (hasEcaMeasuresVal && isMedidaAplicadaOrAwaitingVal && isInTrioVal && !iValidatedVal) {
                 pendingValidationCount++;
               }
 
@@ -900,7 +951,11 @@ const DocumentList: React.FC<DocumentListProps> = ({
                 'NENHUMA', 'AGUARDANDO_AVALIACAO'
               ].includes(s) || s.startsWith('NOTIFICACAO_'));
 
-              if ((doc.notificacoes_trio || []).some(n => {
+              const hasEcaMeasures = (doc.medidas_detalhadas || []).some(m => 
+                m.artigo_inciso.startsWith('Art. 101') || m.artigo_inciso.startsWith('Art. 129')
+              );
+
+              if (hasEcaMeasures && (doc.notificacoes_trio || []).some(n => {
                 if (!n) return false;
                 const upper = n.toUpperCase();
                 if (upper === currentUser.nome.toUpperCase()) return true;
