@@ -447,7 +447,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
     const rawProvName = rawProvCouncilor?.nome || doc.conselheiro_providencia_nome;
     const mappedProvName = (rawProvName && nameMap && nameMap[rawProvName.toUpperCase()]) ? nameMap[rawProvName.toUpperCase()] : rawProvName;
     const provCouncilor = (mappedProvName && (users.find(u => u.status === 'ATIVO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && isSameCounselorName(u.nome, mappedProvName)) || users.find(u => u.status === 'ATIVO' && isSameCounselorName(u.nome, mappedProvName)))) || rawProvCouncilor;
-    const confirmacoes = doc.medidas_detalhadas?.[0]?.confirmacoes || [];
+    const confirmacoes = (doc.medidas_detalhadas || []).flatMap(m => m.confirmacoes || []);
     const isNotified = (doc.notificacoes_trio || []).some(n => 
       isSameCounselorName(n, currentUser.nome) || 
       (currentUser.is_suplente_active && currentUser.substituted_name && isSameCounselorName(n, currentUser.substituted_name))

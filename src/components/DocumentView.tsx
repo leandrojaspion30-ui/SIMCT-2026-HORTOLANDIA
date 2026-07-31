@@ -287,8 +287,8 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       return { 
         name, 
         validated: !!match, 
-        timestamp: match ? match.usuario_nome.split(' - ')[1] || null : null,
-        needsRevalidation: isNotified || ((doc.status.includes('AGUARDANDO_VALIDACAO') || doc.status.includes('MEDIDA_APLICADA')) && !match)
+        timestamp: match ? (match.usuario_nome.split(' - ')[1] || match.data_hora || null) : null,
+        needsRevalidation: isNotified || (!match)
       };
     });
   }, [doc.conselheiros_providencia_nomes, doc.medidas_detalhadas, doc.status, doc.data_aporte, doc.hora_aporte, doc.unidade_id, doc.notificacoes_trio, nameMap, scaleExceptions, users]);
@@ -495,38 +495,71 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     onBack();
   };
 
-  const handleValidate = () => {
+  const handleValidate = (targetSlotName?: string | React.MouseEvent) => {
     const now = new Date();
-    const formatted = `${currentUser.nome} - ${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`;
+    const formattedDate = `${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`;
     
+    const trioRaw = (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.length > 0)
+      ? doc.conselheiros_providencia_nomes
+      : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap, scaleExceptions);
+    const trio = trioRaw.map(n => (nameMap && nameMap[n.toUpperCase()]) ? nameMap[n.toUpperCase()] : n);
+
+    let slotsToValidate: string[] = [];
+    if (typeof targetSlotName === 'string' && targetSlotName.trim()) {
+      slotsToValidate = [targetSlotName.trim()];
+    } else {
+      const pendingInTrio = validationTracker.filter(v => !v.validated || v.needsRevalidation).map(v => v.name);
+      const mySlot = pendingInTrio.find(name => isUserInTrio(name));
+      if (mySlot) {
+        slotsToValidate = [mySlot];
+      } else if (pendingInTrio.length > 0) {
+        slotsToValidate = pendingInTrio;
+      }
+    }
+
+    if (slotsToValidate.length === 0) return;
+
     const existingMedidas = (doc.medidas_detalhadas && doc.medidas_detalhadas.length > 0)
       ? doc.medidas_detalhadas
       : [{ artigo_inciso: 'Medida Aplicada / Providência Registrada', confirmacoes: [] }];
 
     const updated = existingMedidas.map(m => {
-      const filteredConfirmations = (m.confirmacoes || []).filter(c => c.usuario_id !== currentUser.id);
+      let currentConfirmations = [...(m.confirmacoes || [])];
+
+      slotsToValidate.forEach(slotName => {
+        const isSelf = isSameCounselorName(slotName, currentUser.nome);
+        const signatureText = isSelf
+          ? `${currentUser.nome} - ${formattedDate}`
+          : `${slotName} (por ${currentUser.nome}) - ${formattedDate}`;
+
+        currentConfirmations = currentConfirmations.filter(c => {
+          if (c.usuario_id === currentUser.id && isSelf) return false;
+          if (isSameCounselorName(c.usuario_nome, slotName)) return false;
+          if (c.usuario_nome.toUpperCase().includes(slotName.toUpperCase())) return false;
+          return true;
+        });
+
+        currentConfirmations.push({
+          usuario_id: currentUser.id,
+          usuario_nome: signatureText,
+          data_hora: now.toISOString()
+        });
+      });
+
       return {
         ...m,
-        confirmacoes: [
-          ...filteredConfirmations,
-          { usuario_id: currentUser.id, usuario_nome: formatted, data_hora: now.toISOString() }
-        ]
+        confirmacoes: currentConfirmations
       };
     });
 
-    const trioRaw = (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.length > 0)
-      ? doc.conselheiros_providencia_nomes
-      : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap, scaleExceptions);
-
-    const trio = trioRaw.map(n => (nameMap && nameMap[n.toUpperCase()]) ? nameMap[n.toUpperCase()] : n);
     const newConfirmacoes = updated[0]?.confirmacoes || [];
 
     const validatedCount = trio.filter(trioMemberName => {
       return newConfirmacoes.some(c => {
-        if (c.usuario_id === currentUser.id && isUserInTrio(trioMemberName)) return true;
         const signatureName = c.usuario_nome.toUpperCase();
         const upperTrioMember = trioMemberName.toUpperCase();
         if (signatureName.includes(upperTrioMember)) return true;
+        if (isSameCounselorName(c.usuario_nome, trioMemberName)) return true;
         const signingUser = users.find(u => u.id === c.usuario_id);
         if (signingUser && isSameCounselorName(signingUser.nome, trioMemberName)) return true;
         return false;
@@ -537,7 +570,6 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     let nextStatus = [...doc.status];
 
     if (validatedCount >= trioSize) { 
-      // Quando TODOS os conselheiros do trio de providência imediata validarem, atualiza automaticamente o status para "Medida Aplicada"
       nextStatus = nextStatus.filter(s => s !== 'AGUARDANDO_VALIDACAO'); 
       if (!nextStatus.includes('MEDIDA_APLICADA')) {
         nextStatus.push('MEDIDA_APLICADA');
@@ -548,8 +580,9 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       }
     }
     
-    // Remove o próprio nome das notificações ao validar
-    const nextNotificacoes = (doc.notificacoes_trio || []).filter(nome => !isUserInTrio(nome));
+    const nextNotificacoes = (doc.notificacoes_trio || []).filter(nome => 
+      !slotsToValidate.some(slotName => isSameCounselorName(nome, slotName) || isSameCounselorName(nome, currentUser.nome))
+    );
 
     onUpdateDocument(doc.id, { 
       medidas_detalhadas: updated, 
@@ -560,8 +593,8 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     onAddLog(
       doc.id, 
       validatedCount >= trioSize 
-        ? `VALIDAÇÃO TÉCNICA CONCLUÍDA: Todos os 3 conselheiros do trio de imediata validaram. Status atualizado automaticamente para [Medida Aplicada] por ${currentUser.nome}.`
-        : `VALIDAÇÃO TÉCNICA: Assinatura/Revalidação confirmada por ${currentUser.nome} (${validatedCount}/${trioSize} validações).`, 
+        ? `VALIDAÇÃO TÉCNICA CONCLUÍDA: Todos os ${trioSize} conselheiros do trio de imediata validaram. Status atualizado automaticamente para [Medida Aplicada] por ${currentUser.nome}.`
+        : `VALIDAÇÃO TÉCNICA: Assinatura confirmada por ${currentUser.nome} para [${slotsToValidate.join(', ')}] (${validatedCount}/${trioSize} validações).`, 
       'VALIDAÇÃO'
     );
   };
@@ -648,7 +681,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
             </div>
             <div className="flex items-center gap-3">
               <button 
-                onClick={handleValidate}
+                onClick={() => handleValidate()}
                 className="px-6 py-3 bg-white text-emerald-700 hover:bg-emerald-50 rounded-xl text-[11px] font-black uppercase transition-all shadow-lg flex items-center gap-2 cursor-pointer shrink-0"
               >
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
@@ -1102,10 +1135,8 @@ const DocumentView: React.FC<DocumentViewProps> = ({
               </div>
             )
           )}
-          {(doc.status.includes('AGUARDANDO_VALIDACAO') || doc.status.includes('MEDIDA_APLICADA')) && 
-           (!informativeStatusOptions.includes(doc.status[doc.status.length - 1]) || (doc.notificacoes_trio || []).length > 0) && (
-            <div id="validacao-trio" className="mt-8 pt-8 border-t bg-slate-50/50 rounded-[2.5rem] p-8 space-y-6 border border-slate-100 shadow-inner">
-               <h4 className="text-[12px] font-black text-slate-800 uppercase flex items-center gap-2"><Users className="w-5 h-5 text-blue-600" /> Assinaturas Colegiadas (Trio de Imediata)</h4>
+          <div id="validacao-trio" className="mt-8 pt-8 border-t bg-slate-50/50 rounded-[2.5rem] p-8 space-y-6 border border-slate-100 shadow-inner">
+             <h4 className="text-[12px] font-black text-slate-800 uppercase flex items-center gap-2"><Users className="w-5 h-5 text-blue-600" /> Assinaturas Colegiadas (Trio de Imediata)</h4>
                
                {validationTracker.some(v => v.needsRevalidation) && (
                  <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl flex items-center gap-3 text-amber-900 shadow-sm animate-pulse">
@@ -1174,22 +1205,23 @@ const DocumentView: React.FC<DocumentViewProps> = ({
 
                <div className="grid grid-cols-1 md:grid-cols-3 gap-6" id="validacao-trio">
                   {validationTracker.map((status, idx) => {
-                    const isMe = isUserInTrio(status.name) || currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
-                    const isUserNotified = (doc.notificacoes_trio || []).some(n => isUserInTrio(n) || isSameCounselorName(n, status.name));
-                    const canValidateThisSlot = isMe;
-                    const isPending = !status.validated || isUserNotified || status.needsRevalidation || doc.status.includes('AGUARDANDO_VALIDACAO');
+                    const isUserNotified = (doc.notificacoes_trio || []).some(n => isSameCounselorName(n, status.name));
+                    const isValidated = status.validated && !isUserNotified;
 
                     return (
-                      <div key={idx} className={`p-6 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${status.validated && !isUserNotified ? 'bg-white border-emerald-500 shadow-md' : (status.needsRevalidation || isUserNotified) ? 'bg-red-50 border-red-300 animate-pulse' : 'bg-slate-100 border-slate-200 opacity-60'}`}>
+                      <div key={idx} className={`p-6 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${isValidated ? 'bg-white border-emerald-500 shadow-md' : 'bg-red-50 border-red-300 animate-pulse'}`}>
                          <span className="text-[12px] font-black uppercase text-slate-700">{status.name}</span>
-                         <div className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase ${status.validated && !isUserNotified ? 'bg-emerald-500 text-white' : (status.needsRevalidation || isUserNotified) ? 'bg-red-500 text-white' : 'bg-slate-200 text-slate-500'}`}>
-                            {status.validated && !isUserNotified ? `VALIDADO` : (status.needsRevalidation || isUserNotified) ? 'REVALIDAÇÃO NECESSÁRIA' : 'AGUARDANDO'}
+                         <div className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase ${isValidated ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
+                            {isValidated ? 'VALIDADO' : (isUserNotified ? 'REVALIDAÇÃO NECESSÁRIA' : 'AGUARDANDO VALIDAÇÃO')}
                          </div>
-                         {status.validated && status.timestamp && !isUserNotified && (
+                         {isValidated && status.timestamp && (
                            <span className="text-[8px] font-bold text-slate-400 uppercase">{status.timestamp}</span>
                          )}
-                         {canValidateThisSlot && isPending && (
-                           <button onClick={handleValidate} className="mt-2 py-2.5 px-5 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-emerald-700 transition-all cursor-pointer flex items-center gap-1.5">
+                         {!isValidated && (
+                           <button 
+                             onClick={() => handleValidate(status.name)} 
+                             className="mt-2 py-2.5 px-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase shadow-lg transition-all cursor-pointer flex items-center gap-1.5"
+                           >
                               <CheckCircle2 className="w-4 h-4" />
                               <span>Validar & Assinar</span>
                            </button>
@@ -1199,8 +1231,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                   })}
                </div>
             </div>
-          )}
-        </div>
+         </div>
       </div>
 
       {/* PAINEL DE INTELIGÊNCIA E AUDITORIA (OCULTO/INFERIOR) */}
