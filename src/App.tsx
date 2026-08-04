@@ -765,6 +765,47 @@ const App: React.FC = () => {
     navigateTo(tab);
   };
 
+  const handleUpdateStatus = async (id: string, newStatus: DocumentStatus[]) => {
+    if (!currentUser) return;
+    const docObj = normalizedDocuments.find(d => d.id === id);
+    if (!docObj) return;
+
+    const prevStatus = docObj.status[docObj.status.length - 1] || 'AGUARDANDO_ANALISE';
+    const latestStatus = newStatus[newStatus.length - 1];
+    
+    if (prevStatus === latestStatus) {
+      await saveDocument({ id, status: newStatus });
+      return;
+    }
+
+    const label = STATUS_LABELS[latestStatus] || latestStatus;
+    addLog(id, `STATUS: Situação alterada para [${label}].`, 'SISTEMA');
+
+    let updatedAlerts = [...(docObj.alertas_status_referencia || [])];
+    const isReference = docObj.conselheiro_referencia_id === currentUser.id || 
+                       (currentUser.is_suplente_active && docObj.conselheiro_referencia_id === currentUser.real_user_id);
+    
+    if (docObj.conselheiro_referencia_id && !isReference) {
+      updatedAlerts.push({
+        id: `alerta_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        documento_id: docObj.id,
+        conselheiro_referencia_id: docObj.conselheiro_referencia_id,
+        alterado_por_id: currentUser.id,
+        alterado_por_nome: currentUser.nome,
+        status_anterior: prevStatus,
+        status_novo: latestStatus,
+        data_hora: new Date().toISOString(),
+        lido: false
+      });
+    }
+
+    await saveDocument({ 
+      id, 
+      status: newStatus,
+      alertas_status_referencia: updatedAlerts
+    });
+  };
+
   const renderContent = () => {
     if (!currentUser) return null;
     
@@ -1124,10 +1165,7 @@ const App: React.FC = () => {
           addLog(id, `EXCLUSÃO: Documento removido permanentemente do banco de dados SIMCT.`, 'DOCUMENTO');
           await deleteDocument(id);
           goBack();
-      }} onUpdateStatus={async (id, s) => {
-          addLog(id, `STATUS: Documento alterado para a situação [${s[s.length-1]}].`, 'SISTEMA');
-          await saveDocument({ id, status: s });
-      }} onUpdateDocument={async (id, fields) => await saveDocument({ ...fields, id })} onAddLog={addLog} onScience={handleScience} nameMap={userNameMap} scaleExceptions={scaleExceptions} />;
+      }} onUpdateStatus={handleUpdateStatus} onUpdateDocument={async (id, fields) => await saveDocument({ ...fields, id })} onAddLog={addLog} onScience={handleScience} nameMap={userNameMap} scaleExceptions={scaleExceptions} />;
     }
 
     if (activeTab === 'logs' && !(isSuperAdmin || isAdministrative)) {
@@ -1239,12 +1277,7 @@ const App: React.FC = () => {
                 await deleteDocument(id);
               }} 
               onScience={handleScience} 
-              onUpdateStatus={async (id, newStatus) => {
-                const lastS = newStatus[newStatus.length - 1];
-                const label = STATUS_LABELS[lastS] || lastS;
-                addLog(id, `STATUS: Situação do caso alterada para [${label}] no Painel.`, 'SISTEMA');
-                await saveDocument({ id, status: newStatus });
-              }} 
+              onUpdateStatus={handleUpdateStatus} 
               viewMode={dashboardViewMode}
               onViewModeChange={setDashboardViewMode}
               filters={dashboardFilters}
@@ -1298,12 +1331,7 @@ const App: React.FC = () => {
               await deleteDocument(id);
             }} 
             onScience={handleScience} 
-            onUpdateStatus={async (id, newStatus) => {
-              const lastS = newStatus[newStatus.length - 1];
-              const label = STATUS_LABELS[lastS] || lastS;
-              addLog(id, `STATUS: Situação do caso alterada para [${label}] na Minha Referência.`, 'SISTEMA');
-              await saveDocument({ id, status: newStatus });
-            }}  
+            onUpdateStatus={handleUpdateStatus}  
             isMyReferenceView={true} 
             expandedFolders={myDocsExpandedFolders}
             onExpandedFoldersChange={setMyDocsExpandedFolders}

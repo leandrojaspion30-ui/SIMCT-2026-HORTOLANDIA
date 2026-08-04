@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { MessageSquare, Send, X, Users, User as UserIcon, Bell, Minimize2, Maximize2, Shield, AlertCircle, CheckCheck, Trash2, Sparkles, ChevronDown, ChevronLeft, Search, Building2, Globe, UserCheck, Check, Smile } from 'lucide-react';
+import { MessageSquare, Send, X, Users, User as UserIcon, Bell, Minimize2, Maximize2, Shield, AlertCircle, CheckCheck, Trash2, Sparkles, ChevronDown, ChevronLeft, Search, Building2, Globe, UserCheck, Check, Smile, Lock } from 'lucide-react';
 import { User, ChatMessage } from '../types';
 import { saveChatMessage, deleteChatMessage, markChatMessageAsRead, hideChatMessageForUser, hideConversationForUser } from '../lib/db';
 
@@ -26,13 +26,10 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
   isOpen,
   onToggleOpen
 }) => {
-  // activeChannel can be 'ALL_U1', 'ALL_U2', 'ALL_SYSTEM', or a specific user.id
   const defaultChannel = currentUser.unidade_id === 2 ? 'ALL_U2' : 'ALL_U1';
+  const [viewMode, setViewMode] = useState<'LIST' | 'CHAT'>('LIST');
   const [activeChannel, setActiveChannel] = useState<string>(defaultChannel);
   
-  // OS NOMES FICAM OCULTOS POR PADRÃO!
-  // isSelectorOpen controla se o painel de seleção de contatos/destinatário está visível.
-  const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [unitFilter, setUnitFilter] = useState<'U1' | 'U2' | 'ALL'>(
     currentUser.unidade_id === 2 ? 'U2' : 'U1'
   );
@@ -43,6 +40,14 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
   const [contactSearch, setContactSearch] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Helper for online status
+  const isOnline = (u: User) => {
+    if (!u.last_heartbeat) return false;
+    const lastHB = new Date(u.last_heartbeat).getTime();
+    const now = Date.now();
+    return (now - lastHB) < 60000; // 60 seconds threshold
+  };
 
   const QUICK_EMOJIS = ['👍', '😊', '🙏', '✅', '⚠️', '☕', '🚨', '👏'];
 
@@ -200,30 +205,22 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
       // Tocar alerta sonoro!
       playNotificationSound();
 
-      // Ir direto para a tela de quem mandou se houver novo remetente!
-      if (newestSenderChannel) {
-        setActiveChannel(newestSenderChannel);
+      // Se o chat estiver aberto, podemos mudar para o canal ou apenas mostrar o badge na lista
+      if (newestSenderChannel && isOpen) {
+        // Se já estiver na lista, o badge aparecerá. Se estiver em outro chat, talvez queira mudar ou não.
+        // Vamos apenas garantir que o badge de não lidas seja atualizado na lista.
       }
     }
 
     prevMessageIdsRef.current = currentIds;
   }, [userVisibleMessages, currentUser.id]);
 
-  // Helper para abrir/alternar o chat posicionando direto no remetente não lido
-  const handleToggleChatWithAutoSelect = () => {
-    if (!isOpen) {
-      // Se tiver mensagem não lida, muda a aba diretamente para quem mandou
-      if (unreadMessages.length > 0) {
-        const lastUnread = unreadMessages[unreadMessages.length - 1];
-        if (lastUnread.recipient_id === 'COLEGIADO_U1') setActiveChannel('COLEGIADO_U1');
-        else if (lastUnread.recipient_id === 'COLEGIADO_U2') setActiveChannel('COLEGIADO_U2');
-        else if (lastUnread.recipient_id === 'ALL_U1') setActiveChannel('ALL_U1');
-        else if (lastUnread.recipient_id === 'ALL_U2') setActiveChannel('ALL_U2');
-        else if (lastUnread.recipient_id === 'ALL_SYSTEM' || lastUnread.recipient_id === 'ALL') setActiveChannel('ALL_SYSTEM');
-        else setActiveChannel(String(lastUnread.sender_id));
-      }
-    }
+  // Helper para abrir/alternar o chat
+  const handleToggleChat = () => {
     onToggleOpen();
+    if (!isOpen) {
+      setViewMode('LIST');
+    }
   };
 
   // Helper for unread count per specific channel
@@ -313,10 +310,33 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
 
   // Auto scroll to bottom
   useEffect(() => {
-    if (isOpen && !isMinimized && !isSelectorOpen) {
+    if (isOpen && !isMinimized && viewMode === 'CHAT') {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [channelMessages, isOpen, isMinimized, isSelectorOpen]);
+  }, [channelMessages, isOpen, isMinimized, viewMode]);
+
+  // Map of last messages per channel for the list preview
+  const lastMessagesMap = useMemo(() => {
+    const map: Record<string, ChatMessage> = {};
+    userVisibleMessages.forEach(m => {
+      let channelId = '';
+      if (m.recipient_id && ['COLEGIADO_U1', 'COLEGIADO_U2', 'ALL_U1', 'ALL_U2', 'ALL_SYSTEM', 'ALL'].includes(m.recipient_id)) {
+        channelId = m.recipient_id === 'ALL' ? (m.unidade_id === 1 ? 'ALL_U1' : 'ALL_U2') : m.recipient_id;
+      } else {
+        // Private chat
+        const otherId = String(m.sender_id) === String(currentUser.id) ? String(m.recipient_id) : String(m.sender_id);
+        channelId = otherId;
+      }
+
+      if (channelId) {
+        const existing = map[channelId];
+        if (!existing || new Date(m.created_at) > new Date(existing.created_at)) {
+          map[channelId] = m;
+        }
+      }
+    });
+    return map;
+  }, [userVisibleMessages, currentUser.id]);
 
   const handleSendMessage = async (customText?: string) => {
     const textToSend = customText || textInput.trim();
@@ -408,623 +428,404 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
 
   return (
     <>
-      {/* Botão Flutuante de Acesso ao Chat Estilo WhatsApp (Símbolo Pequeno) */}
+      {/* Botão Flutuante Estilo WhatsApp */}
       {(!isOpen || isMinimized) && (
         <button
           onClick={() => {
             if (isMinimized) setIsMinimized(false);
-            handleToggleChatWithAutoSelect();
+            handleToggleChat();
           }}
-          className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-[#25D366] hover:bg-[#128C7E] text-white rounded-full shadow-2xl transition-all duration-300 hover:scale-110 active:scale-95 flex items-center justify-center group cursor-pointer border-2 border-white/80"
-          title="Abrir Chat Interno (WhatsApp SIMCT)"
+          className="fixed bottom-6 right-6 z-50 w-16 h-16 bg-[#25D366] hover:bg-[#128C7E] text-white rounded-full shadow-2xl transition-all duration-300 hover:scale-110 active:scale-95 flex items-center justify-center group cursor-pointer border-2 border-white/20"
+          title="Abrir WhatsApp SIMCT"
         >
           <div className="relative flex items-center justify-center">
-            <MessageSquare className="w-7 h-7 text-white fill-white/20 group-hover:scale-105 transition-transform" />
+            <MessageSquare className="w-8 h-8 text-white fill-white/10 group-hover:scale-105 transition-transform" />
             {totalUnreadCount > 0 && (
-              <span className="absolute -top-3 -right-3 min-w-5 h-5 px-1 bg-red-600 text-white text-[10px] font-black flex items-center justify-center rounded-full animate-pulse shadow-md border-2 border-white">
-                {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
+              <span className="absolute -top-3 -right-3 min-w-6 h-6 px-1.5 bg-red-600 text-white text-[11px] font-black flex items-center justify-center rounded-full animate-pulse shadow-md border-2 border-white">
+                {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
               </span>
             )}
           </div>
         </button>
       )}
 
-      {/* Janela Do Chat Estilo WhatsApp */}
+      {/* Janela Do Chat */}
       {isOpen && !isMinimized && (
         <div 
-          className="fixed right-3 sm:right-6 bottom-3 sm:bottom-6 z-50 w-[92vw] sm:w-[380px] h-[540px] max-h-[82vh] bg-[#F0F2F5] rounded-3xl shadow-2xl border border-slate-200/80 flex flex-col overflow-hidden transition-all duration-300 animate-fadeIn"
+          className="fixed right-3 sm:right-6 bottom-3 sm:bottom-6 z-50 w-[94vw] sm:w-[420px] h-[640px] max-h-[85vh] bg-white rounded-3xl shadow-2xl flex flex-col overflow-hidden transition-all duration-300 animate-fadeIn border border-slate-200"
         >
-          {/* Cabeçalho Principal do Chat (WhatsApp Teal) */}
-          <div className="bg-[#075E54] text-white p-3 sm:p-3.5 flex items-center justify-between shadow-md shrink-0">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-9 h-9 bg-white/20 rounded-full border border-white/30 flex items-center justify-center shrink-0">
-                <MessageSquare className="w-5 h-5 text-amber-300 fill-amber-300/30" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <h3 className="text-xs font-black uppercase tracking-wide text-white truncate">
-                    Chat SIMCT
-                  </h3>
-                  <span className="px-1.5 py-0.2 bg-emerald-400/20 text-emerald-200 rounded-md text-[9px] font-bold uppercase border border-emerald-300/30 shrink-0">
-                    Un. {currentUser.unidade_id || 1}
-                  </span>
+          {/* Header WhatsApp */}
+          <div className="bg-[#075E54] text-white px-4 py-3.5 flex items-center justify-between shadow-lg shrink-0">
+            <div className="flex items-center gap-3">
+              {viewMode === 'CHAT' && (
+                <button 
+                  onClick={() => setViewMode('LIST')}
+                  className="p-1 -ml-1 hover:bg-white/10 rounded-full transition-colors"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </button>
+              )}
+              {viewMode === 'CHAT' ? (
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center border border-white/10">
+                      {activeChannelInfo.icon}
+                    </div>
+                    {(() => {
+                      const targetUser = users.find(u => u.id === activeChannel);
+                      return targetUser && isOnline(targetUser) && (
+                        <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#25D366] border-2 border-[#075E54] rounded-full" />
+                      );
+                    })()}
+                  </div>
+                  <div>
+                    <h4 className="text-[15px] font-bold leading-tight">{activeChannelInfo.title}</h4>
+                    <p className="text-[11px] text-emerald-100/80 font-medium">
+                      {(() => {
+                        const targetUser = users.find(u => u.id === activeChannel);
+                        if (targetUser) {
+                          return isOnline(targetUser) ? 'online' : 'visto por último recentemente';
+                        }
+                        return activeChannelInfo.sub;
+                      })()}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-[10px] text-emerald-100 font-medium truncate mt-0.5 opacity-90">
-                  {currentUser.nome}
-                </p>
-              </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <h3 className="text-[19px] font-bold tracking-tight">WhatsApp SIMCT</h3>
+                </div>
+              )}
             </div>
 
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1.5">
+              <button className="p-2 hover:bg-white/10 rounded-full transition-colors hidden sm:block">
+                <Search className="w-5 h-5" />
+              </button>
               <button
                 onClick={() => setIsMinimized(true)}
-                className="p-1.5 text-emerald-100 hover:text-white hover:bg-white/10 rounded-lg transition-all cursor-pointer"
-                title="Minimizar para ícone"
+                className="p-2 hover:bg-white/10 rounded-full transition-colors"
               >
-                <Minimize2 className="w-4 h-4" />
+                <Minimize2 className="w-5 h-5" />
               </button>
               <button
                 onClick={onToggleOpen}
-                className="p-1.5 text-emerald-100 hover:text-red-200 hover:bg-red-500/20 rounded-lg transition-all cursor-pointer"
-                title="Fechar Chat"
+                className="p-2 hover:bg-white/10 rounded-full transition-colors"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col min-h-0 bg-[#EFEAE2] relative">
-            
-            {/* BARRA SUPERIOR DE SELEÇÃO DE DESTINATÁRIO */}
-            <div className="p-2.5 bg-[#128C7E] text-white border-b border-emerald-900/20 flex items-center justify-between gap-2 shrink-0 shadow-xs">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="p-1.5 bg-white/15 rounded-lg shrink-0">
-                  {activeChannelInfo.icon}
-                </div>
-                <div className="min-w-0">
-                  <span className="text-[8.5px] font-bold text-emerald-100 uppercase tracking-wider block leading-none">
-                    Conversando com:
-                  </span>
-                  <h4 className="text-xs font-black uppercase text-amber-200 truncate mt-0.5">
-                    {activeChannelInfo.title}
-                  </h4>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1 shrink-0">
-                {channelMessages.length > 0 && (
-                  <button
-                    onClick={handleClearConversation}
-                    className="p-1.5 bg-red-500/20 hover:bg-red-600 text-red-100 hover:text-white border border-red-300/30 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1"
-                    title="Apagar conversa para você"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-
-                <button
-                  onClick={() => setIsSelectorOpen(!isSelectorOpen)}
-                  className={`px-2.5 py-1.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wide transition-all flex items-center gap-1 cursor-pointer shadow-xs shrink-0 border ${
-                    isSelectorOpen 
-                      ? 'bg-amber-400 text-amber-950 border-amber-300 font-black' 
-                      : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400/40'
-                  }`}
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>{isSelectorOpen ? 'Fechar' : 'Contatos'}</span>
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isSelectorOpen ? 'rotate-180' : ''}`} />
-                </button>
-              </div>
-            </div>
-
-            {/* PAINEL OCULTO/EXPANSÍVEL DE SELEÇÃO DE CONTATOS */}
-            {isSelectorOpen && (
-              <div className="absolute inset-0 z-20 bg-slate-900/95 backdrop-blur-md text-white p-3.5 flex flex-col overflow-hidden animate-fadeIn">
-                <div className="flex items-center justify-between pb-2 border-b border-white/10 shrink-0">
-                  <div>
-                    <h4 className="text-xs font-black uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
-                      <Users className="w-4 h-4 text-amber-400" />
-                      Selecione o Contato
-                    </h4>
-                    <p className="text-[10px] text-slate-300 mt-0.5">
-                      Escolha um grupo ou conselheiro para conversar.
-                    </p>
+          <div className="flex-1 flex flex-col min-h-0 bg-[#EFEAE2] relative overflow-hidden">
+            {viewMode === 'LIST' ? (
+              /* LISTA DE CONVERSAS (WhatsApp Style) */
+              <div className="flex flex-col h-full bg-white animate-slideIn">
+                {/* Busca e Filtros */}
+                <div className="p-3 border-b border-slate-100 space-y-3 shrink-0">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      placeholder="Pesquisar ou começar uma nova conversa"
+                      value={contactSearch}
+                      onChange={e => setContactSearch(e.target.value)}
+                      className="w-full bg-[#F0F2F5] border-none rounded-xl pl-10 pr-4 py-2 text-sm placeholder-slate-500 focus:ring-0 outline-none"
+                    />
                   </div>
-                  <button
-                    onClick={() => setIsSelectorOpen(false)}
-                    className="p-1.5 bg-white/10 hover:bg-white/20 rounded-xl text-slate-300 hover:text-white transition-all cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* BOTOES DE FILTRO DE UNIDADE */}
-                <div className="my-2.5 flex items-center gap-1 bg-slate-800 p-1 rounded-xl border border-white/10 shrink-0">
-                  <button
-                    onClick={() => setUnitFilter('U1')}
-                    className={`flex-1 py-1.5 px-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                      unitFilter === 'U1'
-                        ? 'bg-amber-400 text-amber-950 shadow-md'
-                        : 'text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    <Building2 className="w-3 h-3" />
-                    <span>Un. I</span>
-                  </button>
-
-                  <button
-                    onClick={() => setUnitFilter('U2')}
-                    className={`flex-1 py-1.5 px-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                      unitFilter === 'U2'
-                        ? 'bg-emerald-500 text-white shadow-md'
-                        : 'text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    <Building2 className="w-3 h-3" />
-                    <span>Un. II</span>
-                  </button>
-
-                  <button
-                    onClick={() => setUnitFilter('ALL')}
-                    className={`flex-1 py-1.5 px-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                      unitFilter === 'ALL'
-                        ? 'bg-blue-500 text-white shadow-md'
-                        : 'text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    <Globe className="w-3 h-3" />
-                    <span>Todos</span>
-                  </button>
-                </div>
-
-                {/* PESQUISA DE CONTATO */}
-                <div className="relative mb-2 shrink-0">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                  <input
-                    type="text"
-                    placeholder="Pesquisar conselheiro..."
-                    value={contactSearch}
-                    onChange={e => setContactSearch(e.target.value)}
-                    className="w-full bg-slate-800 border border-white/10 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-400 outline-none focus:border-amber-400 transition-all"
-                  />
-                </div>
-
-                {/* LISTA VERTICAL DE OPÇÕES */}
-                <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
-                  <div className="text-[9px] font-black uppercase text-amber-400/80 tracking-widest px-1 pt-1">
-                    🏛️ Grupos
-                  </div>
-
-                  {(unitFilter === 'U1' || unitFilter === 'ALL') && (
-                    (() => {
-                      const isMember = (currentUser.unidade_id || 1) === 1 && isConselheiroUser(currentUser);
-                      return (
-                        <button
-                          onClick={() => {
-                            if (!isMember) return;
-                            setActiveChannel('COLEGIADO_U1');
-                            setIsSelectorOpen(false);
-                          }}
-                          disabled={!isMember}
-                          className={`w-full p-2.5 rounded-xl flex items-center justify-between text-left transition-all border ${
-                            !isMember 
-                              ? 'bg-slate-800/40 text-slate-500 border-white/5 opacity-60 cursor-not-allowed'
-                              : activeChannel === 'COLEGIADO_U1'
-                                ? 'bg-amber-400 text-amber-950 border-amber-300 font-bold shadow-lg cursor-pointer'
-                                : 'bg-slate-800/80 hover:bg-slate-800 text-white border-white/10 cursor-pointer'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${
-                              isMember ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-700 text-slate-500'
-                            }`}>
-                              <Users className="w-3.5 h-3.5" />
-                            </div>
-                            <div>
-                              <span className="block text-xs font-black uppercase tracking-wider">
-                                Colegiado I
-                              </span>
-                              <span className="block text-[9px] opacity-80">
-                                Conselheiros Unidade I
-                              </span>
-                            </div>
-                          </div>
-                          {isMember && getUnreadForChannel('COLEGIADO_U1') > 0 && (
-                            <span className="px-2 py-0.5 bg-red-500 text-white font-black text-[9px] rounded-full animate-pulse">
-                              {getUnreadForChannel('COLEGIADO_U1')}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })()
-                  )}
-
-                  {(unitFilter === 'U2' || unitFilter === 'ALL') && (
-                    (() => {
-                      const isMember = currentUser.unidade_id === 2 && isConselheiroUser(currentUser);
-                      return (
-                        <button
-                          onClick={() => {
-                            if (!isMember) return;
-                            setActiveChannel('COLEGIADO_U2');
-                            setIsSelectorOpen(false);
-                          }}
-                          disabled={!isMember}
-                          className={`w-full p-2.5 rounded-xl flex items-center justify-between text-left transition-all border ${
-                            !isMember 
-                              ? 'bg-slate-800/40 text-slate-500 border-white/5 opacity-60 cursor-not-allowed'
-                              : activeChannel === 'COLEGIADO_U2'
-                                ? 'bg-emerald-600 text-white border-emerald-400 font-bold shadow-lg cursor-pointer'
-                                : 'bg-slate-800/80 hover:bg-slate-800 text-white border-white/10 cursor-pointer'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${
-                              isMember ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-700 text-slate-500'
-                            }`}>
-                              <Users className="w-3.5 h-3.5" />
-                            </div>
-                            <div>
-                              <span className="block text-xs font-black uppercase tracking-wider">
-                                Colegiado II
-                              </span>
-                              <span className="block text-[9px] opacity-80">
-                                Conselheiros Unidade II
-                              </span>
-                            </div>
-                          </div>
-                          {isMember && getUnreadForChannel('COLEGIADO_U2') > 0 && (
-                            <span className="px-2 py-0.5 bg-red-500 text-white font-black text-[9px] rounded-full animate-pulse">
-                              {getUnreadForChannel('COLEGIADO_U2')}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })()
-                  )}
-
-                  {(unitFilter === 'U1' || unitFilter === 'ALL') && (
-                    <button
-                      onClick={() => {
-                        setActiveChannel('ALL_U1');
-                        setIsSelectorOpen(false);
-                      }}
-                      className={`w-full p-2.5 rounded-xl flex items-center justify-between text-left transition-all cursor-pointer border ${
-                        activeChannel === 'ALL_U1'
-                          ? 'bg-amber-400 text-amber-950 border-amber-300 font-bold shadow-lg'
-                          : 'bg-slate-800/80 hover:bg-slate-800 text-white border-white/10'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center font-bold text-xs">
-                          <Building2 className="w-3.5 h-3.5" />
-                        </div>
-                        <div>
-                          <span className="block text-xs font-black uppercase tracking-wider">
-                            Geral - Unidade I
-                          </span>
-                        </div>
-                      </div>
-                      {getUnreadForChannel('ALL_U1') > 0 && (
-                        <span className="px-2 py-0.5 bg-red-500 text-white font-black text-[9px] rounded-full">
-                          {getUnreadForChannel('ALL_U1')}
-                        </span>
-                      )}
-                    </button>
-                  )}
-
-                  {(unitFilter === 'U2' || unitFilter === 'ALL') && (
-                    <button
-                      onClick={() => {
-                        setActiveChannel('ALL_U2');
-                        setIsSelectorOpen(false);
-                      }}
-                      className={`w-full p-2.5 rounded-xl flex items-center justify-between text-left transition-all cursor-pointer border ${
-                        activeChannel === 'ALL_U2'
-                          ? 'bg-emerald-600 text-white border-emerald-400 font-bold shadow-lg'
-                          : 'bg-slate-800/80 hover:bg-slate-800 text-white border-white/10'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold text-xs">
-                          <Building2 className="w-3.5 h-3.5" />
-                        </div>
-                        <div>
-                          <span className="block text-xs font-black uppercase tracking-wider">
-                            Geral - Unidade II
-                          </span>
-                        </div>
-                      </div>
-                      {getUnreadForChannel('ALL_U2') > 0 && (
-                        <span className="px-2 py-0.5 bg-red-500 text-white font-black text-[9px] rounded-full">
-                          {getUnreadForChannel('ALL_U2')}
-                        </span>
-                      )}
-                    </button>
-                  )}
-
-                  <button
-                    onClick={() => {
-                      setActiveChannel('ALL_SYSTEM');
-                      setIsSelectorOpen(false);
-                    }}
-                    className={`w-full p-2.5 rounded-xl flex items-center justify-between text-left transition-all cursor-pointer border ${
-                      activeChannel === 'ALL_SYSTEM'
-                        ? 'bg-blue-600 text-white border-blue-400 font-bold shadow-lg'
-                        : 'bg-slate-800/80 hover:bg-slate-800 text-white border-white/10'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-lg bg-blue-500/20 text-blue-300 flex items-center justify-center font-bold text-xs">
-                        <Globe className="w-3.5 h-3.5" />
-                      </div>
-                      <div>
-                        <span className="block text-xs font-black uppercase tracking-wider">
-                          Geral - Todos
-                        </span>
-                      </div>
-                    </div>
-                    {getUnreadForChannel('ALL_SYSTEM') > 0 && (
-                      <span className="px-2 py-0.5 bg-red-500 text-white font-black text-[9px] rounded-full">
-                        {getUnreadForChannel('ALL_SYSTEM')}
-                      </span>
-                    )}
-                  </button>
-
-                  <div className="text-[9px] font-black uppercase text-amber-400/80 tracking-widest px-1 pt-2">
-                    👤 Pessoas ({availableUsers.length})
-                  </div>
-
-                  {availableUsers.map(u => {
-                    const isSelected = activeChannel === u.id;
-                    const unread = getUnreadForChannel(u.id);
-
-                    return (
+                  <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                    {['ALL', 'U1', 'U2'].map((u) => (
                       <button
-                        key={u.id}
-                        onClick={() => {
-                          setActiveChannel(u.id);
-                          setIsSelectorOpen(false);
-                        }}
-                        className={`w-full p-2 rounded-xl flex items-center justify-between text-left transition-all cursor-pointer border ${
-                          isSelected
-                            ? 'bg-emerald-600 text-white border-emerald-400 shadow-md font-bold'
-                            : 'bg-slate-800/50 hover:bg-slate-800 text-slate-100 border-white/5'
+                        key={u}
+                        onClick={() => setUnitFilter(u as any)}
+                        className={`px-4 py-1.5 rounded-full text-[12px] font-bold whitespace-nowrap transition-all border ${
+                          unitFilter === u 
+                            ? 'bg-[#25D366] text-white border-[#25D366] shadow-md' 
+                            : 'bg-[#F0F2F5] text-slate-600 border-[#F0F2F5] hover:bg-[#E3E6EA]'
                         }`}
                       >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 font-black text-xs ${
-                            isSelected ? 'bg-emerald-800 text-white' : 'bg-slate-700 text-amber-300'
-                          }`}>
-                            {u.nome.charAt(0).toUpperCase()}
+                        {u === 'ALL' ? 'Todos' : u === 'U1' ? 'Unidade I' : 'Unidade II'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Lista de Contatos/Grupos */}
+                <div className="flex-1 overflow-y-auto">
+                  {/* Canais de Grupo */}
+                  <div className="p-4 space-y-1">
+                    <h5 className="text-[11px] font-bold text-[#008069] uppercase tracking-wider mb-2">Canais e Grupos</h5>
+                    
+                    {[
+                      { id: 'ALL_SYSTEM', title: 'Geral - Sistema', icon: <Globe className="w-5 h-5" />, color: 'bg-emerald-100 text-emerald-600' },
+                      { id: 'COLEGIADO_U1', title: 'Colegiado I', icon: <Shield className="w-5 h-5" />, color: 'bg-amber-100 text-amber-600', unit: 1, consOnly: true },
+                      { id: 'COLEGIADO_U2', title: 'Colegiado II', icon: <Shield className="w-5 h-5" />, color: 'bg-blue-100 text-blue-600', unit: 2, consOnly: true },
+                      { id: 'ALL_U1', title: 'Unidade I', icon: <Building2 className="w-5 h-5" />, color: 'bg-amber-50 text-amber-500', unit: 1 },
+                      { id: 'ALL_U2', title: 'Unidade II', icon: <Building2 className="w-5 h-5" />, color: 'bg-blue-50 text-blue-500', unit: 2 },
+                    ].filter(g => {
+                      if (g.unit && unitFilter !== 'ALL' && unitFilter !== `U${g.unit}`) return false;
+                      if (g.consOnly && !isConselheiroUser(currentUser)) return false;
+                      if (g.unit && g.unit !== currentUser.unidade_id && g.id.startsWith('COLEGIADO')) return false;
+                      return true;
+                    }).map((group) => {
+                      const lastMsg = lastMessagesMap[group.id];
+                      const unread = getUnreadForChannel(group.id);
+                      return (
+                        <button
+                          key={group.id}
+                          onClick={() => {
+                            setActiveChannel(group.id);
+                            setViewMode('CHAT');
+                          }}
+                          className="w-full flex items-center gap-3 p-3 hover:bg-[#F5F6F6] transition-colors rounded-xl group"
+                        >
+                          <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${group.color}`}>
+                            {group.icon}
                           </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="block text-xs font-black uppercase tracking-wider truncate">
-                                {u.nome}
-                              </span>
-                              <span className={`px-1 py-0.1 text-[8px] font-extrabold rounded uppercase ${
-                                u.unidade_id === 2 ? 'bg-blue-500/30 text-blue-300' : 'bg-amber-500/30 text-amber-300'
-                              }`}>
-                                Un. {u.unidade_id || 1}
-                              </span>
+                          <div className="flex-1 min-w-0 border-b border-slate-100 pb-3 group-last:border-none">
+                            <div className="flex justify-between items-start">
+                              <h4 className="text-[15px] font-bold text-[#111B21] truncate">{group.title}</h4>
+                              {lastMsg && (
+                                <span className="text-[11px] text-slate-500 font-medium whitespace-nowrap ml-2">
+                                  {new Date(lastMsg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex justify-between items-center mt-0.5">
+                              <div className="text-[13px] text-slate-500 truncate pr-4">
+                                {lastMsg ? (
+                                  <>
+                                    <span className="font-semibold text-slate-600">{lastMsg.sender_name.split(' ')[0]}: </span>
+                                    {lastMsg.text}
+                                  </>
+                                ) : 'Nenhuma mensagem enviada'}
+                              </div>
+                              {unread > 0 && (
+                                <span className="bg-[#25D366] text-white text-[10px] font-black min-w-[20px] h-5 rounded-full flex items-center justify-center px-1">
+                                  {unread}
+                                </span>
+                              )}
                             </div>
                           </div>
-                        </div>
-
-                        {unread > 0 && (
-                          <span className="px-2 py-0.5 bg-red-500 text-white font-black text-[9px] rounded-full animate-pulse">
-                            {unread}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* BOTOES DE AVISOS RÁPIDOS */}
-            <div className="px-2.5 py-1.5 bg-amber-50/90 border-b border-amber-200/60 flex items-center gap-1.5 overflow-x-auto shrink-0 scrollbar-none">
-              <span className="text-[8.5px] font-black uppercase text-amber-900 tracking-wider shrink-0 flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-amber-600" />
-                Avisos:
-              </span>
-              {quickAlerts.map((a, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleSendMessage(a.text)}
-                  className="px-2 py-0.5 bg-white hover:bg-amber-100 text-amber-950 border border-amber-300/80 rounded-md text-[8.5px] font-bold uppercase tracking-wider whitespace-nowrap shadow-2xs transition-all cursor-pointer active:scale-95 shrink-0"
-                >
-                  {a.label}
-                </button>
-              ))}
-            </div>
-
-            {/* FEED DE MENSAGENS (WhatsApp Style) */}
-            <div className="flex-1 p-3 overflow-y-auto space-y-2.5 bg-[#EFEAE2]">
-              {channelMessages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500">
-                  <div className="w-12 h-12 rounded-full bg-emerald-100/80 flex items-center justify-center mb-2">
-                    <MessageSquare className="w-6 h-6 text-[#075E54]" />
-                  </div>
-                  <p className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
-                    Nenhuma mensagem por aqui.
-                  </p>
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Digite sua mensagem abaixo ou toque em "Contatos" para escolher outro destinatário.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between px-2.5 py-1 mb-1 bg-white/70 backdrop-blur-xs border border-slate-200/60 rounded-lg text-[9.5px] text-slate-600 font-semibold shrink-0">
-                    <span>Mensagens: <strong>{channelMessages.length}</strong></span>
-                    <button
-                      onClick={handleClearConversation}
-                      className="text-red-600 hover:text-red-700 font-bold uppercase text-[8.5px] flex items-center gap-1 cursor-pointer hover:underline"
-                      title="Excluir mensagens para você"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      <span>Limpar Chat</span>
-                    </button>
+                        </button>
+                      );
+                    })}
                   </div>
 
-                  {channelMessages.map(msg => {
-                    const isMe = String(msg.sender_id) === String(currentUser.id);
-                    const timeFormatted = new Date(msg.created_at).toLocaleTimeString('pt-BR', {
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    });
-
-                    const reads = (msg.read_by || []).map(id => String(id));
-                    const otherReaders = reads.filter(id => id !== String(currentUser.id) && id !== String(msg.sender_id));
-                    const isRead = otherReaders.length > 0;
-
-                    return (
-                      <div
-                        key={msg.id}
-                        className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} group`}
-                      >
-                        {!isMe && (
-                          <div className="flex items-center gap-1 mb-0.5 px-1">
-                            <span className="text-[9.5px] font-black uppercase tracking-wider text-[#075E54]">
-                              {msg.sender_name}
-                            </span>
-                            {msg.sender_cargo && (
-                              <span className="text-[8px] font-bold uppercase text-slate-500">
-                                ({msg.sender_cargo})
-                              </span>
+                  {/* Lista de Usuários */}
+                  <div className="p-4 pt-0 space-y-1">
+                    <h5 className="text-[11px] font-bold text-[#008069] uppercase tracking-wider mb-2">Contatos ({availableUsers.length})</h5>
+                    {availableUsers.map(u => {
+                      const lastMsg = lastMessagesMap[u.id];
+                      const unread = getUnreadForChannel(u.id);
+                      const online = isOnline(u);
+                      return (
+                        <button
+                          key={u.id}
+                          onClick={() => {
+                            setActiveChannel(u.id);
+                            setViewMode('CHAT');
+                          }}
+                          className="w-full flex items-center gap-3 p-3 hover:bg-[#F5F6F6] transition-colors rounded-xl group"
+                        >
+                          <div className="relative shrink-0">
+                            <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center font-black text-lg border border-indigo-100">
+                              {u.nome.charAt(0).toUpperCase()}
+                            </div>
+                            {online && (
+                              <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-[#25D366] border-2 border-white rounded-full shadow-sm" />
                             )}
                           </div>
-                        )}
-
-                        <div
-                          className={`max-w-[85%] px-3.5 py-2 rounded-2xl text-xs font-medium leading-relaxed shadow-2xs break-words relative ${
-                            isMe
-                              ? 'bg-[#D9FDD3] text-[#111B21] rounded-tr-xs border border-[#B7E4A9]'
-                              : 'bg-white text-[#111B21] rounded-tl-xs border border-slate-200/80'
-                          }`}
+                          <div className="flex-1 min-w-0 border-b border-slate-100 pb-3 group-last:border-none">
+                            <div className="flex justify-between items-start">
+                              <div className="flex items-center gap-2 truncate">
+                                <h4 className="text-[15px] font-bold text-[#111B21] truncate">{u.nome}</h4>
+                                <span className={`px-1.5 py-0.5 text-[9px] font-black rounded uppercase ${
+                                  u.unidade_id === 2 ? 'bg-blue-100 text-blue-600' : 'bg-amber-100 text-amber-600'
+                                }`}>
+                                  Un. {u.unidade_id || 1}
+                                </span>
+                              </div>
+                              {lastMsg && (
+                                <span className="text-[11px] text-slate-500 font-medium whitespace-nowrap ml-2">
+                                  {new Date(lastMsg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex justify-between items-center mt-0.5">
+                              <div className="text-[13px] text-slate-500 truncate pr-4">
+                                {lastMsg ? (
+                                  <span className="flex items-center gap-1">
+                                    {String(lastMsg.sender_id) === String(currentUser.id) && (
+                                      <CheckCheck className={`w-3.5 h-3.5 ${(lastMsg.read_by || []).length > 1 ? 'text-sky-500' : 'text-slate-400'}`} />
+                                    )}
+                                    {lastMsg.text}
+                                  </span>
+                                ) : (u.cargo || 'Funcionário')}
+                              </div>
+                              {unread > 0 && (
+                                <span className="bg-[#25D366] text-white text-[10px] font-black min-w-[20px] h-5 rounded-full flex items-center justify-center px-1 shadow-sm">
+                                  {unread}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* CONVERSA ATIVA (CHAT WhatsApp Style) */
+              <div className="flex-1 flex flex-col min-h-0 bg-[#EFEAE2] animate-slideIn">
+                <div className="flex-1 p-4 overflow-y-auto space-y-4 scroll-smooth">
+                  {channelMessages.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-60">
+                      <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4">
+                        <Lock className="w-8 h-8 text-slate-400" />
+                      </div>
+                      <p className="text-sm font-bold text-slate-700 uppercase tracking-widest mb-1">Criptografia de Ponta a Ponta</p>
+                      <p className="text-[11px] text-slate-500 max-w-[200px]">As mensagens internas são protegidas e visíveis apenas para os envolvidos.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between px-2 py-1 mb-2 bg-white/40 backdrop-blur-md border border-slate-200/40 rounded-lg text-[10px] text-slate-600 font-bold shrink-0">
+                        <span>Mensagens: <strong>{channelMessages.length}</strong></span>
+                        <button
+                          onClick={handleClearConversation}
+                          className="text-red-600 hover:text-red-700 font-black uppercase text-[9px] flex items-center gap-1 cursor-pointer"
                         >
-                          <div>{msg.text}</div>
+                          <Trash2 className="w-3 h-3" />
+                          <span>Limpar Conversa</span>
+                        </button>
+                      </div>
 
-                          <div className="flex items-center justify-end gap-1 mt-1 pt-0.5 text-[8.5px] font-semibold text-slate-500">
-                            <span>{timeFormatted}</span>
-                            {isMe && (
-                              <div className="flex items-center gap-0.5 ml-1" title={isRead ? "Visualizada" : "Enviada"}>
-                                {isRead ? (
-                                  <CheckCheck className="w-3.5 h-3.5 text-sky-600 stroke-[2.5]" />
-                                ) : (
-                                  <Check className="w-3.5 h-3.5 text-slate-400 stroke-[2.5]" />
-                                )}
+                      {channelMessages.map((msg, idx) => {
+                        const isMe = String(msg.sender_id) === String(currentUser.id);
+                        const msgDate = new Date(msg.created_at);
+                        const timeStr = msgDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                        
+                        const showDateHeader = idx === 0 || 
+                          new Date(channelMessages[idx-1].created_at).toDateString() !== msgDate.toDateString();
+
+                        const reads = (msg.read_by || []).map(id => String(id));
+                        const isRead = reads.filter(id => id !== String(currentUser.id) && id !== String(msg.sender_id)).length > 0;
+
+                        return (
+                          <React.Fragment key={msg.id}>
+                            {showDateHeader && (
+                              <div className="flex justify-center my-4">
+                                <span className="bg-[#FFFFFF]/90 backdrop-blur-md px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-slate-500 shadow-sm border border-slate-200/50 tracking-widest">
+                                  {msgDate.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
+                                </span>
                               </div>
                             )}
-                            <button
-                              onClick={() => handleDeleteMessage(msg.id)}
-                              className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-all ml-1.5 cursor-pointer"
-                              title="Apagar para mim"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
+                            <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} animate-fadeIn group relative`}>
+                              {!isMe && (
+                                <div className="flex items-center gap-1 mb-1 px-2">
+                                  <span className="text-[10px] font-black uppercase tracking-wider text-[#075E54]">
+                                    {msg.sender_name}
+                                  </span>
+                                </div>
+                              )}
+                              <div className={`max-w-[85%] min-w-[70px] relative rounded-xl px-3 py-1.5 shadow-sm text-[14.5px] font-medium leading-normal ${
+                                isMe 
+                                  ? 'bg-[#D9FDD3] text-[#111B21] rounded-tr-none border border-[#B7E4A9]' 
+                                  : 'bg-white text-[#111B21] rounded-tl-none border border-slate-200'
+                              }`}>
+                                <div className={`absolute top-0 w-3 h-3 ${
+                                  isMe 
+                                    ? '-right-1.5 bg-[#D9FDD3] [clip-path:polygon(0_0,0_100%,100%_0)]' 
+                                    : '-left-1.5 bg-white [clip-path:polygon(100%_0,100%_100%,0_0)]'
+                                }`} />
+                                
+                                <div className="whitespace-pre-wrap break-words">{msg.text}</div>
+                                
+                                <div className="flex items-center justify-end gap-1 mt-0.5 text-[10px] text-slate-500/80 font-bold uppercase tracking-tighter">
+                                  <span>{timeStr}</span>
+                                  {isMe && (
+                                    <div className="ml-1">
+                                      <CheckCheck className={`w-4 h-4 ${isRead ? 'text-sky-500' : 'text-slate-400'}`} />
+                                    </div>
+                                  )}
+                                </div>
 
-            {/* PAINEL EXPANSÍVEL DE EMOJIS */}
-            {showEmojiPicker && (
-              <div className="absolute bottom-16 left-2 right-2 z-30 bg-white border border-slate-200 rounded-2xl shadow-2xl p-2.5 animate-fadeIn flex flex-col max-h-[200px]">
-                <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 shrink-0">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1">
-                    <Smile className="w-3.5 h-3.5 text-amber-500" />
-                    Emojis
-                  </span>
-                  <button
-                    onClick={() => setShowEmojiPicker(false)}
-                    className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+                                <button
+                                  onClick={() => handleDeleteMessage(msg.id)}
+                                  className={`absolute top-0 ${isMe ? '-left-8' : '-right-8'} p-1.5 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer`}
+                                  title="Apagar para mim"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </React.Fragment>
+                        );
+                      })}
+                    </>
+                  )}
+                  <div ref={messagesEndRef} />
                 </div>
 
-                <div className="flex-1 overflow-y-auto space-y-2 pt-2">
-                  {EMOJI_CATEGORIES.map((cat, idx) => (
-                    <div key={idx}>
-                      <div className="text-[8.5px] font-extrabold uppercase text-slate-400 tracking-wider mb-1">
-                        {cat.category}
-                      </div>
-                      <div className="grid grid-cols-8 gap-1">
-                        {cat.emojis.map((e, eIdx) => (
-                          <button
-                            key={eIdx}
-                            onClick={() => handleInsertEmoji(e)}
-                            className="w-7 h-7 flex items-center justify-center text-base hover:bg-slate-100 rounded-lg transition-transform hover:scale-125 cursor-pointer active:scale-95"
-                          >
-                            {e}
+                {/* Input Area WhatsApp style */}
+                <div className="bg-[#F0F2F5] p-2.5 flex items-center gap-2 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] border-t border-slate-200 shrink-0">
+                  <button 
+                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                    className={`p-2 transition-all rounded-full ${showEmojiPicker ? 'bg-amber-100 text-amber-600' : 'text-slate-500 hover:bg-slate-200'}`}
+                  >
+                    <Smile className="w-6 h-6" />
+                  </button>
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      placeholder="Mensagem"
+                      value={textInput}
+                      onChange={e => setTextInput(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      className="w-full bg-white border-none rounded-xl px-4 py-2.5 text-[15px] placeholder-slate-400 shadow-sm outline-none focus:ring-0"
+                    />
+                    {showEmojiPicker && (
+                      <div className="absolute bottom-full left-0 mb-3 w-[280px] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-slideUp z-50">
+                        <div className="p-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Emojis</span>
+                          <button onClick={() => setShowEmojiPicker(false)} className="p-1 hover:bg-slate-200 rounded-lg text-slate-400">
+                            <X className="w-3.5 h-3.5" />
                           </button>
-                        ))}
+                        </div>
+                        <div className="p-2 max-h-[220px] overflow-y-auto space-y-3">
+                          {EMOJI_CATEGORIES.map((cat, ci) => (
+                            <div key={ci}>
+                              <p className="text-[9px] font-bold text-slate-400 uppercase mb-1.5 px-1">{cat.category}</p>
+                              <div className="grid grid-cols-6 gap-1">
+                                {cat.emojis.map((emoji, ei) => (
+                                  <button
+                                    key={ei}
+                                    onClick={() => handleInsertEmoji(emoji)}
+                                    className="w-8 h-8 flex items-center justify-center text-lg hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleSendMessage()}
+                    disabled={!textInput.trim() || isSending}
+                    className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${
+                      textInput.trim() ? 'bg-[#00A884] text-white shadow-md active:scale-90' : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                    }`}
+                  >
+                    <Send className="w-5 h-5 fill-current" />
+                  </button>
                 </div>
               </div>
             )}
-
-            {/* INPUT DE ENVIO DE MENSAGEM */}
-            <div className="p-2.5 bg-[#F0F2F5] border-t border-slate-200 shrink-0 flex flex-col gap-1.5">
-              {/* EMOJIS RÁPIDOS */}
-              <div className="flex items-center gap-1 overflow-x-auto scrollbar-none pb-0.5">
-                {QUICK_EMOJIS.map((e, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleInsertEmoji(e)}
-                    className="px-1.5 py-0.5 bg-white hover:bg-amber-100 text-xs rounded-md transition-transform hover:scale-110 active:scale-95 cursor-pointer shrink-0 border border-slate-200/60"
-                  >
-                    {e}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                  className={`p-2 rounded-xl border transition-all cursor-pointer shrink-0 flex items-center justify-center ${
-                    showEmojiPicker
-                      ? 'bg-amber-100 border-amber-300 text-amber-700'
-                      : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-600'
-                  }`}
-                  title="Seletor de Emojis"
-                >
-                  <Smile className="w-4 h-4 text-amber-500" />
-                </button>
-
-                <input
-                  type="text"
-                  placeholder={`Mensagem para ${activeChannelInfo.title}...`}
-                  value={textInput}
-                  onChange={e => setTextInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  className="flex-1 bg-white border border-slate-200 focus:border-[#075E54] rounded-xl px-3 py-2 text-xs text-slate-800 outline-none font-medium transition-all shadow-2xs"
-                />
-
-                <button
-                  onClick={() => {
-                    handleSendMessage();
-                    setShowEmojiPicker(false);
-                  }}
-                  disabled={!textInput.trim() || isSending}
-                  className="p-2 bg-[#075E54] hover:bg-[#128C7E] disabled:opacity-40 text-white rounded-xl transition-all cursor-pointer shadow-xs shrink-0 active:scale-95 flex items-center justify-center"
-                  title="Enviar mensagem"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
           </div>
         </div>
       )}
