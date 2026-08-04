@@ -382,20 +382,34 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     const history = findExisting();
     if (history.length > 0) {
       const existingDoc = history[0];
-      if (!initialData) {
-        setFormData(prev => ({
-          ...prev,
-          genitora_nome: prev.genitora_nome || existingDoc.genitora_nome,
-          bairro: prev.bairro || existingDoc.bairro,
-          conselheiro_referencia_id: existingDoc.conselheiro_referencia_id,
-          unidade_id: existingDoc.unidade_id || prev.unidade_id
-        }));
+      
+      // Armazena o histórico para exibir o aviso
+      if (familyHistory.length === 0) {
+        // Se ainda não mostramos o aviso para este conjunto de resultados
+        setFamilyHistory(history);
+        
+        // Exibe o alerta conforme Instruções do Sistema
+        if (!initialData && (formData.genitora_nome || '').length > 3) {
+          setTimeout(() => {
+            if (window.confirm("Atenção: Histórico familiar localizado. Vincular a este prontuário?")) {
+              setFormData(prev => ({
+                ...prev,
+                genitora_nome: prev.genitora_nome || existingDoc.genitora_nome,
+                bairro: prev.bairro || existingDoc.bairro,
+                conselheiro_referencia_id: existingDoc.conselheiro_referencia_id,
+                unidade_id: existingDoc.unidade_id || prev.unidade_id
+              }));
+              setIsReferenceLocked(true);
+              setIsManualReference(isADM);
+            }
+          }, 100);
+        } else {
+          setIsReferenceLocked(true);
+          if (!initialData) {
+            setIsManualReference(isADM);
+          }
+        }
       }
-      setIsReferenceLocked(true);
-      if (!initialData) {
-        setIsManualReference(isADM);
-      }
-      setFamilyHistory(history);
     } else {
       setIsReferenceLocked(false);
       setFamilyHistory([]);

@@ -151,6 +151,53 @@ const App: React.FC = () => {
     forceDirectEdit: boolean;
   }[]>([]);
 
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [lastCleanup, setLastCleanup] = useState<number>(0);
+
+  // Relógio em tempo real para manter a escala atualizada sem refresh
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // 1 minuto
+    return () => clearInterval(timer);
+  }, []);
+
+  // Limpeza automática de trocas de escala após 47 horas
+  useEffect(() => {
+    if (!currentUser || scaleExceptions.length === 0) return;
+    
+    // Rodar limpeza apenas a cada 1 hora para evitar excesso de requisições
+    const now = Date.now();
+    if (now - lastCleanup < 3600000) return; 
+
+    const cleanup = async () => {
+      const threshold = 47 * 60 * 60 * 1000; // 47 horas
+      const currentMs = Date.now();
+
+      for (const ex of scaleExceptions) {
+        try {
+          let endMs: number;
+          if (ex.fim_data && ex.fim_hora) {
+            endMs = new Date(`${ex.fim_data}T${ex.fim_hora}:00`).getTime();
+          } else {
+            // Fallback para o dia da troca
+            endMs = new Date(`${ex.data || ex.inicio_data}T23:59:59`).getTime();
+          }
+
+          if (!isNaN(endMs) && (currentMs - endMs) > threshold) {
+            console.log(`[SIMCT] Limpeza automática: Removendo troca expirada ${ex.id}`);
+            await deleteScaleException(ex.id);
+          }
+        } catch (e) {
+          console.warn("Falha na limpeza de troca:", e);
+        }
+      }
+      setLastCleanup(currentMs);
+    };
+
+    cleanup();
+  }, [currentUser, scaleExceptions, lastCleanup]);
+
   const isLud = useMemo(() => currentUser?.nome === 'LUDIMILA', [currentUser]);
   const isSuperAdmin = useMemo(() => currentUser?.nome === 'LUDIMILA' || currentUser?.nome === 'LEANDRO', [currentUser]);
   const isAdministrative = useMemo(() => currentUser?.perfil === 'ADMIN' || currentUser?.perfil === 'ADMINISTRATIVO' || currentUser?.nome === 'LEANDRO', [currentUser]);
@@ -546,7 +593,7 @@ const App: React.FC = () => {
 
        return (isAwaiting || hasNotif) && inTrio && !iValidated;
     });
-  }, [documents, currentUser, userNameMap, scaleExceptions]);
+  }, [documents, currentUser, userNameMap, scaleExceptions, currentTime]);
 
   // DIRETRIZ: Alertas de Monitoramento Vencido
   const expiredMonitoringItems = useMemo(() => {

@@ -67,7 +67,7 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
     setTextInput(prev => prev + emoji);
   };
 
-  // Helper function to play a double-beep sound notification
+  // Helper function to play a distinctive WhatsApp-style notification sound
   const playNotificationSound = () => {
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -75,29 +75,34 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
       const ctx = new AudioCtx();
       
       const playTones = () => {
-        // Tone 1
+        const now = ctx.currentTime;
+        
+        // WhatsApp notification often has a quick "pop" or double high-tone
+        // Tone 1: High crisp beep
         const osc1 = ctx.createOscillator();
         const gain1 = ctx.createGain();
         osc1.type = 'sine';
-        osc1.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
-        gain1.gain.setValueAtTime(0.2, ctx.currentTime);
-        gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+        osc1.frequency.setValueAtTime(880, now); // A5
+        gain1.gain.setValueAtTime(0, now);
+        gain1.gain.linearRampToValueAtTime(0.2, now + 0.01);
+        gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
         osc1.connect(gain1);
         gain1.connect(ctx.destination);
-        osc1.start(ctx.currentTime);
-        osc1.stop(ctx.currentTime + 0.15);
+        osc1.start(now);
+        osc1.stop(now + 0.1);
 
-        // Tone 2
+        // Tone 2: Slightly higher second beep
         const osc2 = ctx.createOscillator();
         const gain2 = ctx.createGain();
         osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(987.77, ctx.currentTime + 0.12); // B5
-        gain2.gain.setValueAtTime(0.25, ctx.currentTime + 0.12);
-        gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.38);
+        osc2.frequency.setValueAtTime(1046.50, now + 0.08); // C6
+        gain2.gain.setValueAtTime(0, now + 0.08);
+        gain2.gain.linearRampToValueAtTime(0.25, now + 0.09);
+        gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
         osc2.connect(gain2);
         gain2.connect(ctx.destination);
-        osc2.start(ctx.currentTime + 0.12);
-        osc2.stop(ctx.currentTime + 0.38);
+        osc2.start(now + 0.08);
+        osc2.stop(now + 0.25);
       };
 
       if (ctx.state === 'suspended') {
@@ -541,7 +546,21 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
                       {(() => {
                         const targetUser = users.find(u => u.id === activeChannel);
                         if (targetUser) {
-                          return isOnline(targetUser) ? 'online' : 'visto por último recentemente';
+                          if (isOnline(targetUser)) return 'online';
+                          if (!targetUser.last_heartbeat) return 'visto por último recentemente';
+                          
+                          const lastHB = new Date(targetUser.last_heartbeat);
+                          const now = new Date();
+                          const diffMs = now.getTime() - lastHB.getTime();
+                          const diffMin = Math.floor(diffMs / 60000);
+                          const diffHrs = Math.floor(diffMin / 60);
+                          const diffDays = Math.floor(diffHrs / 24);
+
+                          if (diffMin < 1) return 'visto por último agora mesmo';
+                          if (diffMin < 60) return `visto por último há ${diffMin} min`;
+                          if (diffHrs < 24) return `visto por último há ${diffHrs} h`;
+                          if (diffDays === 1) return 'visto por último ontem';
+                          return `visto por último em ${lastHB.toLocaleDateString()}`;
                         }
                         return activeChannelInfo.sub;
                       })()}
