@@ -261,7 +261,7 @@ const App: React.FC = () => {
         }
         return merged;
       });
-    }, { limitCount: 300 });
+    }, { limitCount: 300, orderByField: 'created_at', orderDirection: 'desc' });
     const unsubUsers = syncCollection<UserWithPassword>('users', (storedUsers) => {
       const baseUsers = INITIAL_USERS.map(u => ({ ...u, status: u.status || 'ATIVO', tentativas_login: 0 }));
       

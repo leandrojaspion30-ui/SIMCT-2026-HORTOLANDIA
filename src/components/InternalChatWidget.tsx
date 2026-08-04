@@ -39,6 +39,7 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
   const [isSending, setIsSending] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [lastNotification, setLastNotification] = useState<{ text: string, sender: string, channelId: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Helper for online status
@@ -73,29 +74,37 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
       
-      // Tone 1
-      const osc1 = ctx.createOscillator();
-      const gain1 = ctx.createGain();
-      osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
-      gain1.gain.setValueAtTime(0.2, ctx.currentTime);
-      gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-      osc1.connect(gain1);
-      gain1.connect(ctx.destination);
-      osc1.start(ctx.currentTime);
-      osc1.stop(ctx.currentTime + 0.15);
+      const playTones = () => {
+        // Tone 1
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
+        gain1.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.start(ctx.currentTime);
+        osc1.stop(ctx.currentTime + 0.15);
 
-      // Tone 2
-      const osc2 = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(987.77, ctx.currentTime + 0.12); // B5
-      gain2.gain.setValueAtTime(0.25, ctx.currentTime + 0.12);
-      gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.38);
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.start(ctx.currentTime + 0.12);
-      osc2.stop(ctx.currentTime + 0.38);
+        // Tone 2
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(987.77, ctx.currentTime + 0.12); // B5
+        gain2.gain.setValueAtTime(0.25, ctx.currentTime + 0.12);
+        gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.38);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.start(ctx.currentTime + 0.12);
+        osc2.stop(ctx.currentTime + 0.38);
+      };
+
+      if (ctx.state === 'suspended') {
+        ctx.resume().then(playTones);
+      } else {
+        playTones();
+      }
     } catch (e) {
       console.warn('Erro ao tocar som do chat:', e);
     }
@@ -170,9 +179,16 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
 
   const totalUnreadCount = unreadMessages.length;
 
-  // Monitorar novas mensagens recebidas para emitir SOM e mudar canal automaticamente
+  // Monitorar novas mensagens recebidas para emitir SOM e exibir notificação visual
   const prevMessageIdsRef = useRef<Set<string>>(new Set());
   const isInitialLoadRef = useRef(true);
+
+  useEffect(() => {
+    if (lastNotification) {
+      const timer = setTimeout(() => setLastNotification(null), 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [lastNotification]);
 
   useEffect(() => {
     const currentIds = new Set(userVisibleMessages.map(m => m.id));
@@ -184,6 +200,7 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
     }
 
     let hasNewIncoming = false;
+    let newestMsg: ChatMessage | null = null;
     let newestSenderChannel: string | null = null;
 
     userVisibleMessages.forEach(m => {
@@ -191,6 +208,7 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
         // Nova mensagem que não foi enviada por mim
         if (String(m.sender_id) !== String(currentUser.id)) {
           hasNewIncoming = true;
+          newestMsg = m;
           if (m.recipient_id === 'COLEGIADO_U1') newestSenderChannel = 'COLEGIADO_U1';
           else if (m.recipient_id === 'COLEGIADO_U2') newestSenderChannel = 'COLEGIADO_U2';
           else if (m.recipient_id === 'ALL_U1') newestSenderChannel = 'ALL_U1';
@@ -201,19 +219,24 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
       }
     });
 
-    if (hasNewIncoming) {
+    if (hasNewIncoming && newestMsg) {
       // Tocar alerta sonoro!
       playNotificationSound();
 
-      // Se o chat estiver aberto, podemos mudar para o canal ou apenas mostrar o badge na lista
-      if (newestSenderChannel && isOpen) {
-        // Se já estiver na lista, o badge aparecerá. Se estiver em outro chat, talvez queira mudar ou não.
-        // Vamos apenas garantir que o badge de não lidas seja atualizado na lista.
+      // Notificação Visual se o chat não estiver focado nessa conversa
+      const isChatFocussed = isOpen && !isMinimized && viewMode === 'CHAT' && String(activeChannel) === String(newestSenderChannel);
+      
+      if (!isChatFocussed) {
+        setLastNotification({
+          text: newestMsg.text,
+          sender: newestMsg.sender_name,
+          channelId: newestSenderChannel || 'ALL_SYSTEM'
+        });
       }
     }
 
     prevMessageIdsRef.current = currentIds;
-  }, [userVisibleMessages, currentUser.id]);
+  }, [userVisibleMessages, currentUser.id, isOpen, isMinimized, viewMode, activeChannel]);
 
   // Helper para abrir/alternar o chat
   const handleToggleChat = () => {
@@ -428,6 +451,40 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
 
   return (
     <>
+      {/* Notificação Toast Flutuante (Visual Alert) */}
+      {lastNotification && (
+        <div 
+          className="fixed bottom-24 right-6 z-[60] w-72 bg-white rounded-2xl shadow-2xl border border-emerald-100 overflow-hidden animate-slideIn cursor-pointer"
+          onClick={() => {
+            if (isMinimized) setIsMinimized(false);
+            if (!isOpen) onToggleOpen();
+            setActiveChannel(lastNotification.channelId);
+            setViewMode('CHAT');
+            setLastNotification(null);
+          }}
+        >
+          <div className="bg-[#075E54] px-3 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="w-3.5 h-3.5 text-white" />
+              <span className="text-[10px] font-black text-white uppercase tracking-wider">Nova Mensagem</span>
+            </div>
+            <button onClick={(e) => { e.stopPropagation(); setLastNotification(null); }}>
+              <X className="w-3.5 h-3.5 text-white/70 hover:text-white" />
+            </button>
+          </div>
+          <div className="p-3 flex gap-3">
+            <div className="w-10 h-10 bg-emerald-50 rounded-full flex items-center justify-center shrink-0">
+              <UserIcon className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[12px] font-black text-slate-800 truncate">{lastNotification.sender}</p>
+              <p className="text-[11px] text-slate-500 line-clamp-2 leading-snug">{lastNotification.text}</p>
+            </div>
+          </div>
+          <div className="h-1 bg-[#25D366] animate-progress" style={{ animationDuration: '6000ms' }} />
+        </div>
+      )}
+
       {/* Botão Flutuante Estilo WhatsApp */}
       {(!isOpen || isMinimized) && (
         <button
