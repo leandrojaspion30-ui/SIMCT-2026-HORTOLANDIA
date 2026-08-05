@@ -1268,6 +1268,16 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                                 )) : <span className="text-[9px] text-slate-400 italic">Nenhum agente selecionado</span>}
                              </div>
                           </div>
+                          <div>
+                             <span className="text-[8px] font-black text-rose-600 uppercase block mb-1 tracking-tighter">Local da Ocorrência</span>
+                             <div className="flex flex-wrap gap-1">
+                                {(localOcorrencia || doc.local_ocorrencia) ? (
+                                   <span className="px-2 py-1 bg-rose-50 text-rose-700 text-[9px] font-bold rounded-lg border border-rose-100 uppercase leading-none">
+                                      {localOcorrencia || doc.local_ocorrencia}
+                                   </span>
+                                ) : <span className="text-[9px] text-slate-400 italic">Nenhum local selecionado</span>}
+                             </div>
+                          </div>
                        </div>
 
                        {/* Medidas e Atribuições */}
