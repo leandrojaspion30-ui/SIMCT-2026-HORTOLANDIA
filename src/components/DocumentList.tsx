@@ -695,11 +695,11 @@ const DocumentList: React.FC<DocumentListProps> = ({
             </div>
           </div>
 
-          {/* Action buttons on right */}
-          <div className="shrink-0 flex md:flex-col items-end gap-2.5 self-start md:self-center">
+          {/* Action buttons on right/bottom */}
+          <div className="shrink-0 flex flex-row md:flex-col items-center md:items-end gap-2.5 mt-4 md:mt-0 pt-3 md:pt-0 border-t md:border-t-0 border-slate-100 md:border-transparent">
              {!isReadOnly && (
-                <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-200/80" onClick={(e) => e.stopPropagation()}>
-                  <span className="text-[11px] font-medium text-slate-500 pl-1 flex items-center gap-1 shrink-0">
+                <div className="flex-1 md:flex-none flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-200/80" onClick={(e) => e.stopPropagation()}>
+                  <span className="text-[10px] md:text-[11px] font-black uppercase text-slate-400 pl-1 flex items-center gap-1 shrink-0 tracking-wider">
                     Status:
                   </span>
                   <select
@@ -711,7 +711,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                         onUpdateStatus(doc.id, [...doc.status.filter(s => s !== newS), newS]);
                       }
                     }}
-                    className="bg-white text-slate-800 border border-slate-200 text-[11px] font-medium rounded-md px-2 py-1 outline-none focus:border-blue-500 cursor-pointer transition-colors"
+                    className="flex-1 md:flex-none bg-white text-slate-800 border border-slate-200 text-[11px] font-bold rounded-md px-2 py-1.5 outline-none focus:border-blue-500 cursor-pointer transition-colors"
                   >
                     <option value="AGUARDANDO_ANALISE">⏳ AGUARDANDO ANÁLISE</option>
                     <option value="AGUARDANDO_DOCUMENTO">📄 AGUARDANDO DOCUMENTO</option>
@@ -728,11 +728,11 @@ const DocumentList: React.FC<DocumentListProps> = ({
                 </div>
              )}
 
-             <div className="flex items-center gap-2">
+             <div className="flex items-center gap-2 shrink-0">
                 {!isReadOnly && (
                   <button 
                     onClick={(e) => { e.stopPropagation(); onEditDoc(doc.id); }} 
-                    className="p-2 bg-slate-50 hover:bg-slate-900 hover:text-white border border-slate-200/80 text-slate-600 rounded-lg transition-all cursor-pointer" 
+                    className="p-2.5 md:p-2 bg-slate-50 hover:bg-slate-900 hover:text-white border border-slate-200/80 text-slate-600 rounded-lg transition-all cursor-pointer" 
                     title="Editar Documento"
                   >
                     <FileText className="w-4 h-4" />
@@ -740,7 +740,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                 )}
                 {(hasCounselorActions => {
                    const isCreatorAdmin = 
-                     (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome === 'LEANDRO');
+                     (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome?.toUpperCase() === 'LEANDRO');
                    
                    return isCreatorAdmin && !hasCounselorActions;
                  })(!!(
@@ -758,14 +758,14 @@ const DocumentList: React.FC<DocumentListProps> = ({
                        e.stopPropagation(); 
                        setDocToDelete(doc.id);
                      }} 
-                     className="p-2 bg-red-50 hover:bg-red-600 hover:text-white border border-red-200/60 text-red-600 rounded-lg transition-all cursor-pointer"
+                     className="p-2.5 md:p-2 bg-red-50 hover:bg-red-600 hover:text-white border border-red-200/60 text-red-600 rounded-lg transition-all cursor-pointer"
                      title="Excluir Prontuário"
                    >
                      <Trash2 className="w-4 h-4" />
                    </button>
                 )}
                 <button 
-                  className="p-2 bg-slate-900 hover:bg-blue-600 text-white rounded-lg transition-all cursor-pointer shadow-2xs"
+                  className="p-2.5 md:p-2 bg-slate-900 hover:bg-blue-600 text-white rounded-lg transition-all cursor-pointer shadow-2xs"
                   title="Visualizar"
                 >
                   <Eye className="w-4 h-4" />

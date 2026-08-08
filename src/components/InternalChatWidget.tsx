@@ -496,9 +496,9 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
         <motion.button
           drag
           dragConstraints={{ 
-            left: -(window.innerWidth - 80), 
+            left: -(window.innerWidth - 70), 
             right: 0, 
-            top: -(window.innerHeight - 80), 
+            top: -(window.innerHeight - 70), 
             bottom: 0 
           }}
           dragElastic={0.1}
@@ -509,11 +509,11 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
             if (isMinimized) setIsMinimized(false);
             handleToggleChat();
           }}
-          className="fixed bottom-6 right-6 z-50 w-16 h-16 bg-[#25D366] text-white rounded-full shadow-2xl transition-shadow duration-300 flex items-center justify-center group cursor-grab active:cursor-grabbing border-2 border-white/20 touch-none"
+          className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-50 w-14 h-14 md:w-16 md:h-16 bg-[#25D366] text-white rounded-full shadow-2xl transition-shadow duration-300 flex items-center justify-center group cursor-grab active:cursor-grabbing border-2 border-white/20 touch-none"
           title="Segure para arrastar ou clique para abrir"
         >
           <div className="relative flex items-center justify-center">
-            <MessageSquare className="w-8 h-8 text-white fill-white/10 group-hover:scale-105 transition-transform" />
+            <MessageSquare className="w-7 h-7 md:w-8 md:h-8 text-white fill-white/10 group-hover:scale-105 transition-transform" />
             {totalUnreadCount > 0 && (
               <span className="absolute -top-3 -right-3 min-w-6 h-6 px-1.5 bg-red-600 text-white text-[11px] font-black flex items-center justify-center rounded-full animate-pulse shadow-md border-2 border-white">
                 {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
