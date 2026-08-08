@@ -160,6 +160,7 @@ export interface Documento {
   origem: string;
   canal_comunicado: string; 
   notificacao?: string;
+  is_urgente?: boolean;
   data_recebimento: string;
   hora_rece_bimento?: string;
   data_aporte: string;

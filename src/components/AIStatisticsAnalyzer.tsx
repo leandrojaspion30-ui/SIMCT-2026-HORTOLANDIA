@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI } from "@google/genai";
 import { Sparkles, Loader2, AlertCircle, RefreshCw, Send, User, Bot, ShieldCheck } from 'lucide-react';
 
 interface AIStatisticsAnalyzerProps {
@@ -68,17 +67,24 @@ const AIStatisticsAnalyzer: React.FC<AIStatisticsAnalyzerProps> = ({ stats, tota
     setError(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || process.env.GEMINI_API_KEY });
       const contents = [
         { role: 'user', parts: [{ text: getSystemContext() }] },
         ...chatHistory.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
         { role: 'user', parts: [{ text: messageToSend }] }
       ];
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
-        contents: contents as any,
+      const res = await fetch("/api/ai/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents, model: "gemini-1.5-flash" })
       });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Erro na análise de dados");
+      }
+
+      const response = await res.json();
 
       const botResponse: Message = { 
         role: 'model', 
@@ -87,7 +93,7 @@ const AIStatisticsAnalyzer: React.FC<AIStatisticsAnalyzerProps> = ({ stats, tota
       setChatHistory(prev => [...prev, botResponse]);
     } catch (err: any) {
       console.error(err);
-      setError("Erro de conexão com o servidor de Inteligência de Dados SIMCT.");
+      setError(err.message || "Erro de conexão com o servidor de Inteligência de Dados SIMCT.");
     } finally {
       setLoading(false);
     }

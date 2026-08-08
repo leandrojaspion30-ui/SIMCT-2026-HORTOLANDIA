@@ -120,7 +120,7 @@ export const ORIGENS_HIERARQUICAS = [
   },
   {
     label: 'OUTROS',
-    options: ['DENÚNCIA ESPONTÂNEA', 'DENÚNCIA TELEFÔNICA', 'JUDICIÁRIO', 'DISQUE 100', 'SIPIA', 'E-MAIL'].sort()
+    options: ['DENÚNCIA ESPONTÂNEA', 'DENÚNCIA TELEFÔNICA', 'JUDICIÁRIO', 'MINISTÉRIO PÚBLICO (MP)', 'DISQUE 100', 'SIPIA', 'E-MAIL'].sort()
   }
 ];
 

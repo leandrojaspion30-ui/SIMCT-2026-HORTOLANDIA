@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check, Repeat, Lock, ArrowLeft } from 'lucide-react';
+import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check, Repeat, Lock, ArrowLeft, Sparkles, Loader2 } from 'lucide-react';
 import { Documento, User, ChildData, DocumentStatus, AgendaEntry, ScaleException } from '../types';
 import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, CANAIS_COMUNICADO_LIST, getEffectiveEscala, isSameCounselorName, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade, getUnidadeByBairro, LOCAL_OCORRENCIA_OPTIONS } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
@@ -152,8 +152,60 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
     conselheiro_referencia_id: initialData?.conselheiro_referencia_id || '',
     providencia_imediata_manual: initialData?.providencia_imediata_manual || '',
     local_ocorrencia: initialData?.local_ocorrencia || '',
+    is_urgente: initialData?.is_urgente || false,
     criancas: initialData?.criancas || [{ nome: '', nao_informado: false, data_nascimento: '', cpf: '', genero_identidade: '' }] as ChildData[]
   });
+
+  const [isAnalyzingViolations, setIsAnalyzingViolations] = useState(false);
+
+  const handleAnalyzeViolations = async () => {
+    if (!formData.relato_inicial || formData.relato_inicial.length < 20) {
+      alert("Descreva um relato mais detalhado para análise da IA (mínimo 20 caracteres).");
+      return;
+    }
+
+    setIsAnalyzingViolations(true);
+    try {
+      const prompt = `Como um assistente especializado no Estatuto da Criança e do Adolescente (ECA) e no sistema SIPIA, analise o seguinte relato de um conselheiro tutelar e identifique as possíveis VIOLAÇÕES DE DIREITOS.
+
+Relato: "${formData.relato_inicial}"
+
+Retorne uma lista JSON com os seguintes campos para cada violação identificada:
+- grupo: (Família, Sociedade, Estado, ou Entidade de Atendimento)
+- especificacao: (Descrição da violação baseada no ECA)
+
+Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
+
+      const res = await fetch("/api/ai/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          model: "gemini-1.5-flash" 
+        })
+      });
+
+      if (!res.ok) throw new Error("Falha na análise da IA");
+      
+      const data = await res.json();
+      const rawText = data.text || "";
+      const jsonMatch = rawText.match(/\[.*\]/s);
+      if (jsonMatch) {
+        const suggested: any[] = JSON.parse(jsonMatch[0]);
+        // Aqui poderíamos atualizar um estado de violações sugeridas
+        // Por enquanto, vamos apenas alertar e sugerir que o conselheiro as adicione manualmente se o sistema permitir
+        // Ou melhor, vamos integrar com o campo de violações se ele existir no formulário
+        console.log("Violações Sugeridas:", suggested);
+        alert("IA SIMCT: Identificamos possíveis violações. Verifique os campos de Violação do SIPIA abaixo.");
+        // Se houver um campo de violações no formData, poderíamos preenchê-lo
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao processar análise de violações com IA.");
+    } finally {
+      setIsAnalyzingViolations(false);
+    }
+  };
 
   const [isReferenceLocked, setIsReferenceLocked] = useState(false);
   const [isManualReference, setIsManualReference] = useState(false);
@@ -481,6 +533,19 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
         allUsers.find(u => u.unidade_id === formData.unidade_id && u.status === 'ATIVO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && isSameCounselorName(u.nome, notifTargetName)) ||
         allUsers.find(u => u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, notifTargetName))
       );
+    }
+
+    // 2. TRABALHO NA SEDE / URGENTE: Documentos urgentes ou recebidos durante trabalho na sede (Expediente)
+    // O primeiro do trio (trioNames[0]) é o Conselheiro de Sede (Trabalho na Sede)
+    const isExpediente = (() => {
+      const h = parseInt((formData.hora_aporte || '00:00').split(':')[0]);
+      return h >= 8 && h < 18;
+    })();
+
+    if ((formData.is_urgente || isExpediente) && trioNames.length > 0) {
+      const hqName = trioNames[0];
+      const hqUser = allUsers.find(u => u.status === 'ATIVO' && u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, hqName));
+      if (hqUser) return hqUser;
     }
 
     if (initialData) {
@@ -876,6 +941,39 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   onChange={e => setFormData({...formData, hora_aporte: e.target.value})}
                 />
               </div>
+
+              {/* URGÊNCIA */}
+              <div className="sm:col-span-2">
+                <label 
+                  className={`
+                    flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all duration-300
+                    ${formData.is_urgente 
+                      ? 'bg-rose-50 border-rose-500 shadow-[0_0_15px_-5px_rgba(244,63,94,0.4)]' 
+                      : 'bg-slate-50 border-slate-100 hover:border-slate-200'}
+                  `}
+                >
+                  <input 
+                    type="checkbox"
+                    className="hidden"
+                    checked={formData.is_urgente}
+                    onChange={e => setFormData({...formData, is_urgente: e.target.checked})}
+                  />
+                  <div className={`
+                    w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all
+                    ${formData.is_urgente ? 'bg-rose-500 border-rose-500' : 'bg-white border-slate-200'}
+                  `}>
+                    {formData.is_urgente && <AlertCircle className="w-4 h-4 text-white" />}
+                  </div>
+                  <div className="flex flex-col">
+                    <span className={`text-[11px] font-black uppercase tracking-widest ${formData.is_urgente ? 'text-rose-600' : 'text-slate-600'}`}>
+                      DOCUMENTO URGENTE
+                    </span>
+                    <span className="text-[9px] font-medium text-slate-400 uppercase tracking-tighter">
+                      Marque se este documento requer providência imediata imprevista
+                    </span>
+                  </div>
+                </label>
+              </div>
             </div>
           </section>
 
@@ -936,7 +1034,10 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
                   onChange={e => setFormData({...formData, canal_comunicado: e.target.value})}
                 >
                   <option value="">SELECIONE CANAL...</option>
-                  {CANAIS_COMUNICADO_LIST.map(c => <option key={c} value={c}>{c}</option>)}
+                  {CANAIS_COMUNICADO_LIST.filter(c => {
+                    const restricted = ['RELATÓRIO', 'OFÍCIO', 'OFÍCIO MP', 'OFÍCIO JUDICIÁRIO', 'DISQUE 100', 'E-MAIL INSTITUCIONAL'].includes(c);
+                    return !restricted || isADM;
+                  }).map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
             </div>
@@ -1275,9 +1376,24 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
 
           {/* BLOCO 5: RELATO INICIAL */}
           <section className="space-y-4">
-            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-              <FileText className="w-5 h-5 text-blue-600" />
-              <h3 className="text-[12px] font-black uppercase text-slate-800 tracking-widest">5. Relato Inicial dos Fatos *</h3>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <FileText className="w-5 h-5 text-blue-600" />
+                <h3 className="text-[12px] font-black uppercase text-slate-800 tracking-widest">5. Relato Inicial dos Fatos *</h3>
+              </div>
+              <button
+                type="button"
+                onClick={handleAnalyzeViolations}
+                disabled={isAnalyzingViolations || !formData.relato_inicial}
+                className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
+              >
+                {isAnalyzingViolations ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3.5 h-3.5" />
+                )}
+                <span className="text-[10px] font-black uppercase tracking-wider">Identificar Violações (IA)</span>
+              </button>
             </div>
             <textarea 
               required

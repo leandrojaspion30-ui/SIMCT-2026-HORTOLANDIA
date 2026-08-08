@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { motion } from 'motion/react';
 import { MessageSquare, Send, X, Users, User as UserIcon, Bell, Minimize2, Maximize2, Shield, AlertCircle, CheckCheck, Trash2, Sparkles, ChevronDown, ChevronLeft, Search, Building2, Globe, UserCheck, Check, Smile, Lock } from 'lucide-react';
 import { User, ChatMessage } from '../types';
 import { saveChatMessage, deleteChatMessage, markChatMessageAsRead, hideChatMessageForUser, hideConversationForUser } from '../lib/db';
@@ -490,15 +491,26 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
         </div>
       )}
 
-      {/* Botão Flutuante Estilo WhatsApp */}
+      {/* Botão Flutuante Estilo WhatsApp (Draggable) */}
       {(!isOpen || isMinimized) && (
-        <button
+        <motion.button
+          drag
+          dragConstraints={{ 
+            left: -(window.innerWidth - 80), 
+            right: 0, 
+            top: -(window.innerHeight - 80), 
+            bottom: 0 
+          }}
+          dragElastic={0.1}
+          dragMomentum={false}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
           onClick={() => {
             if (isMinimized) setIsMinimized(false);
             handleToggleChat();
           }}
-          className="fixed bottom-6 right-6 z-50 w-16 h-16 bg-[#25D366] hover:bg-[#128C7E] text-white rounded-full shadow-2xl transition-all duration-300 hover:scale-110 active:scale-95 flex items-center justify-center group cursor-pointer border-2 border-white/20"
-          title="Abrir WhatsApp SIMCT"
+          className="fixed bottom-6 right-6 z-50 w-16 h-16 bg-[#25D366] text-white rounded-full shadow-2xl transition-shadow duration-300 flex items-center justify-center group cursor-grab active:cursor-grabbing border-2 border-white/20 touch-none"
+          title="Segure para arrastar ou clique para abrir"
         >
           <div className="relative flex items-center justify-center">
             <MessageSquare className="w-8 h-8 text-white fill-white/10 group-hover:scale-105 transition-transform" />
@@ -508,7 +520,7 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
               </span>
             )}
           </div>
-        </button>
+        </motion.button>
       )}
 
       {/* Janela Do Chat */}
