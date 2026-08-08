@@ -205,6 +205,8 @@ export interface Documento {
   ciência_registrada_por?: string[];
   distribuicao_automatica?: boolean;
   is_manual_override?: boolean;
+  is_reference_in_trio?: boolean;
+  is_plantao?: boolean;
   snapshot_validado?: SnapshotComparativo;
   justificativa_distribuicao?: string;
   historico_versoes?: any[];

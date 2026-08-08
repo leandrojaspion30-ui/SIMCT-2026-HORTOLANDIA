@@ -535,17 +535,33 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
       );
     }
 
-    // 2. TRABALHO NA SEDE / URGENTE: Documentos urgentes ou recebidos durante trabalho na sede (Expediente)
-    // O primeiro do trio (trioNames[0]) é o Conselheiro de Sede (Trabalho na Sede)
-    const isExpediente = (() => {
-      const h = parseInt((formData.hora_aporte || '00:00').split(':')[0]);
-      return h >= 8 && h < 18;
+    // 2. TRABALHO NA SEDE / URGENTE / PLANTÃO (FORA DE EXPEDIENTE): 
+    // Documentos urgentes ou recebidos durante trabalho na sede (Expediente)
+    // O primeiro do trio (trioNames[0]) é o Conselheiro de Sede (Trabalho na Sede) ou o Primeiro Plantonista
+    const timeInfo = (() => {
+      const parts = (formData.hora_aporte || '00:00').split(':');
+      const h = parseInt(parts[0]);
+      const m = parseInt(parts[1] || '0');
+      const timeVal = h * 60 + m; // minutos totais desde 00:00
+      
+      const isDayShift = h >= 8 && h < 17; // 08:00 às 16:59
+      const isNightShift = h >= 17 || h < 8; // 17:00 às 07:59
+      
+      const dateObj = new Date(formData.data_aporte + 'T12:00:00');
+      const dayOfWeek = dateObj.getDay(); // 0: Dom, 5: Sex, 6: Sab
+      
+      const isWeekend = (dayOfWeek === 5 && h >= 17) || (dayOfWeek === 6) || (dayOfWeek === 0) || (dayOfWeek === 1 && h < 8);
+      
+      return { isDayShift, isNightShift, isWeekend };
     })();
 
-    if ((formData.is_urgente || isExpediente) && trioNames.length > 0) {
-      const hqName = trioNames[0];
-      const hqUser = allUsers.find(u => u.status === 'ATIVO' && u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, hqName));
-      if (hqUser) return hqUser;
+    const isPlantao = timeInfo.isNightShift || timeInfo.isWeekend;
+
+    if ((formData.is_urgente || isPlantao) && trioNames.length > 0) {
+      // Se for noite ou final de semana, o "Primeiro Plantonista" (trioNames[0]) assume tudo.
+      const targetName = trioNames[0];
+      const targetUser = allUsers.find(u => u.status === 'ATIVO' && u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, targetName));
+      if (targetUser) return targetUser;
     }
 
     if (initialData) {
@@ -564,6 +580,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
 
     // 2. SE O CONSELHEIRO DE REFERÊNCIA ESTÁ NO TRIO/PLANTÃO DE HOJE:
     // O sistema DEVE SEMPRE reconhecer e atribuir a providência imediata para ele (ou para seu substituto de plantão).
+    // Esta atribuição NÃO consome o turno da distribuição sequencial.
     const refUser = (formData.conselheiro_referencia_id ? allUsers.find(u => u.id === formData.conselheiro_referencia_id) : undefined) || assignedReference;
     const refUserName = refUser?.nome?.toUpperCase();
     const mappedRefName = (refUserName && nameMap && nameMap[refUserName]) ? nameMap[refUserName] : refUserName;
@@ -575,13 +592,18 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     }
 
     // 3. Persistência Familiar no mesmo dia de recebimento/aporte real (Hoje)
-    // Procuramos documentos da mesma família cadastrados hoje
+    // Se um documento já foi recebido hoje para esta família/referência, todos os subsequentes de hoje devem ir para o mesmo conselheiro.
+    // Esta regra garante que um conselheiro que pegou o primeiro caso do dia (por rodízio ou referência) continue no caso durante o dia.
     const sameFamilyTodayDocs = documents.filter(d => {
       const isDocOfToday = d.data_aporte === dateToUse || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === dateToUse);
       if (!isDocOfToday || d.unidade_id !== formData.unidade_id || !d.conselheiro_providencia_id || d.id === initialData?.id) {
         return false;
       }
       
+      // Checa se a referência é a mesma
+      const currentRefId = refUser?.id;
+      if (currentRefId && d.conselheiro_referencia_id === currentRefId) return true;
+
       const cpfGen = (formData.cpf_genitora || '').replace(/\D/g, '');
       const dCpfGen = (d.cpf_genitora || '').replace(/\D/g, '') || '';
       if (cpfGen && dCpfGen && cpfGen === dCpfGen) return true;
@@ -609,18 +631,18 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     }
     
     // 4. Lógica de Distribuição Justa (Rodízio de Providência Imediata)
-    // Filtramos para ignorar documentos que foram atribuídos por persistência familiar ou manual para não quebrar a sequência de hoje
+    // Filtramos para ignorar documentos que foram atribuídos por persistência familiar, referência no trio, notificações ou manual para não quebrar a sequência de hoje
     const todayDocs = documents
       .filter(d => {
         const isDocOfToday = d.data_aporte === dateToUse || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === dateToUse);
         if (!isDocOfToday || d.unidade_id !== formData.unidade_id) {
           return false;
         }
-        return !d.is_family_persistence && !d.is_manual_providencia;
+        return !d.is_family_persistence && !d.is_manual_providencia && !d.is_reference_in_trio && !d.notificacao && !d.is_plantao && !d.is_urgente;
       })
       .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
 
-    const lastAutoDoc = todayDocs.find(d => !d.notificacao);
+    const lastAutoDoc = todayDocs[0];
     
     const lastImediataId = lastAutoDoc?.conselheiro_providencia_id;
     const lastImediataUser = allUsers.find(u => u.id === lastImediataId);
@@ -851,6 +873,16 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
         : (initialData ? initialData.conselheiros_providencia_nomes : finalValidators),
       is_family_persistence: isFamilyPersistence,
       is_manual_providencia: !!formData.providencia_imediata_manual,
+      is_reference_in_trio: isRefUserInTrio && !!finalRefUser,
+      is_plantao: (() => {
+        const parts = (formData.hora_aporte || '00:00').split(':');
+        const h = parseInt(parts[0]);
+        const dateObj = new Date(formData.data_aporte + 'T12:00:00');
+        const dayOfWeek = dateObj.getDay();
+        const isNight = h >= 17 || h < 8;
+        const isWeekend = (dayOfWeek === 5 && h >= 17) || (dayOfWeek === 6) || (dayOfWeek === 0) || (dayOfWeek === 1 && h < 8);
+        return isNight || isWeekend;
+      })(),
       status: initialData ? initialData.status : (formData.notificacao ? [`NOTIFICACAO_${formData.notificacao.toUpperCase()}` as DocumentStatus] : ['AGUARDANDO_ANALISE']),
       justificativa_distribuicao: initialData 
         ? initialData.justificativa_distribuicao 
@@ -1528,7 +1560,24 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                     ))}
                 </select>
               ) : (
-                <div className="p-4 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 flex items-center justify-between">
+                <div className="p-4 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 flex items-center justify-between relative overflow-hidden">
+                  {/* BADGE DE PLANTÃO / SEDE */}
+                  {(formData.is_urgente || (() => {
+                    const parts = (formData.hora_aporte || '00:00').split(':');
+                    const h = parseInt(parts[0]);
+                    const dateObj = new Date(formData.data_aporte + 'T12:00:00');
+                    const dayOfWeek = dateObj.getDay();
+                    const isNight = h >= 17 || h < 8;
+                    const isWeekend = (dayOfWeek === 5 && h >= 17) || (dayOfWeek === 6) || (dayOfWeek === 0) || (dayOfWeek === 1 && h < 8);
+                    return isNight || isWeekend;
+                  })()) && (
+                    <div className="absolute top-0 right-0 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-bl-lg border-l border-b border-amber-200 z-10">
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-2.5 h-2.5" />
+                        <span className="text-[8px] font-black uppercase tracking-tighter">PLANTÃO / URGÊNCIA</span>
+                      </div>
+                    </div>
+                  )}
                   <span>
                     {allUsers.find(u => u.id === (formData.providencia_imediata_manual || (initialData?.conselheiro_providencia_id) || assignedImediata?.id))?.nome || assignedImediata?.nome || 'Aguardando...'}
                   </span>
