@@ -14,7 +14,7 @@ async function startServer() {
   // API Gemini Proxy
   app.post("/api/ai/analyze", async (req, res) => {
     try {
-      const { contents, model = "gemini-1.5-flash" } = req.body;
+      const { contents, model = "gemini-2.5-flash" } = req.body;
       const apiKey = process.env.GEMINI_API_KEY;
 
       if (!apiKey) {
