@@ -187,16 +187,21 @@ Linguagem: Institucional, técnica, clara, baseada em evidências, com ética, r
         body: JSON.stringify({ contents, model: "gemini-2.5-flash" })
       });
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Erro na análise de dados");
+      const responseText = await res.text();
+      let responseData: any;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        throw new Error("Resposta inválida do servidor. Verifique a conexão com o servidor do Analista Digital.");
       }
 
-      const response = await res.json();
+      if (!res.ok) {
+        throw new Error(responseData?.error || `Erro ${res.status} na análise de dados SIMCT.`);
+      }
 
       const botResponse: Message = { 
         role: 'model', 
-        text: response.text || "Não foi possível gerar a análise técnica SIMCT." 
+        text: responseData?.text || "Não foi possível gerar a análise técnica SIMCT." 
       };
       setChatHistory(prev => [...prev, botResponse]);
     } catch (err: any) {

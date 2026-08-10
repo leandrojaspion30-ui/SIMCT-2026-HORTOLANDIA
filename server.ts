@@ -18,19 +18,37 @@ async function startServer() {
       const apiKey = process.env.GEMINI_API_KEY;
 
       if (!apiKey) {
-        return res.status(500).json({ error: "GEMINI_API_KEY is not configured on server" });
+        return res.status(500).json({ error: "Chave GEMINI_API_KEY não configurada no servidor." });
       }
 
       const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model,
-        contents,
-      });
+      
+      let response;
+      try {
+        response = await ai.models.generateContent({
+          model,
+          contents,
+        });
+      } catch (e1: any) {
+        console.warn(`Tentativa com ${model} falhou: ${e1?.message}. Tentando gemini-2.5-flash...`);
+        try {
+          response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents,
+          });
+        } catch (e2: any) {
+          console.warn(`Tentativa com gemini-2.5-flash falhou. Tentando gemini-1.5-flash...`);
+          response = await ai.models.generateContent({
+            model: "gemini-1.5-flash",
+            contents,
+          });
+        }
+      }
 
       res.json({ text: response.text });
     } catch (error: any) {
       console.error("Gemini Error:", error);
-      res.status(500).json({ error: error.message || "Failed to generate content" });
+      res.status(500).json({ error: error?.message || "Falha ao gerar resposta do Analista Digital." });
     }
   });
 
