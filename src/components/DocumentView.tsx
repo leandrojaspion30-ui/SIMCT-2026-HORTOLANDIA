@@ -760,6 +760,32 @@ const DocumentView: React.FC<DocumentViewProps> = ({
           </div>
         )}
 
+        {/* ALERTA DE DOCUMENTO URGENTE PARA PROVIDÊNCIA IMEDIATA */}
+        {doc.is_urgente && (
+          <div className="bg-rose-600 text-white p-5 px-8 flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg border-b-2 border-rose-700 animate-pulse">
+            <div className="flex items-center gap-4">
+              <AlertCircle className="w-8 h-8 shrink-0 text-white animate-bounce" />
+              <div>
+                <h4 className="text-[14px] font-black uppercase tracking-wider">
+                  🚨 DOCUMENTO URGENTE - PROVIDÊNCIA IMEDIATA REQUERIDA
+                </h4>
+                <p className="text-[11px] font-bold uppercase opacity-95">
+                  Este prontuário exige providência imediata sob responsabilidade do Conselheiro:{' '}
+                  <span className="underline font-black bg-rose-800/80 px-2 py-0.5 rounded ml-1">
+                    {doc.conselheiro_providencia_nome || 'Designado pelo Sistema'}
+                  </span>
+                </p>
+              </div>
+            </div>
+            {isActualProvidenciaImediata && (
+              <div className="px-4 py-2 bg-white text-rose-700 rounded-xl font-black text-[11px] uppercase shadow-md shrink-0 border border-rose-200 flex items-center gap-1.5">
+                <ShieldAlert className="w-4 h-4 text-rose-600" />
+                <span>VOCÊ É O CONSELHEIRO DE PROVIDÊNCIA IMEDIATA</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ALERTA DE REVALIDAÇÃO OBRIGATÓRIA OU VALIDAÇÃO PENDENTE */}
         {showCollegiateValidation && (((doc.notificacoes_trio || []).some(n => isUserInTrio(n) || (nameMap && isUserInTrio(nameMap[n.toUpperCase()]))) || doc.status.includes('AGUARDANDO_VALIDACAO'))) && (
           <div className="bg-gradient-to-r from-amber-600 to-red-600 p-6 flex flex-col md:flex-row items-center justify-between gap-4 animate-pulse">

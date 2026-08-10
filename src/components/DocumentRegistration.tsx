@@ -1000,8 +1000,8 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                     <span className={`text-[11px] font-black uppercase tracking-widest ${formData.is_urgente ? 'text-rose-600' : 'text-slate-600'}`}>
                       DOCUMENTO URGENTE
                     </span>
-                    <span className="text-[9px] font-medium text-slate-400 uppercase tracking-tighter">
-                      Marque se este documento requer providência imediata imprevista
+                    <span className="text-[9px] font-bold text-red-600 uppercase tracking-tighter">
+                      Marque se este documento requer providência imediata
                     </span>
                   </div>
                 </label>
@@ -1560,9 +1560,17 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                     ))}
                 </select>
               ) : (
-                <div className="p-4 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 flex items-center justify-between relative overflow-hidden">
-                  {/* BADGE DE PLANTÃO / SEDE */}
-                  {(formData.is_urgente || (() => {
+                <div className={`p-4 rounded-xl font-bold flex items-center justify-between relative overflow-hidden transition-all ${
+                  formData.is_urgente
+                    ? 'bg-rose-50 border-2 border-rose-500 text-rose-950 shadow-md ring-2 ring-rose-200'
+                    : 'bg-white border border-slate-200 text-slate-700'
+                }`}>
+                  {/* BADGE DE PLANTÃO / URGÊNCIA */}
+                  {formData.is_urgente ? (
+                    <div className="absolute top-0 right-0 px-2.5 py-1 bg-rose-600 text-white rounded-bl-lg z-10 font-black text-[9px] uppercase tracking-wider flex items-center gap-1 shadow-sm animate-pulse">
+                      <AlertCircle className="w-3 h-3 text-white" /> DESTAQUE ESPECIAL: PROVIDÊNCIA IMEDIATA URGENTE
+                    </div>
+                  ) : (() => {
                     const parts = (formData.hora_aporte || '00:00').split(':');
                     const h = parseInt(parts[0]);
                     const dateObj = new Date(formData.data_aporte + 'T12:00:00');
@@ -1570,24 +1578,31 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                     const isNight = h >= 17 || h < 8;
                     const isWeekend = (dayOfWeek === 5 && h >= 17) || (dayOfWeek === 6) || (dayOfWeek === 0) || (dayOfWeek === 1 && h < 8);
                     return isNight || isWeekend;
-                  })()) && (
+                  })() ? (
                     <div className="absolute top-0 right-0 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-bl-lg border-l border-b border-amber-200 z-10">
                       <div className="flex items-center gap-1.5">
                         <Clock className="w-2.5 h-2.5" />
                         <span className="text-[8px] font-black uppercase tracking-tighter">PLANTÃO / URGÊNCIA</span>
                       </div>
                     </div>
-                  )}
-                  <span>
+                  ) : null}
+                  <span className={formData.is_urgente ? 'font-black text-rose-950 text-sm flex items-center gap-1.5 pt-1' : ''}>
+                    {formData.is_urgente && <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />}
                     {allUsers.find(u => u.id === (formData.providencia_imediata_manual || (initialData?.conselheiro_providencia_id) || assignedImediata?.id))?.nome || assignedImediata?.nome || 'Aguardando...'}
                   </span>
-                  <span className={`text-[9px] px-2 py-1 flex items-center gap-1 rounded-md uppercase font-black ${initialData && !formData.providencia_imediata_manual ? 'bg-slate-200 text-slate-700 border border-slate-300' : 'bg-amber-50 text-amber-600'}`}>
-                    {(!canEditCouncillors || !formData.providencia_imediata_manual) && <Lock className="w-3 h-3 text-slate-500" />}
-                    {initialData && !formData.providencia_imediata_manual
-                      ? 'Cadastrado' 
-                      : (formData.providencia_imediata_manual 
-                          ? 'Sobrescrita Manual (ADM)' 
-                          : (formData.notificacao ? 'Vínculo de Notificação' : 'Escala do Dia'))}
+                  <span className={`text-[9px] px-2 py-1 flex items-center gap-1 rounded-md uppercase font-black ${
+                    formData.is_urgente 
+                      ? 'bg-rose-600 text-white shadow-xs' 
+                      : (initialData && !formData.providencia_imediata_manual ? 'bg-slate-200 text-slate-700 border border-slate-300' : 'bg-amber-50 text-amber-600')
+                  }`}>
+                    {(!canEditCouncillors || !formData.providencia_imediata_manual) && <Lock className={`w-3 h-3 ${formData.is_urgente ? 'text-white' : 'text-slate-500'}`} />}
+                    {formData.is_urgente
+                      ? '🚨 URGENTE'
+                      : (initialData && !formData.providencia_imediata_manual
+                          ? 'Cadastrado' 
+                          : (formData.providencia_imediata_manual 
+                              ? 'Sobrescrita Manual (ADM)' 
+                              : (formData.notificacao ? 'Vínculo de Notificação' : 'Escala do Dia')))}
                   </span>
                 </div>
               )}

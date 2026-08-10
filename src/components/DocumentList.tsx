@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, ChevronUp, Folder, FolderOpen, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database, Trash2, Timer, Calendar, GraduationCap, Stethoscope, HandHeart, Phone, Mail, Siren, PhoneCall, Bell, BellRing } from 'lucide-react';
+import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, ChevronUp, Folder, FolderOpen, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database, Trash2, Timer, Calendar, GraduationCap, Stethoscope, HandHeart, Phone, Mail, Siren, PhoneCall, Bell, BellRing, AlertCircle } from 'lucide-react';
 import { Documento, User as UserType, DocumentStatus, ScaleException } from '../types';
 import { STATUS_LABELS, INITIAL_USERS, BAIRROS, getBairrosByUnidade, isSameCounselorName, getEffectiveEscala } from '../constants';
 import { formatLocalDateString, parseLocalDate, formatCadastroDateTime } from '../lib/dateUtils';
@@ -557,6 +557,10 @@ const DocumentList: React.FC<DocumentListProps> = ({
     const isReferenceCounselor = doc.conselheiro_referencia_id === currentUser.id ||
       (currentUser.is_suplente_active && currentUser.real_user_id && doc.conselheiro_referencia_id === currentUser.real_user_id);
 
+    const isProvUser = doc.conselheiro_providencia_id === currentUser.id ||
+      (currentUser.is_suplente_active && currentUser.real_user_id && doc.conselheiro_providencia_id === currentUser.real_user_id) ||
+      (doc.conselheiro_providencia_nome && isSameCounselorName(doc.conselheiro_providencia_nome, currentUser.nome));
+
     const unreadRefAlerts = isReferenceCounselor 
       ? (doc.alertas_status_referencia || []).filter(a => !a.lido)
       : [];
@@ -565,12 +569,17 @@ const DocumentList: React.FC<DocumentListProps> = ({
       <div 
         key={doc.id} 
         onClick={() => onSelectDoc(doc.id)} 
-        className={`bg-white rounded-xl border border-slate-200/80 ${style.border} border-l-4 shadow-2xs hover:shadow-md transition-all cursor-pointer group p-4 md:p-5 ${isNested ? 'bg-white' : ''}`}
+        className={`bg-white rounded-xl border ${doc.is_urgente ? 'border-2 border-rose-500 bg-rose-50/20 shadow-md ring-2 ring-rose-200/60' : `border-slate-200/80 ${style.border}`} border-l-4 shadow-2xs hover:shadow-md transition-all cursor-pointer group p-4 md:p-5 ${isNested ? 'bg-white' : ''}`}
       >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-2.5 flex-1">
             {/* Status Chips Row */}
             <div className="flex flex-wrap items-center gap-2">
+              {doc.is_urgente && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-rose-600 text-white text-[12px] font-black uppercase tracking-wider animate-pulse shadow-sm">
+                  <AlertCircle className="w-3.5 h-3.5 text-white" /> URGENTE - PROVIDÊNCIA IMEDIATA
+                </span>
+              )}
               {doc.status.includes('MEDIDA_PENDENTE') && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200/80 text-emerald-700 text-[12px] font-medium">
                   <CheckCircle2 className="w-3.5 h-3.5" /> Medida Pendente
@@ -674,8 +683,12 @@ const DocumentList: React.FC<DocumentListProps> = ({
                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 border border-blue-200/60 rounded-lg text-[12px] font-medium text-blue-700">
                   <UserCheck className="w-3.5 h-3.5 text-blue-600" /> Titular: {refCouncilor?.nome || 'N/A'}
                </div>
-               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-sky-50 border border-sky-200/60 rounded-lg text-[12px] font-medium text-sky-800">
-                  <ShieldCheck className="w-3.5 h-3.5 text-sky-600" /> Imediata: {provCouncilor?.nome || 'N/A'}
+               <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[12px] ${
+                  doc.is_urgente 
+                    ? 'bg-rose-600 text-white font-black shadow-sm animate-pulse ring-2 ring-rose-400' 
+                    : 'bg-sky-50 border border-sky-200/60 font-medium text-sky-800'
+                }`}>
+                  <ShieldCheck className={`w-3.5 h-3.5 ${doc.is_urgente ? 'text-white' : 'text-sky-600'}`} /> Imediata: {provCouncilor?.nome || 'N/A'}
                </div>
                {doc.origem && (
                   <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200/80 rounded-lg text-[12px] font-medium text-slate-700" title="Origem do Caso">
