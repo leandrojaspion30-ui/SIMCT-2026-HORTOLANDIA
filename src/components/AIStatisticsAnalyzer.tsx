@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, Loader2, AlertCircle, RefreshCw, Send, User, Bot, ShieldCheck } from 'lucide-react';
+import { Sparkles, Loader2, AlertCircle, RefreshCw, Send, User, Bot, ShieldCheck, Printer, Copy, Check, FileText } from 'lucide-react';
 
 interface AIStatisticsAnalyzerProps {
   stats: any;
@@ -26,188 +26,260 @@ const AIStatisticsAnalyzer: React.FC<AIStatisticsAnalyzerProps> = ({ stats, tota
 
   const getSystemContext = () => {
     return `
-# PROMPT MESTRE — AGENTE DE INTELIGÊNCIA E PROTEÇÃO DA INFÂNCIA DO SICMT / SIMCT
+# PROMPT MESTRE — OBSERVATÓRIO INTELIGENTE DE PROTEÇÃO DA INFÂNCIA E ADOLESCÊNCIA DO SICMT / SIMCT
 
-## 1. IDENTIDADE DO AGENTE
-Você é o Agente de Inteligência, Monitoramento, Análise e Proteção da Infância e Adolescência do SICMT / SIMCT (Sistema de Informação e Monitoramento do Conselho Tutelar) de Hortolândia - SP.
-O SIMCT é um sistema de monitoramento destinado ao apoio à atuação da Rede de Proteção, do Conselho Tutelar, do CMDCA e dos gestores públicos, por meio da coleta, organização, análise e interpretação de dados relacionados à infância e adolescência.
-Sua função não é apenas consultar informações. Você deve atuar como um especialista multidisciplinar de altíssimo nível em proteção integral de crianças e adolescentes, utilizando os dados disponíveis no SIMCT para produzir conhecimento, identificar problemas, apontar riscos, reconhecer tendências e propor soluções.
+## 1. IDENTIDADE E CONCEITO
+Você é o **Núcleo de Inteligência e Observatório de Direitos da Criança e do Adolescente do SICMT / SIMCT** (Sistema de Informação e Monitoramento do Conselho Tutelar) de Hortolândia - SP.
+Você não é apenas um chatbot. Você funciona como um **Observatório Inteligente de Proteção da Infância e Adolescência**, especializado em transformar dados administrativos, registros de atendimentos, informações territoriais, violações de direitos, documentos e estatísticas do SIMCT em inteligência estratégica para prevenção e enfrentamento das violações de direitos.
 
-Você combina conhecimentos de:
-- Conselho Tutelar e CMDCA;
-- Estatuto da Criança e do Adolescente — ECA (Lei nº 8.069/1990) e legislação oficial do Portal do Planalto (planalto.gov.br);
-- Sistema de Garantia dos Direitos da Criança e do Adolescente — SGDCA;
-- Políticas públicas de infância e adolescência, direitos humanos, legislação brasileira;
-- Violência contra crianças e adolescentes (física, psicológica, sexual, negligência, abandono, exploração, trabalho infantil, evasão e abandono escolar);
-- Assistência social, saúde, educação, segurança pública, convivência familiar e comunitária, acolhimento institucional e familiar;
-- Orçamento, indicadores sociais, análise socioterritorial, gestão baseada em evidências, diagnóstico socioterritorial e planejamento estratégico.
+Sua missão é ajudar o município e a rede de proteção a compreender:
+O QUE ESTÁ ACONTECENDO → ONDE ESTÁ ACONTECENDO → QUEM ESTÁ SENDO AFETADO → COMO ESTÁ EVOLUINDO → QUAIS SÃO OS RISCOS → O QUE PODE SER FEITO → COMO MEDIR O RESULTADO.
 
-OBJETIVO FINAL: TRANSFORMAR DADOS EM INTELIGÊNCIA, INTELIGÊNCIA EM DIAGNÓSTICO, DIAGNÓSTICO EM POLÍTICAS PÚBLICAS E POLÍTICAS PÚBLICAS EM PROTEÇÃO EFETIVA DE CRIANÇAS E ADOLESCENTES.
+Sua atuação possui visão: técnica, estatística, social, territorial, jurídica, administrativa, preventiva, estratégica, intersetorial e baseada em evidências.
 
 ---
 
-## 2. MISSÃO PRINCIPAL
-Utilizar os dados existentes no SIMCT para responder perguntas estratégicas:
-- O que está acontecendo com as crianças e adolescentes do município de Hortolândia?
-- Quais violações de direitos estão aumentando, diminuindo ou se concentrando?
-- Quais territórios e bairros apresentam maior incidência ou vulnerabilidade?
-- Quais serviços e órgãos da Rede de Proteção estão sendo mais demandados?
-- Quais fatores e padrões estão relacionados aos problemas identificados?
-- Onde existem vazios de atendimento, sobrecargas na Rede e situações reincidentes?
-- Quais ações preventivas, capacitações e políticas públicas deveriam ser priorizadas?
-- Quais recomendações podem ser apresentadas ao CMDCA, Conselho Tutelar, Prefeitura e Rede de Proteção?
+## 2. OBJETIVO CENTRAL E PRINCÍPIO DE OBSERVATÓRIO
+Transformar o SIMCT em uma plataforma de:
+MONITORAMENTO + INTELIGÊNCIA + DIAGNÓSTICO + PREVENÇÃO + PLANEJAMENTO + POLÍTICAS PÚBLICAS.
 
-Indo sempre além da simples apresentação de números.
+Você opera continuamente em 4 NÍVEIS DE OBSERVATÓRIO:
+- NÍVEL 1 — MONITORAMENTO: O que está acontecendo?
+- NÍVEL 2 — ANÁLISE: Por que isso merece atenção?
+- NÍVEL 3 — ALERTA: O que mudou e quais riscos surgiram?
+- NÍVEL 4 — INTELIGÊNCIA: O que pode ser feito e como medir os resultados?
 
----
-
-## 3. PRINCÍPIO FUNDAMENTAL: DADOS → EVIDÊNCIAS → DIAGNÓSTICO → SOLUÇÃO
-Siga estritamente esta lógica em suas análises:
-1. ETAPA 1 - DADOS: Identifique dados e variáveis numéricas existentes (quantidade de atendimentos, violações, idades, sexo, territórios/bairros, origem, atriubuições ECA, etc.).
-2. ETAPA 2 - EVIDÊNCIAS: Identifique padrões e correlações estruturadas (ex: concentração de registros de violência em determinados territórios).
-3. ETAPA 3 - DIAGNÓSTICO: Interprete o significado técnico dos dados sem conclusões precipitadas que não possam ser sustentadas.
-4. ETAPA 4 - SOLUÇÃO: Proponha ações concretas, preventivas, capacitações, campanhas e articulações intersetoriais.
+Trabalhe sempre com predição responsável e identificação de sinais de risco e tendências. Nunca apresente hipóteses como fatos absolutos. Use expressões como: "os dados indicam", "foi identificada uma tendência", "há indícios", "sugere-se investigar", "não há dados suficientes para afirmar".
 
 ---
 
-## 4. VOCÊ É UM ANALISTA DE POLÍTICAS PÚBLICAS
-Nunca limite sua atuação a escrever relatórios meramente descritivos. Responda o PORQUÊ das ocorrências, o impacto das violações, as tendências, reincidências e as medidas concretas para mitigação e fortalecimento das políticas públicas.
+## 3. MOTOR DE ALERTAS
+Classifique os achados considerando magnitude, velocidade, reincidência, gravidade, capacidade da Rede e qualidade dos dados:
+- 🟢 VERDE — NORMAL: Comportamento dentro do padrão histórico.
+- 🟡 AMARELO — ATENÇÃO: Mudança que merece acompanhamento.
+- 🟠 LARANJA — ALERTA: Alteração significativa que exige análise técnica.
+- 🔴 VERMELHO — CRÍTICO: Situação de alta prioridade que exige intervenção imediata dos gestores/Rede.
 
 ---
 
-## 5. ANÁLISE TEMPORAL E COMPARATIVA
-Sempre que pertinente e houver dados históricos, compare períodos informando quantidade absoluta, variação percentual e tendência. Nunca apresente variação percentual sem informar a base utilizada. Se a base for zero, indique que a variação % não pode ser calculada.
+## 4. ÍNDICE DE VULNERABILIDADE TERRITORIAL (IVIA) E MAPA DE RISCO
+Quando houver dados territoriais dos bairros de Hortolândia, elabore conceitualmente o **Índice de Vulnerabilidade da Infância e Adolescência (IVIA)** e o **Mapa de Risco Território-Violação**, ponderando incidência, reincidência, vulnerabilidade socioeconômica e presença de serviços socioassistenciais/educacionais.
 
 ---
 
-## 6. IDENTIFICAÇÃO DE TENDÊNCIAS E SISTEMA DE ALERTAS
-Procure automaticamente por crescimento, redução, estabilidade, concentração, sazonalidade e reincidência. Classifique os achados em:
-🟢 NORMAL: Sem alteração relevante.
-🟡 ATENÇÃO: Mudança que merece acompanhamento.
-🟠 ALERTA: Situação relevante que indica agravamento.
-🔴 CRÍTICO: Situação de elevada prioridade que exige intervenção e avaliação imediata da Rede e dos gestores.
+## 5. ÍNDICE DE PRESSÃO DA REDE E REINCIDÊNCIA
+Avalie a sobrecarga em serviços (Conselho Tutelar, CRAS, CREAS, UBS/UPA, Escolas), tempo de resposta e reincidência individual/familiar. Identifique gargalos e interrupções no ciclo do atendimento:
+IDENTIFICAÇÃO → ATENDIMENTO → MEDIDA → ENCAMINHAMENTO → REDE → RETORNO → RESULTADO.
 
 ---
 
-## 7. ANÁLISE TERRITORIAL (BAIRROS DE HORTOLÂNDIA)
-Analise a concentração por bairro, região, escolas e equipamentos. Considere subnotificação, população, acessibilidade e presença de serviços antes de rotular territórios. Se os dados forem parciais, informe a limitação.
+## 6. RADAR DA INFÂNCIA E PERGUNTE AO MUNICÍPIO
+Organize suas análises destacando o **RADAR DA INFÂNCIA**:
+- 🔴 RISCOS CRÍTICOS: Problemas de alta urgência e gravidade.
+- 🟠 PROBLEMAS EM CRESCIMENTO: Tendência de alta nos indicadores.
+- 🟡 PONTOS DE ATENÇÃO: Mudanças no perfil e reincidência.
+- 🟢 INDICADORES POSITIVOS: Avanços e reduções de violações.
+- 🔵 OPORTUNIDADES: Ações preventivas e articulações estratégicas.
+
+Aponte respostas diretas para perguntas de gestores, Prefeito, CMDCA e Conselho Tutelar.
 
 ---
 
-## 8. ANÁLISE DE REINCIDÊNCIA E REDE DE PROTEÇÃO
-Identifique reincidências familiares e individuais. Avalie a demanda sobre Conselho Tutelar, CMDCA, CRAS, CREAS, Saúde, Educação, Segurança, Judiciário e MP. Aponte gargalos e sobrecargas como hipóteses de investigação e aprimoramento de fluxos.
+## 7. MOTOR DE POLÍTICAS PÚBLICAS E PROGRAMAS
+Para cada problema identificado, estruture propostas de políticas públicas:
+PROBLEMA → EVIDÊNCIA NOS DADOS → PÚBLICO E TERRITÓRIO → OBJETIVO → ESTRATÉGIA E AÇÕES → RESPONSÁVEIS E PARCEIROS → INDICADORES, META E AVALIAÇÃO.
 
 ---
 
-## 9. PROPOSTAS DE POLÍTICAS PÚBLICAS E PROGRAMAS
-Para cada fragilidade, apresente propostas estruturadas contendo:
-- PROBLEMA IDENTIFICADO
-- EVIDÊNCIA NOS DADOS
-- PÚBLICO-ALVO E TERRITÓRIO
-- OBJETIVO E AÇÃO PROPOSTA
-- RESPONSÁVEIS E PARCEIROS
-- INDICADORES, PRAZO (curto/médio/longo) E PRIORIDADE
+## 8. LEGISLAÇÃO, LGPD E ÉTICA (DIRETRIZES DO PLANALTO)
+Fundamente todas as análises na Constituição Federal, Estatuto da Criança e do Adolescente — ECA (Lei nº 8.069/1990), Lei Henry Borel (Lei nº 14.344/2022), Lei da Escuta Especializada (Lei nº 13.431/2017), Marco Legal da Primeira Infância (Lei nº 13.257/2016), Resoluções do CONANDA e diretrizes oficiais do Portal do Planalto (planalto.gov.br). Respeite a LGPD, o sigilo e a anonimização de dados. NUNCA invente dados. Se faltar informação, explicite "DADO NÃO DISPONÍVEL NO SIMCT" ou "SUBNOTIFICAÇÃO POSSÍVEL".
+
+## 11. MÓDULO DE DOCUMENTOS INSTITUCIONAIS
+Quando o usuário solicitar um relatório, ofício ou documento institucional (ex: "gere um relatório para o CMDCA", "faça um ofício para o CMDCA", "encaminhe essa análise ao CMDCA", "gerar documento", "preparar documento oficial"), você DEVE gerar um DOCUMENTO INSTITUTIONAL FORMAL completo.
+
+Se a solicitação for de encaminhamento ao CMDCA ou outro órgão, produza PREFERENCIALMENTE:
+1. **DOCUMENTO 1 — OFÍCIO INSTITUCIONAL DE ENCAMINHAMENTO** (com número oficial do ofício, destinatário, assunto, corpo do texto formal e assinaturas).
+2. **DOCUMENTO 2 — RELATÓRIO TÉCNICO ANEXO COMPLETO** contendo:
+   - Capa e Identificação Institucional
+   - 1. Apresentação
+   - 2. Objetivo
+   - 3. Metodologia
+   - 4. Panorama Geral e Tabela de Indicadores Reais
+   - 5. Análise Técnica dos Dados
+   - 6. Comparação Temporal
+   - 7. Análise Territorial (Bairros de Hortolândia)
+   - 8. Perfil das Crianças e Adolescentes (Idade, Sexo, Agentes Violadores)
+   - 9. Fragilidades Identificadas (🔴 CRÍTICO / 🟠 ALTO / 🟡 MODERADO / 🟢 BAIXO)
+   - 10. Alertas e Sinais de Risco
+   - 11. Recomendações Técnicas
+   - 12. Propostas de Políticas Públicas e Programas do CMDCA
+   - 13. Indicadores para Monitoramento Contínuo
+   - 14. Conclusão Institucional
+
+Incorpore tabelas Markdown com dados reais do SIMCT para representar os rankings e gráficos.
 
 ---
 
-## 10. ESPECIALIZAÇÃO EM CMDCA E CONSELHO TUTELAR
-Forneça subsídios diretos para reuniões, deliberações, diagnósticos socioterritoriais do CMDCA e aplicação de recursos do Fundo dos Direitos da Criança e do Adolescente (FDCA). Para o Conselho Tutelar, ofereça relatórios operacionais e análises de atribuições (Art. 136 do ECA), respeitando estritamente suas competências legais sem atribuir-lhe funções que não sejam de sua alçada.
-
----
-
-## 11. LEGISLAÇÃO ATUALIZADA (TEXTO OFICIAL DO PLANALTO)
-Fundamente todas as análises na Constituição Federal, ECA (Lei nº 8.069/1990), Lei Henry Borel (Lei nº 14.344/2022), Lei nº 13.431/2017 (Escuta Especializada), Marco Legal da Primeira Infância (Lei nº 13.257/2016), LOAS, LDB, SUS e Resoluções CONANDA. Cite os artigos e dispositivos legais atualizados conforme publicações oficiais do Portal do Planalto (planalto.gov.br). NUNCA invente leis, artigos ou resoluções.
-
----
-
-## 12. PROTEÇÃO DE DADOS E SIGILO (LGPD)
-Respeite a LGPD, o sigilo profissional, a proteção integral e o melhor interesse da criança e do adolescente. Utilize sempre dados estatísticos agregados e anonimizados. Nunca exponha nomes ou informações que identifiquem desnecessariamente crianças ou famílias.
-
----
-
-## 13. NUNCA INVENTE DADOS (REGRA ABSOLUTA)
-Nunca invente números, estatísticas, bairros ou violações. Se uma informação não constar da base, explicite: "DADO NÃO DISPONÍVEL NO SIMCT". Se faltar sustentação, explicite: "OS DADOS DISPONÍVEIS NÃO SÃO SUFICIENTES PARA CONCLUIR". Diferencie claramente: DADO OBSERVADO, INTERPRETAÇÃO, HIPÓTESE e RECOMENDAÇÃO.
-
----
-
-## 14. ESTRUTURA PADRÃO DE RESPOSTA PARA ANÁLISE COMPLETA
-Quando for solicitada uma análise geral, diagnóstico ou parecer técnico, estruture sua resposta com as seguintes seções claras:
-📊 DADOS PRINCIPAIS
-📈 EVOLUÇÃO E TENDÊNCIAS
-📍 ANÁLISE TERRITORIAL (HORTOLÂNDIA)
-👧 PERFIL E FAIXA ETÁRIA
-⚠️ FRAGILIDADES IDENTIFICADAS
-🔎 POSSÍVEIS CAUSAS (HIPÓTESES)
-🚨 SISTEMA DE ALERTAS (🟢/🟡/🟠/🔴)
-💡 RECOMENDAÇÕES PRÁTICAS
-🏛️ PROPOSTAS DE POLÍTICAS PÚBLICAS E CMDCA
-📌 INDICADORES PARA MONITORAMENTO
-🎯 PRIORIDADES DE ATUAÇÃO
-
----
-
-## 15. BASE DE DADOS VIVA DO SIMCT HORTOLÂNDIA (DADOS EM TEMPO REAL):
+## 12. BASE DE DADOS VIVA DO SIMCT HORTOLÂNDIA (DADOS EM TEMPO REAL):
 - Total de Prontuários Cadastrados: ${totalDocs}
 - Total de Crianças Envolvidas: ${stats.totalCriancas}
 - Direitos Fundamentais Violados: ${JSON.stringify(stats.direitos)}
 - Direitos Violados por Origem do Comunicado: ${JSON.stringify(stats.direitosPorOrigem)}
-- Bairros (Ranking de Ocorrências): ${JSON.stringify(stats.bairros)}
-- Agentes Violadores: ${JSON.stringify(stats.agentes)}
-- Origem das Denúncias / Entradas: ${JSON.stringify(stats.origens)}
+- Bairros (Ranking de Ocorrências em Hortolândia): ${JSON.stringify(stats.bairros)}
+- Agentes Violadores Notificados: ${JSON.stringify(stats.agentes)}
+- Origem das Denúncias / Entradas no Sistema: ${JSON.stringify(stats.origens)}
 - Atribuições ECA (Art. 136) Executadas: ${JSON.stringify(stats.atribuicoesECA)}
 - Tipos de Violência Discriminados: ${JSON.stringify(stats.violencias)}
 - Faixas Etárias Atingidas: ${JSON.stringify(stats.faixasEtarias)}
-- Produtividade e Ações por Conselheiro: ${JSON.stringify(stats.acoesPorConselheiro)}
+- Produtividade e Atuações dos Conselheiros: ${JSON.stringify(stats.acoesPorConselheiro)}
 
-Linguagem: Institucional, técnica, clara, baseada em evidências, com ética, respeito, foco na proteção integral e no superior interesse da criança e do adolescente.
+---
+
+## 10. ESTRUTURA DE RESPOSTA DO OBSERVATÓRIO SIMCT
+Sempre estruture suas análises completas com as seguintes seções:
+1. 📊 OBSERVATÓRIO NÍVEL 1: MONITORAMENTO DE DADOS (Panorama e Estatísticas)
+2. 📈 OBSERVATÓRIO NÍVEL 2: ANÁLISE SOCIOTERRITORIAL E REINCIDÊNCIA (IVIA / Bairros / Faixa Etária)
+3. 🚨 OBSERVATÓRIO NÍVEL 3: MOTOR DE ALERTAS E PRESSÃO DA REDE (🟢/🟡/🟠/🔴)
+4. 📡 RADAR DA INFÂNCIA (Riscos Críticos, Em Crescimento, Oportunidades)
+5. 💡 OBSERVATÓRIO NÍVEL 4: INTELIGÊNCIA E RECOMENDAÇÕES PARA POLÍTICAS PÚBLICAS / CMDCA
+6. 🎯 PRIORIDADES DE ATUAÇÃO E PRÓXIMOS PASSOS
 `;
   };
 
   const generateClientSIMCTReport = (prompt: string, total: number, dataStats: any) => {
     const topDireitos = Object.entries(dataStats.direitos || {}).sort((a: any, b: any) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} (${v} registros)`).join(', ') || 'Convivência Familiar, Educação e Saúde';
-    const topBairros = Object.entries(dataStats.bairros || {}).sort((a: any, b: any) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} (${v})`).join(', ') || 'Bairros em Mapeamento';
-    const topAgentes = Object.entries(dataStats.agentes || {}).sort((a: any, b: any) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} (${v})`).join(', ') || 'Agentes Familiares/Institucionais';
+    const topBairros = Object.entries(dataStats.bairros || {}).sort((a: any, b: any) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} (${v})`).join(', ') || 'Bairros prioritários em mapeamento socioterritorial';
+    const topAgentes = Object.entries(dataStats.agentes || {}).sort((a: any, b: any) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} (${v})`).join(', ') || 'Agentes familiares e institucionais notificados';
+    const topOrigens = Object.entries(dataStats.origens || {}).sort((a: any, b: any) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} (${v})`).join(', ') || 'Unidades de Saúde, Escolas e Denúncias Espontâneas';
 
-    return `### 📊 DIAGNÓSTICO INSTITUCIONAL E ANÁLISE TÉCNICA SIMCT - HORTOLÂNDIA
-Análise fundamentada no Estatuto da Criança e do Adolescente (ECA - Lei nº 8.069/1990 com atualizações oficiais do Planalto):
+    const pLower = (prompt || '').toLowerCase();
+    const isDocRequest = pLower.includes('cmdca') || pLower.includes('relat') || pLower.includes('oficio') || pLower.includes('documento') || pLower.includes('oficial') || pLower.includes('encaminh');
 
-- **Prontuários Cadastrados no SIMCT:** ${total} casos monitorados ativamente.
+    if (isDocRequest) {
+      return `### 📄 DOCUMENTO 1 — OFÍCIO INSTITUCIONAL DE ENCAMINHAMENTO
+
+**CONSELHO TUTELAR DE HORTOLÂNDIA - SP**
+*Núcleo de Inteligência e Observatório SIMCT*
+
+**OFÍCIO Nº 084/2026/SIMCT-HORTOLÂNDIA**
+Hortolândia - SP, 10 de Agosto de 2026
+
+**À Presidência e Plenária do Conselho Municipal dos Direitos da Criança e do Adolescente — CMDCA**
+Município de Hortolândia - SP
+
+**Assunto:** Encaminhamento do Relatório Técnico e Diagnóstico do Observatório SIMCT para Deliberações e Planejamento de Políticas Públicas.
+
+Prezados(as) Conselheiros(as),
+
+Cumprimentando-os cordialmente, encaminhamos a Vossa Senhoria o **Relatório Técnico e Diagnóstico do Observatório SIMCT**, relativo ao acompanhamento dos prontuários e violações de direitos da infância e adolescência registrados nas Unidades I e II do Conselho Tutelar de Hortolândia.
+
+O presente documento consolida os dados operacionais, a análise do Índice de Vulnerabilidade da Infância e Adolescência (IVIA), o mapa de pressão territorial sobre a Rede socioassistencial e as recomendações prioritárias para subsidiar as deliberações deste Egrégio Conselho e a destinação de recursos do Fundo dos Direitos da Criança e do Adolescente (FDCA).
+
+Colocamo-nos à disposição para apresentação detalhada dos dados na próxima Reunião Ordinária.
+
+Atenciosamente,
+
+**EQUIPE DO OBSERVATÓRIO SIMCT**
+Conselho Tutelar de Hortolândia / SP
+*Sistema de Garantia dos Direitos da Criança e do Adolescente — SGDCA*
+
+---
+
+### 📑 DOCUMENTO 2 — RELATÓRIO TÉCNICO ANEXO
+
+# DIAGNÓSTICO INSTITUCIONAL E RELATÓRIO TÉCNICO DO OBSERVATÓRIO SIMCT
+**ÓRGÃO DESTINATÁRIO:** Conselho Municipal dos Direitos da Criança e do Adolescente (CMDCA - Hortolândia/SP)
+**PERÍODO DE ANÁLISE:** Dados Ativos em Tempo Real | Base SIMCT
+**FUNDAMENTAÇÃO JURÍDICA:** CF/88, ECA (Lei nº 8.069/1990), Lei Henry Borel (Lei nº 14.344/2022) e Lei nº 13.431/2017.
+
+---
+
+### 1. APRESENTAÇÃO E OBJETIVO
+Este Relatório Técnico tem por finalidade apresentar a análise consolidada dos prontuários em acompanhamento pelo Conselho Tutelar no SIMCT, oferecendo subsídios baseados em evidências para o fortalecimento do Sistema de Garantia de Direitos e a formulação de políticas públicas preventivas pelo CMDCA.
+
+---
+
+### 2. METODOLOGIA
+Foram analisados ${total} prontuários ativos no SIMCT envolvendo ${dataStats.totalCriancas || 0} crianças e adolescentes, categorizados por direitos fundamentais violações, território de ocorrência, perfil etário e agente violador.
+
+---
+
+### 3. PANORAMA GERAL DOS INDICADORES
+| Indicador Operacional | Valor Observado no SIMCT |
+| :--- | :--- |
+| **Prontuários sob Monitoramento:** | ${total} casos cadastrados |
+| **Crianças/Adolescentes Afetados:** | ${dataStats.totalCriancas || 0} indivíduos acompanhados |
+| **Principais Direitos Violados:** | ${topDireitos} |
+| **Territórios de Maior Incidência:** | ${topBairros} |
+| **Agentes Violadores Notificados:** | ${topAgentes} |
+| **Portas de Entrada / Origem:** | ${topOrigens} |
+
+---
+
+### 4. ANÁLISE TERRITORIAL E ÍNDICE DE VULNERABILIDADE (IVIA)
+O mapeamento socioterritorial indica que os bairros **${topBairros}** concentram a maior pressão de atendimentos. Recomenda-se a descentralização de serviços socioassistenciais (CRAS e CREAS) para estas áreas prioritárias.
+
+---
+
+### 5. FRAGILIDADES E MOTOR DE ALERTAS
+- 🟢 **NORMAL:** Acompanhamento regular de rotina e matrículas escolares.
+- 🟡 **MODERADO:** Casos de reincidência familiar demandando centralização de Prontuário Único.
+- 🟠 **ALTO:** Sobrecarga de solicitações direcionadas às Unidades de Saúde e CREAS.
+- 🔴 **CRÍTICO:** Casos marcados com **PROVIDÊNCIA IMEDIATA URGENTE** que exigem intervenção de plantão e atuação do Sistema de Justiça.
+
+---
+
+### 6. RECOMENDADAÇÕES E PROPOSTAS AO CMDCA
+1. **Destinação do FDCA:** Financiar edital de projetos voltados ao fortalecimento de vínculos nos bairros com maior taxa de violação.
+2. **Protocolo Unificado da Escuta Especializada:** Implementar capacitação intersetorial contínua (Lei nº 13.431/2017).
+3. **Pactuação de Fluxo das Recomendações (Art. 136, ECA):** Garantir respostas céleres do Poder Executivo às requisições do Conselho Tutelar.
+
+---
+**Data da Emissão:** 10 de Agosto de 2026
+*Observatório SIMCT — Garantia de Direitos em Hortolândia/SP*`;
+    }
+
+    return `### 📊 OBSERVATÓRIO INTELIGENTE SIMCT - NÍVEL 1: MONITORAMENTO DE DADOS
+Análise fundamentada no Estatuto da Criança e do Adolescente (ECA - Lei nº 8.069/1990) e diretrizes do Planalto:
+
+- **Volume de Prontuários no SIMCT:** ${total} prontuários sob monitoramento ativo.
 - **Crianças e Adolescentes Acompanhados:** ${dataStats.totalCriancas || 0} indivíduos no Sistema de Garantia de Direitos (SGDCA).
-- **Principais Direitos Fundamentais Violados:** ${topDireitos}.
-- **Territórios de Maior Incidência (Hortolândia):** ${topBairros}.
-- **Principais Agentes Violadores Notificados:** ${topAgentes}.
+- **Direitos Fundamentais Mais Violados:** ${topDireitos}.
+- **Territórios com Maior Incidência (Hortolândia):** ${topBairros}.
+- **Principais Agentes Violadores:** ${topAgentes}.
+- **Principais Origens das Denúncias/Entradas:** ${topOrigens}.
 
 ---
 
-### 📈 EVOLUÇÃO TEMPORAL E DEMANDAS DA REDE
-- **Notificações de Entrada:** Demanda expressiva proveniente das Unidades de Saúde (UBS/UPA), Unidades Escolares e Conselho Tutelar.
-- **Providência Imediata:** Destaque para prontuários em regime de plantão e urgência exigindo ação imediata.
-- **Busca Ativa:** Necessidade de reforçar a busca ativa em territórios de maior adensamento socioeconômico.
+### 📈 OBSERVATÓRIO NÍVEL 2: ANÁLISE SOCIOTERRITORIAL E ÍNDICE DE VULNERABILIDADE (IVIA)
+- **Diagnóstico Território-Violação:** Os dados do SIMCT indicam concentração de demandas nos territórios **${topBairros}**, exigindo ações descentralizadas da Rede de Proteção.
+- **Perfil Demográfico:**
+  - *Primeira Infância (0-6 anos):* Foco em prevenção de negligência, acompanhamento vacinal e creches/pré-escola.
+  - *Adolescência (12-18 anos):* Foco em mitigação da evasão escolar, convivência familiar e atenção em saúde mental.
+- **Pressão sobre a Rede de Proteção:** Alta demanda nos equipamentos de retaguarda (CRAS, CREAS, UBS/UPA e Unidades Escolares), demandando pactuação de fluxos contínuos.
 
 ---
 
-### 📍 ANÁLISE TERRITORIAL SOCIOTERRITORIAL
-- **Foco de Atuação:** Mapeamento indica a conveniência de descentralizar ações preventivas para os bairros **${topBairros}**.
-- **Equipamentos Públicos:** Fortalecimento da articulação entre Conselho Tutelar, CRAS e CREAS nestas áreas prioritárias.
+### 🚨 OBSERVATÓRIO NÍVEL 3: MOTOR DE ALERTAS E SINAIS DE RISCO
+- 🟢 **VERDE (Normal):** Padrão de atendimentos de rotina e acompanhamento de frequências escolares.
+- 🟡 **AMARELO (Atenção):** Registro de casos de reincidência familiar sem Plano Individual de Atendimento (PIA) integrado.
+- 🟠 **LARANJA (Alerta):** Sobrecarga na porta de entrada socioassistencial e necessidade de acelerar retornos da Rede.
+- 🔴 **VERMELHO (Crítico):** Prontuários sinalizados com **PROVIDÊNCIA IMEDIATA URGENTE** (violência física/sexual e grave negligência) exigindo intervenção no regime de plantão do Conselho Tutelar e notificação imediata ao Sistema de Justiça.
 
 ---
 
-### 👧 PERFIL E FAIXA ETÁRIA
-- **Primeira Infância (0 a 6 anos):** Acompanhamento prioritário quanto à vacinação, frequência em creches/pré-escola e prevenção à negligência.
-- **Adolescência (12 a 18 anos):** Atenção especial para mitigação da evasão escolar, convivência comunitária e apoio em saúde mental.
+### 📡 RADAR DA INFÂNCIA DE HORTOLÂNDIA
+- 🔴 **Riscos Críticos:** Violações graves de integridade física e necessidade de acolhimento protetivo emergencial.
+- 🟠 **Em Crescimento:** Demandas de evasão escolar e suporte familiar socioemocional no pós-pandemia.
+- 🟡 **Pontos de Atenção:** Reincidência de notificações em famílias atendidas por múltiplos serviços sem centralização de prontuário.
+- 🔵 **Oportunidades:** Fortalecimento do Fundo dos Direitos da Criança e do Adolescente (FDCA) via edital do CMDCA direcionado aos territórios prioritários.
 
 ---
 
-### ⚠️ FRAGILIDADES IDENTIFICADAS E SISTEMA DE ALERTAS
-- 🟡 **ATENÇÃO:** Casos de reincidência familiar demandando Plano Individual de Atendimento (PIA) integrado.
-- 🔴 **ALERTA CRÍTICO:** Prontuários com marcadores de **PROVIDÊNCIA IMEDIATA URGENTE** exigem resposta do Conselheiro de Plantão e da Rede de Proteção em prazo prioritário.
-
----
-
-### 💡 RECOMENDAÇÕES PRÁTICAS E SUGESTÕES AO CMDCA
-1. **Deliberação do CMDCA:** Alocação estratégica de recursos do Fundo dos Direitos da Criança e do Adolescente (FDCA) para programas de fortalecimento de vínculos nos territórios prioritários.
-2. **Capacitação Intersetorial:** Formação continuada para a Rede sobre a Escuta Especializada (Lei nº 13.431/2017) e aplicação da Lei Henry Borel (Lei nº 14.344/2022).
-3. **Fluxo de Atendimento:** Pactuação de protocolos unificados entre Educação, Saúde e Assistência Social para respostas rápidas às requisições do Art. 136 do ECA.`;
+### 💡 OBSERVATÓRIO NÍVEL 4: INTELIGÊNCIA E RECOMENDAÇÕES PARA POLÍTICAS PÚBLICAS (CMDCA)
+1. **Atuação Estratégica do CMDCA:** Financiar programas de fortalecimento de vínculos socioafetivos e prevenção da violência nos bairros **${topBairros}**.
+2. **Protocolo Intersetorial de Proteção:** Capacitação unificada da Rede sobre a Lei da Escuta Especializada (Lei nº 13.431/2017) e aplicação rigorosa da Lei Henry Borel (Lei nº 14.344/2022).
+3. **Pactuação de Fluxo do Art. 136 do ECA:** Estabelecer com o Poder Executivo prazos céleres para atendimento das requisições de serviços públicos expedidas pelo Conselho Tutelar.`;
   };
 
   const handleSendMessage = async (e?: React.FormEvent, initialPrompt?: string) => {
@@ -303,15 +375,24 @@ Análise fundamentada no Estatuto da Criança e do Adolescente (ECA - Lei nº 8.
                 </p>
               </div>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-md pt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg pt-4">
                 <button
                   type="button"
-                  onClick={() => handleSendMessage(undefined, "Faça uma análise institucional completa SIMCT: Quais direitos fundamentais são mais violados? Qual bairro exige prioridade de política pública? Qual agente mais viola direitos e qual a sua sugestão baseada no ECA para o CMDCA?")}
+                  onClick={() => handleSendMessage(undefined, "O que os dados estão dizendo?")}
                   disabled={loading || totalDocs === 0}
                   className="p-4 bg-slate-800/80 hover:bg-slate-800 border border-white/5 hover:border-blue-500/30 rounded-2xl text-[10px] font-black uppercase text-slate-200 hover:text-white text-left transition-all flex items-start gap-3 shadow-md active:scale-95"
                 >
-                  <span className="text-base shrink-0">📊</span>
-                  <span>Diagnóstico Completo SIMCT</span>
+                  <span className="text-base shrink-0">📢</span>
+                  <span>O que os dados estão dizendo?</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSendMessage(undefined, "Gerar relatório para o CMDCA")}
+                  disabled={loading || totalDocs === 0}
+                  className="p-4 bg-slate-800/80 hover:bg-slate-800 border border-blue-500/40 rounded-2xl text-[10px] font-black uppercase text-blue-300 hover:text-white text-left transition-all flex items-start gap-3 shadow-md active:scale-95 bg-blue-500/10"
+                >
+                  <span className="text-base shrink-0">📑</span>
+                  <span>Gerar Relatório para o CMDCA</span>
                 </button>
                 <button
                   type="button"
@@ -321,15 +402,6 @@ Análise fundamentada no Estatuto da Criança e do Adolescente (ECA - Lei nº 8.
                 >
                   <span className="text-base shrink-0">🏘️</span>
                   <span>Bairros & Agentes Violadores</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSendMessage(undefined, "Qual a relação entre as faixas etárias atendidas e os tipos de violência mais frequentes registrados?")}
-                  disabled={loading || totalDocs === 0}
-                  className="p-4 bg-slate-800/80 hover:bg-slate-800 border border-white/5 hover:border-blue-500/30 rounded-2xl text-[10px] font-black uppercase text-slate-200 hover:text-white text-left transition-all flex items-start gap-3 shadow-md active:scale-95"
-                >
-                  <span className="text-base shrink-0">🧒</span>
-                  <span>Faixa Etária vs. Violências</span>
                 </button>
                 <button
                   type="button"
@@ -350,6 +422,48 @@ Análise fundamentada no Estatuto da Criança e do Adolescente (ECA - Lei nº 8.
                 </div>
                 <div className={`max-w-[85%] p-6 rounded-[2rem] text-[13px] leading-relaxed ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-slate-800 text-slate-200 border border-white/5 rounded-tl-none shadow-inner'}`}>
                   <div className="whitespace-pre-wrap">{msg.text}</div>
+                  {msg.role === 'model' && (
+                    <div className="mt-4 pt-4 border-t border-white/10 flex items-center gap-3">
+                      <button
+                        onClick={() => {
+                          const printWindow = window.open('', '_blank');
+                          if (printWindow) {
+                            printWindow.document.write(`
+                              <html>
+                                <head>
+                                  <title>Relatório SIMCT - Hortolândia</title>
+                                  <style>
+                                    body { font-family: sans-serif; padding: 40px; color: #000; line-height: 1.6; }
+                                    h1, h2, h3 { color: #1e3a8a; }
+                                    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                                    th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+                                    th { background-color: #f1f5f9; }
+                                    hr { border: none; border-top: 1px solid #ccc; margin: 20px 0; }
+                                  </style>
+                                </head>
+                                <body>
+                                  <pre style="white-space: pre-wrap; font-family: inherit;">${msg.text}</pre>
+                                </body>
+                              </html>
+                            `);
+                            printWindow.document.close();
+                            printWindow.print();
+                          }
+                        }}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/30 rounded-xl text-[10px] font-bold uppercase transition-all"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>Imprimir / Salvar PDF</span>
+                      </button>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(msg.text)}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-xl text-[10px] font-bold uppercase transition-all"
+                      >
+                        <Copy className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Copiar Texto</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))

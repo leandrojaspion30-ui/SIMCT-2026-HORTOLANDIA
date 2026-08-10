@@ -13,50 +13,127 @@ function generateSIMCTFallbackResponse(contents: any[]): string {
     }
   }
 
-  return `### 📊 DADOS PRINCIPAIS E PANORAMA GERAL DO SIMCT HORTOLÂNDIA
-Análise gerada em conformidade com o Estatuto da Criança e do Adolescente (ECA - Lei nº 8.069/1990) e diretrizes do Planalto:
+  const qLower = userQuestion.toLowerCase();
+  const isDocRequest = qLower.includes('cmdca') || qLower.includes('relat') || qLower.includes('oficio') || qLower.includes('documento') || qLower.includes('oficial') || qLower.includes('encaminh');
 
-- **Monitoramento Institucional:** Sistema de Informação e Monitoramento do Conselho Tutelar (SIMCT) ativo para as Unidades I e II de Hortolândia.
-- **Foco da Análise:** Proteção Integral, Diagnóstico Socioterritorial e Fortalecimento do Sistema de Garantia de Direitos (SGDCA).
-- **Direitos com Maior Incidência de Violação:** Direito à Convivência Familiar e Comunitária, Direito à Educação e Direito à Saúde/Integridade Física.
+  if (isDocRequest) {
+    return `### 📄 DOCUMENTO 1 — OFÍCIO INSTITUCIONAL DE ENCAMINHAMENTO
 
----
+**CONSELHO TUTELAR DE HORTOLÂNDIA - SP**
+*Núcleo de Inteligência e Observatório SIMCT*
 
-### 📈 EVOLUÇÃO E TENDÊNCIAS
-- **Demandas da Rede:** Notado aumento das solicitações via Unidades Escolares e Unidades de Saúde (UBS/UPA).
-- **Providência Imediata:** Acompanhamento prioritário em regime de plantão e urgência para casos de violação grave.
-- **Tendência Observada:** Estabilidade na entrada de denúncias via Disk 100/Conselho, indicando a importância de manter a busca ativa nos bairros prioritários.
+**OFÍCIO Nº 084/2026/SIMCT-HORTOLÂNDIA**
+Hortolândia - SP, 10 de Agosto de 2026
 
----
+**À Presidência e Plenária do Conselho Municipal dos Direitos da Criança e do Adolescente — CMDCA**
+Município de Hortolândia - SP
 
-### 📍 ANÁLISE TERRITORIAL (BAIRROS DE HORTOLÂNDIA)
-- **Territórios Prioritários:** Bairros com maior adensamento populacional e menor oferta de equipamentos socioassistenciais (CRAS/CREAS) exigem intervenção preventiva urgente.
-- **Direcionamento:** Fortalecimento dos serviços preventivos e articulação com a Secretaria de Assistência Social.
+**Assunto:** Encaminhamento do Relatório Técnico e Diagnóstico do Observatório SIMCT para Deliberações e Planejamento de Políticas Públicas.
 
----
+Prezados(as) Conselheiros(as),
 
-### 👧 PERFIL E FAIXA ETÁRIA
-- **Primeira Infância (0 a 6 anos):** Predominância de registros associados à negligência de cuidados básicos, vacinação e acompanhamento de saúde.
-- **Adolescência (12 a 18 anos):** Concentração de conflitos familiares, evasão escolar e demanda por atenção à saúde mental.
+Cumprimentando-os cordialmente, encaminhamos a Vossa Senhoria o **Relatório Técnico e Diagnóstico do Observatório SIMCT**, relativo ao acompanhamento dos prontuários e violações de direitos da infância e adolescência registrados nas Unidades I e II do Conselho Tutelar de Hortolândia.
 
----
+O presente documento consolida os dados operacionais, a análise do Índice de Vulnerabilidade da Infância e Adolescência (IVIA), o mapa de pressão territorial sobre a Rede socioassistencial e as recomendações prioritárias para subsidiar as deliberações deste Egrégio Conselho e a destinação de recursos do Fundo dos Direitos da Criança e do Adolescente (FDCA).
 
-### ⚠️ FRAGILIDADES IDENTIFICADAS
-1. Reincidência de atendimentos familiares sem acompanhamento sistemático de Plano Individual de Atendimento (PIA).
-2. Necessidade de maior agilidade na resposta às requisições de serviços públicos essenciais (Art. 136, III do ECA).
+Atenciosamente,
+
+**EQUIPE DO OBSERVATÓRIO SIMCT**
+Conselho Tutelar de Hortolândia / SP
+*Sistema de Garantia dos Direitos da Criança e do Adolescente — SGDCA*
 
 ---
 
-### 🚨 SISTEMA DE ALERTAS
-- 🟡 **ATENÇÃO:** Reincidência de violações em famílias atendidas por mais de 3 vezes sem plano integrado da Rede.
-- 🔴 **CRÍTICO:** Casos de violência física/sexual e documentos marcados com **PROVIDÊNCIA IMEDIATA URGENTE**, requerendo atuação imediata do Conselheiro de Plantão e da Rede de Proteção.
+### 📑 DOCUMENTO 2 — RELATÓRIO TÉCNICO ANEXO
+
+# DIAGNÓSTICO INSTITUCIONAL E RELATÓRIO TÉCNICO DO OBSERVATÓRIO SIMCT
+**ÓRGÃO DESTINATÁRIO:** Conselho Municipal dos Direitos da Criança e do Adolescente (CMDCA - Hortolândia/SP)
+**PERÍODO DE ANÁLISE:** Dados Ativos em Tempo Real | Base SIMCT
+**FUNDAMENTAÇÃO JURÍDICA:** CF/88, ECA (Lei nº 8.069/1990), Lei Henry Borel (Lei nº 14.344/2022) e Lei nº 13.431/2017.
 
 ---
 
-### 💡 RECOMENDAÇÕES PRÁTICAS E PROPOSTAS PARA O CMDCA
-1. **Atuação do CMDCA:** Destinar recursos do Fundo dos Direitos da Criança e do Adolescente (FDCA) para programas de fortalecimento de vínculos nos bairros com maior índice de vulnerabilidade.
-2. **Capacitação da Rede:** Realizar formação continuada sobre a Escuta Especializada (Lei nº 13.431/2017) e aplicação do protocolo Henry Borel (Lei nº 14.344/2022).
-3. **Busca Ativa Escolar:** Pactuar fluxo unificado entre a Secretaria de Educação e o Conselho Tutelar para mitigação da evasão escolar.`;
+### 1. APRESENTAÇÃO E OBJETIVO
+Este Relatório Técnico tem por finalidade apresentar a análise consolidada dos prontuários em acompanhamento pelo Conselho Tutelar no SIMCT, oferecendo subsídios baseados em evidências para o fortalecimento do Sistema de Garantia de Direitos e a formulação de políticas públicas preventivas pelo CMDCA.
+
+---
+
+### 2. METODOLOGIA
+Análise dos prontuários ativos no SIMCT em Hortolândia, categorizados por direitos fundamentais, território de ocorrência (bairros), perfil etário e agentes violadores notificados.
+
+---
+
+### 3. PANORAMA GERAL DOS INDICADORES
+| Indicador Operacional | Descrição / Observação no SIMCT |
+| :--- | :--- |
+| **Plataforma Ativa:** | SIMCT Hortolândia (Unidades I e II) |
+| **Principais Direitos Violados:** | Convivência Familiar, Educação e Saúde |
+| **Territórios Prioritários:** | Bairros com maior adensamento socioeconômico |
+| **Portas de Entrada:** | Unidades de Saúde (UBS/UPA), Escolas e Conselho Tutelar |
+
+---
+
+### 4. ANÁLISE TERRITORIAL E ÍNDICE DE VULNERABILIDADE (IVIA)
+Concentração de demandas em territórios descentralizados demandando maior suporte dos equipamentos socioassistenciais (CRAS/CREAS).
+
+---
+
+### 5. FRAGILIDADES E MOTOR DE ALERTAS
+- 🟢 **NORMAL:** Atendimentos de rotina e matrículas escolares.
+- 🟡 **MODERADO:** Reincidência familiar exigindo Plano Individual de Atendimento (PIA).
+- 🟠 **ALTO:** Sobrecarga nas solicitações da rede de retaguarda.
+- 🔴 **CRÍTICO:** Casos com **PROVIDÊNCIA IMEDIATA URGENTE** exigindo atuação imediata do plantão.
+
+---
+
+### 6. RECOMENDAÇÕES E PROPOSTAS AO CMDCA
+1. **Atuação Estratégica:** Destinar recursos do FDCA para prevenção nos territórios de alta vulnerabilidade.
+2. **Capacitação da Rede:** Formação contínua sobre a Escuta Especializada (Lei nº 13.431/2017) e protocolo Henry Borel.
+3. **Pactuação de Fluxo:** Garantir respostas tempestivas do Executivo às requisições do Art. 136 do ECA.
+
+---
+**Data da Emissão:** 10 de Agosto de 2026
+*Observatório SIMCT — Garantia de Direitos em Hortolândia/SP*`;
+  }
+
+  return `### 📊 OBSERVATÓRIO INTELIGENTE SIMCT - NÍVEL 1: MONITORAMENTO DE DADOS
+Análise técnica do Núcleo de Inteligência e Observatório de Direitos da Criança e do Adolescente de Hortolândia - SP (ECA - Lei nº 8.069/1990):
+
+- **Plataforma Ativa:** Sistema de Informação e Monitoramento do Conselho Tutelar (SIMCT) - Unidades I e II.
+- **Foco Analítico:** Proteção Integral, Diagnóstico Socioterritorial, Gestão por Evidências e Fortalecimento do SGDCA.
+- **Principais Direitos Monitorados:** Direito à Convivência Familiar e Comunitária, Direito à Educação e Direito à Integridade Física/Saúde.
+
+---
+
+### 📈 OBSERVATÓRIO NÍVEL 2: ANÁLISE SOCIOTERRITORIAL E ÍNDICE DE VULNERABILIDADE (IVIA)
+- **Análise Socioterritorial (Bairros):** Concentração de vulnerabilidades observada em territórios com menor cobertura de equipamentos socioassistenciais (CRAS/CREAS), demandando atenção preventiva descentralizada.
+- **Perfil Demográfico da Infância:**
+  - *Primeira Infância (0 a 6 anos):* Foco na prevenção de negligência de cuidados primários, acompanhamento vacinal e vacância em creches.
+  - *Adolescência (12 a 18 anos):* Monitoramento da evasão/abandono escolar, acolhimento socioemocional e mediação de conflitos familiares.
+- **Pressão sobre a Rede:** Alta demanda sobre as portas de entrada de Saúde (UBS/UPA), Educação e Conselho Tutelar.
+
+---
+
+### 🚨 OBSERVATÓRIO NÍVEL 3: MOTOR DE ALERTAS E SINAIS DE RISCO
+- 🟢 **VERDE (Normal):** Acompanhamento sistemático de rotina de frequências escolares e programas preventivos.
+- 🟡 **AMARELO (Atenção):** Famílias com reincidência de notificações sem Plano Individual de Atendimento (PIA) articulado.
+- 🟠 **LARANJA (Alerta):** Sobrecarga de solicitações na rede de retaguarda socioassistencial e atrasos na devolução de retornos.
+- 🔴 **VERMELHO (Crítico):** Prontuários sinalizados com **PROVIDÊNCIA IMEDIATA URGENTE** (violência física, sexual e negligência grave), exigindo intervenção imediata do Conselheiro de Plantão e comunicação ao Ministério Público/Poder Judiciário.
+
+---
+
+### 📡 RADAR DA INFÂNCIA DE HORTOLÂNDIA
+- 🔴 **Riscos Críticos:** Necessidade de pronta resposta em casos de suspeita de violência doméstica e violação de integridade.
+- 🟠 **Em Crescimento:** Demandas por suporte em saúde mental infanto-juvenil e busca ativa de alunos em risco de evasão escolar.
+- 🟡 **Pontos de Atenção:** Fragmentação de informações entre serviços de atendimento da mesma família.
+- 🔵 **Oportunidades:** Destinação de recursos do Fundo dos Direitos da Criança e do Adolescente (FDCA) pelo CMDCA para projetos preventivos locais.
+
+---
+
+### 💡 OBSERVATÓRIO NÍVEL 4: INTELIGÊNCIA E RECOMENDAÇÕES PARA POLÍTICAS PÚBLICAS (CMDCA / GESTÃO)
+1. **Atuação do CMDCA:** Financiar programas e projetos focados na convivência comunitária nos bairros com maior vulnerabilidade apontada pelo IVIA.
+2. **Capacitação da Rede de Proteção:** Formação continuada intersetorial sobre a Lei da Escuta Especializada (Lei nº 13.431/2017) e aplicação do protocolo Henry Borel (Lei nº 14.344/2022).
+3. **Fluxo Unificado de Atendimento:** Pactuação de protocolos claros de acolhimento e resposta rápida às requisições do Art. 136 do ECA.`;
 }
 
 async function startServer() {
