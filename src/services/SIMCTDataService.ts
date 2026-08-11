@@ -1,4 +1,4 @@
-import { Documento, AgendaEntry, User } from './types';
+import { Documento, AgendaEntry, User } from '../types';
 
 export interface SIMCTStats {
   totalProntuarios: number;
@@ -46,7 +46,7 @@ export class SIMCTDataService {
       stats.violacoesPredominantes[violacao] = (stats.violacoesPredominantes[violacao] || 0) + 1;
 
       // Reincidência (por nome da genitora/criança simplificado)
-      const key = `${doc.nome_genitora}-${doc.nome_crianca}`.toLowerCase();
+      const key = `${doc.genitora_nome || ''}-${doc.crianca_nome || ''}`.toLowerCase();
       reincidenciaMap.set(key, (reincidenciaMap.get(key) || 0) + 1);
     });
 

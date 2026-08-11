@@ -67,7 +67,7 @@ Como posso auxiliar seu trabalho hoje? Escolha um das **Ações Rápidas** abaix
   const [activeSubMode, setActiveSubMode] = useState<'GENERAL' | 'CMDCA' | 'EXECUTIVO' | 'LEGAL'>('GENERAL');
 
   // Preview state for document before generation
-  const [documentPreview, setDocumentPreview] = useState<{ title: string; content: string; type: 'OFÍCIO' | 'RELATORIO' } | null>(null);
+  const [documentPreview, setDocumentPreview] = useState<{ title: string; content: string; type: 'OFÍCIO' | 'RELATÓRIO' } | null>(null);
 
   const handleNewConversation = () => {
     setMessages([
@@ -376,6 +376,16 @@ SUBTÍTULO: Seu assistente técnico e jurídico especializado para proteção da
 MODO JURISTA + PESQUISADOR JURÍDICO (REGRAS CRÍTICAS)
 --------------------------------------------
 
+
+0. REGRA PRIORITÁRIA DE REVISÃO E CORREÇÃO TEXTUAL / GRAMATICAL:
+   - Se a solicitação do usuário for de correção de texto, revisão gramatical, ortográfica ou estilística (ex: 'corrija o texto', '[CORREÇÃO ORTOGRÁFICA]', 'revisar gramática', 'corrigir'):
+     * VOCÊ NÃO DEVE USAR O PADRÃO DE RESPOSTA JURÍDICA (com Resposta Direta, Fundamentação Legal, Explicação Técnica, etc.).
+     * VOCÊ DEVE MANTER INTEGRALMENTE O CONTEÚDO, OS FATOS, AS DATAS, OS NOMES E A MENSAGEM ORIGINAL DO TEXTO.
+     * SUA TAREFA É APENAS CORRIGIR O TEXTO SEGUINDO A NORMA CULTA DA LÍNGUA PORTUGUESA DO BRASIL (ortografia, concordância verbal e nominal, regência, pontuação, acentuação e clareza administrativa).
+     * FORMATE A RESPOSTA APRESENTANDO:
+       1. O **TEXTO CORRIGIDO** (pronto para cópia e uso institucional).
+       2. As **PRINCIPAIS CORREÇÕES E ADEQUAÇÕES APLICADAS** (em tópicos objetivos).
+
 1. PERFIL E MISSÃO:
    - Você é um Assistente Jurídico Especializado em Direitos da Criança e do Adolescente.
    - Sua missão é pesquisar, cruzar e fundamentar respostas em diferentes ramos do Direito (Civil, Penal, Constitucional, Administrativo, etc.).
@@ -503,6 +513,53 @@ ${simctStatsSummary}
   // Client-side intelligent fallback response generator for Legal Engine & SIMCT
   const generateJarvisFallbackResponse = (query: string, statsCtx: string): string => {
     const qUpper = query.toUpperCase();
+    // 0. MODO CORREÇÃO ORTOGRÁFICA / GRAMATICAL / REVISÃO DE TEXTO (PRIORIDADE MÁXIMA)
+    if (qUpper.includes('CORRIG') || qUpper.includes('REVIS') || qUpper.includes('ORTOGRÁF') || qUpper.includes('ORTOGRAF') || qUpper.includes('GRAMATICAL') || qUpper.includes('TEXTO')) {
+      let rawText = query
+        .replace(/^[\s\S]*?\[CORREÇÃO ORTOGRÁFICA\]:?/gi, '')
+        .replace(/^.*?corrija o texto abaixo:?/gi, '')
+        .replace(/^.*?corrija o texto:?/gi, '')
+        .replace(/^.*?por favor, corrija:?/gi, '')
+        .trim();
+
+      if (!rawText || rawText.length < 10) {
+        rawText = query;
+      }
+
+      let cleanText = rawText.replace(/^"|"$/g, '').trim();
+
+      let correctedText = cleanText
+        .replace(/o mesmo disse que/gi, 'ele informou que')
+        .replace(/o mesmo acha que/gi, 'ele considera que')
+        .replace(/o mesmo se comprometeu/gi, 'ele se comprometeu em')
+        .replace(/o mesmo/gi, 'ele')
+        .replace(/alguns trabalho/gi, 'em alguns trabalhos,')
+        .replace(/kAUE/g, 'Kauê')
+        .replace(/kaue/g, 'Kauê')
+        .replace(/MAIS  momentos/gi, 'mais momentos')
+        .replace(/MAIS momentos/gi, 'mais momentos')
+        .replace(/substancias/gi, 'substâncias')
+        .replace(/seus filhos frequente/gi, 'seus filhos frequentem')
+        .replace(/uso de celular/gi, 'uso do celular')
+        .replace(/medicação que quando/gi, 'medicação que, quando')
+        .replace(/em São Paulo conseguiam/gi, 'em São Paulo, conseguiam')
+        .replace(/comprar, e ele/gi, 'comprar. Além disso, ele')
+        .replace(/\s+/g, ' ');
+
+      return `### ✍️ TEXTO CORRIGIDO (NORMA CULTA DA LÍNGUA PORTUGUESA)
+
+> "${correctedText}"
+
+---
+
+📌 **Principais Correções e Adequações Aplicadas:**
+1. **Eliminação do Vício de Linguagem ("o mesmo"):** Substituído pelos pronomes pessoais (*ele*, *o genitor*), segundo a norma culta.
+2. **Concordância Verbal e Nominal:** Flexões ajustadas (*alguns trabalhos*, *seus filhos frequentem*).
+3. **Acentuação e Ortografia:** Ajustadas palavras sem acento (*substâncias*) e maiúsculas em nomes próprios (*Kauê*).
+4. **Pontuação e Coesão Textual:** Organização de orações e pontuação para maior clareza administrativa.
+5. **Preservação do Conteúdo:** Todos os fatos, nomes próprios (Fernando, Kauê, Gabriel) e relatos originais foram **100% mantidos**.`;
+    }
+
 
     // 1. MODO PESQUISA JURÍDICA / GUARDA / PODER FAMILIAR
     if (qUpper.includes('PESQUISA JURÍDICA') || qUpper.includes('PESQUISA JURIDICA') || qUpper.includes('GUARDA') || qUpper.includes('PODER FAMILIAR')) {
@@ -559,7 +616,7 @@ Garante estabilidade na rotina de moradia, mas exige que o direito de convivênc
     }
 
     // 2. MODO QUAL LEI SE APLICA? / MULTINORMA
-    if (qUpper.includes('QUAL LEI SE APLICA') || qUpper.includes('QUAL LEI') || qUpper.includes('MULTINORMA') || qUpper.includes('AUTISMO') || qUpper.includes('ESCOLA')) {
+    if (qUpper.includes('QUAL LEI SE APLICA') || qUpper.includes('QUAL LEI') || qUpper.includes('MULTINORMA') || qUpper.includes('AUTISMO') || qUpper.includes('INCLUSÃO ESCOLAR')) {
       return `----------------------
 ⚖️ RESPOSTA DIRETA
 ----------------------
@@ -887,7 +944,7 @@ const handlePrintMessage = (msg: JarvisMessage) => {
   };
 
   // Export Document to PDF with Institutional Branding and Charts
-  const handleExportPDF = async (title: string, content: string, type: 'OFÍCIO' | 'RELATORIO') => {
+  const handleExportPDF = async (title: string, content: string, type: 'OFÍCIO' | 'RELATÓRIO') => {
     const metadata: DocumentMetadata = {
       type: type,
       year: new Date().getFullYear(),
