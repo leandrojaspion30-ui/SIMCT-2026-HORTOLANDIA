@@ -146,7 +146,374 @@ Sempre estruture suas análises completas com as seguintes seções:
 `;
   };
 
-  const generateClientSIMCTReport = (prompt: string, total: number, dataStats: any) => {
+  const parseMarkdownToHtml = (markdown: string): string => {
+    if (!markdown) return '';
+
+    const lines = markdown.split('\n');
+    let html = '';
+    let inTable = false;
+    let tableLines: string[] = [];
+
+    const flushTable = (tLines: string[]): string => {
+      if (tLines.length === 0) return '';
+
+      const rows = tLines
+        .map(l => l.trim())
+        .filter(l => l.startsWith('|') && l.endsWith('|'))
+        .map(l => l.slice(1, -1).split('|').map(c => c.trim()));
+
+      if (rows.length === 0) return '';
+
+      const headerRow = rows[0];
+      const bodyRows = rows.slice(1).filter(r => !r.every(cell => /^[:\-\s]+$/.test(cell)));
+
+      if (bodyRows.length === 0) return '';
+
+      let maxVal = 1;
+      let items: { label: string; valStr: string; valNum: number; pctVal: number }[] = [];
+      let hasNumericData = false;
+
+      bodyRows.forEach(row => {
+        const label = row[0].replace(/\*\*/g, '').trim();
+        const col2 = row[1] ? row[1].replace(/\*\*/g, '').trim() : '';
+        const col3 = row[2] ? row[2].replace(/\*\*/g, '').trim() : '';
+        const combined = `${col2} ${col3}`;
+
+        const matchPct = combined.match(/(\d+(?:[.,]\d+)?)\s*%/);
+        const matchNum = combined.match(/\b(\d+)\b/);
+
+        let valNum = matchNum ? parseFloat(matchNum[1]) : 0;
+        let pctVal = matchPct ? parseFloat(matchPct[1].replace(',', '.')) : 0;
+
+        let valStr = col2;
+        if (col3) {
+          valStr += ` (${col3})`;
+        }
+
+        if (valNum > 0 || pctVal > 0) {
+          hasNumericData = true;
+        }
+        if (valNum > maxVal) maxVal = valNum;
+
+        items.push({ label, valStr, valNum, pctVal });
+      });
+
+      let title = headerRow[0] ? headerRow[0].replace(/\*\*/g, '').trim().toUpperCase() : 'INDICADORES E DADOS SIMCT';
+
+      if (hasNumericData && items.length > 0) {
+        const chartRowsHtml = items.map((item, idx) => {
+          let widthPct = item.pctVal;
+          if (widthPct <= 0 && maxVal > 0 && item.valNum > 0) {
+            widthPct = Math.min(100, Math.round((item.valNum / maxVal) * 100));
+          }
+          if (widthPct <= 0) widthPct = 25;
+
+          const colors = ['#2563eb', '#dc2626', '#9333ea', '#16a34a', '#ea580c', '#0284c7', '#7c3aed'];
+          const barColor = colors[idx % colors.length];
+
+          return `
+            <div style="display: flex; align-items: center; font-size: 11px; margin-bottom: 8px; line-height: 1.2;">
+              <div style="width: 200px; min-width: 200px; text-align: right; font-weight: 800; color: #334155; text-transform: uppercase; padding-right: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${item.label}">
+                ${item.label}
+              </div>
+              <div style="flex: 1; background-color: #f1f5f9; height: 14px; border-radius: 9999px; overflow: hidden; display: flex; align-items: center;">
+                <div style="height: 100%; width: ${widthPct}%; background-color: ${barColor}; border-radius: 9999px; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; transition: width 0.3s ease;"></div>
+              </div>
+              <div style="min-width: 90px; padding-left: 12px; font-weight: 800; color: #0f172a; font-size: 11px; white-space: nowrap;">
+                ${item.valStr}
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 16px; padding: 16px 18px; margin: 18px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); font-family: 'Segoe UI', Arial, sans-serif; page-break-inside: avoid; color: #0f172a;">
+            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; margin-bottom: 12px;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 11px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: -0.2px;">
+                  ${title}
+                </span>
+                <span style="display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid #cbd5e1; color: #64748b; font-size: 9px; font-weight: bold;">i</span>
+              </div>
+              <span style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 2px 8px; font-size: 8.5px; font-weight: 700; color: #64748b; text-transform: uppercase;">
+                MODELO GRÁFICO SIMCT
+              </span>
+            </div>
+            <div>
+              ${chartRowsHtml}
+            </div>
+          </div>
+        `;
+      }
+
+      // Fallback HTML table
+      const ths = headerRow.map(h => `<th style="border: 1px solid #cbd5e1; padding: 8px 10px; background-color: #f1f5f9; font-weight: 800; color: #1e3a8a; text-transform: uppercase; font-size: 10.5px; text-align: left;">${h.replace(/\*\*/g, '')}</th>`).join('');
+      const trs = bodyRows.map((row, rIdx) => {
+        const tds = row.map(cell => `<td style="border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; color: #0f172a; font-size: 11px;">${cell.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</td>`).join('');
+        const bg = rIdx % 2 === 0 ? '#ffffff' : '#f8fafc';
+        return `<tr style="background-color: ${bg};">${tds}</tr>`;
+      }).join('');
+
+      return `
+        <div style="margin: 16px 0; overflow-x: auto; page-break-inside: avoid;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; background: #ffffff;">
+            <thead>
+              <tr>${ths}</tr>
+            </thead>
+            <tbody>
+              ${trs}
+            </tbody>
+          </table>
+        </div>
+      `;
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+        if (!inTable) {
+          inTable = true;
+          tableLines = [line];
+        } else {
+          tableLines.push(line);
+        }
+      } else {
+        if (inTable) {
+          inTable = false;
+          html += flushTable(tableLines);
+          tableLines = [];
+        }
+
+        let formatted = line
+          .replace(/^### (.*$)/gim, '<h3 style="color:#1e3a8a; border-bottom: 2px solid #e2e8f0; padding-bottom:4px; margin-top:20px; font-size:13px; font-weight:800; text-transform:uppercase;">$1</h3>')
+          .replace(/^## (.*$)/gim, '<h2 style="color:#0f172a; margin-top:22px; font-size:14px; font-weight:800; text-transform:uppercase; border-bottom:1px solid #cbd5e1; padding-bottom:4px;">$1</h2>')
+          .replace(/^# (.*$)/gim, '<h1 style="color:#1e3a8a; text-align:center; text-transform:uppercase; font-size:16px; font-weight:800; margin-bottom:16px;">$1</h1>')
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*(.*?)\*/g, '<em>$1</em>')
+          .replace(/^[\-*]\s+(.*$)/gim, '<li style="margin-bottom:4px; margin-left: 16px;">$1</li>')
+          .replace(/^---/g, '<hr style="border:none; border-top:1px solid #cbd5e1; margin:20px 0;"/>');
+
+        html += formatted + '\n';
+      }
+    }
+
+    if (inTable) {
+      html += flushTable(tableLines);
+    }
+
+    return html;
+  };
+
+  const getStatusColor = (statusName: string, index: number) => {
+    const cleanName = statusName.toUpperCase().replace(/_/g, ' ');
+    const STATUS_COLORS: { [key: string]: string } = {
+      'AGUARDANDO ANALISE': '#2563eb',
+      'AGUARDANDO ANÁLISE': '#2563eb',
+      'MEDIDA PENDENTE': '#2563eb',
+      'CONCLUIDO': '#dc2626',
+      'CONCLUÍDO': '#16a34a',
+      'NOTIFICADO': '#dc2626',
+      'MEDIDA APLICADA': '#9333ea',
+      'AGUARDANDO VALIDACAO': '#16a34a',
+      'AGUARDANDO VALIDAÇÃO': '#16a34a',
+      'DIREITO NAO VIOLADO': '#ea580c',
+      'DIREITO NÃO VIOLADO': '#ea580c',
+      'NOTIFICAÇÃO ROSILDA': '#2563eb',
+      'NOTIFICAÇÃO LEANDRO': '#2563eb',
+      'AGUARDANDO DOCUMENTO': '#0d9488',
+      'NOTIFICAÇÃO MIRIAN': '#0d9488',
+      'NOTIFICAÇÃO SANDRA': '#7c3aed',
+      'NOTIFICAÇÃO LUIZA': '#2563eb',
+    };
+    if (STATUS_COLORS[cleanName]) return STATUS_COLORS[cleanName];
+    if (STATUS_COLORS[statusName]) return STATUS_COLORS[statusName];
+    const palette = ['#2563eb', '#dc2626', '#9333ea', '#16a34a', '#ea580c', '#0284c7', '#eab308', '#0d9488', '#7c3aed'];
+    return palette[index % palette.length];
+  };
+
+  const generatePrintChartsHtml = (statsData: any, total: number) => {
+    if (!statsData) return '';
+    const divisor = total || 1;
+
+    // 1. Bairros (Dados reais do SIMCT)
+    const bairrosList = Object.entries(statsData.bairros || {})
+      .map(([name, val]) => ({ name: (name || 'NÃO INFORMADO').replace(/_/g, ' ').toUpperCase(), val: Number(val) }))
+      .sort((a, b) => b.val - a.val)
+      .slice(0, 10);
+    const maxBairroVal = Math.max(...bairrosList.map(b => b.val), 1);
+
+    const bairrosRowsHtml = bairrosList.map(item => {
+      const pct = ((item.val / divisor) * 100).toFixed(1).replace('.', ',');
+      const widthPct = Math.max((item.val / maxBairroVal) * 100, 2);
+      return `
+        <div class="chart-row-item">
+          <div class="chart-label-col" title="${item.name}">${item.name}</div>
+          <div class="chart-track-col">
+            <div class="chart-fill-bar" style="width: ${widthPct}%; background-color: #2563eb;"></div>
+          </div>
+          <div class="chart-val-col">${item.val} (${pct}%)</div>
+        </div>
+      `;
+    }).join('');
+
+    // 2. Status / Situação (Dados reais do SIMCT)
+    const statusSource = (statsData.status && Object.keys(statsData.status).length > 0)
+      ? statsData.status
+      : (statsData.origens || {});
+    const statusList = Object.entries(statusSource)
+      .map(([name, val]) => ({ name: (name || 'OUTROS').replace(/_/g, ' ').toUpperCase(), val: Number(val) }))
+      .sort((a, b) => b.val - a.val)
+      .slice(0, 12);
+    const maxStatusVal = Math.max(...statusList.map(s => s.val), 1);
+
+    const statusRowsHtml = statusList.map((item, idx) => {
+      const pct = ((item.val / divisor) * 100).toFixed(1).replace('.', ',');
+      const widthPct = Math.max((item.val / maxStatusVal) * 100, 2);
+      const barColor = getStatusColor(item.name, idx);
+      return `
+        <div class="chart-row-item">
+          <div class="chart-label-col" title="${item.name}">${item.name}</div>
+          <div class="chart-track-col">
+            <div class="chart-fill-bar" style="width: ${widthPct}%; background-color: ${barColor};"></div>
+          </div>
+          <div class="chart-val-col">${item.val} (${pct}%)</div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="charts-section-print">
+        <div class="charts-grid-print">
+          <div class="chart-card-print">
+            <div class="chart-header-print">
+              <div class="chart-title-box">
+                <span class="chart-title-text">GRÁFICO 1: DISTRIBUIÇÃO DE PROCEDIMENTOS POR BAIRRO</span>
+                <span class="chart-info-icon">i</span>
+              </div>
+              <div class="chart-badge-tag">TOP 10 BAIRROS</div>
+            </div>
+            <div class="chart-body-list">
+              ${bairrosRowsHtml || '<div style="text-align:center; color:#94a3b8;">Sem dados disponíveis</div>'}
+            </div>
+          </div>
+
+          <div class="chart-card-print">
+            <div class="chart-header-print">
+              <div class="chart-title-box">
+                <span class="chart-title-text">GRÁFICO 2: SITUAÇÃO E STATUS DOS PROCEDIMENTOS</span>
+                <span class="chart-info-icon">i</span>
+              </div>
+              <div class="chart-badge-tag">TODOS OS STATUS</div>
+            </div>
+            <div class="chart-body-list">
+              ${statusRowsHtml || '<div style="text-align:center; color:#94a3b8;">Sem dados disponíveis</div>'}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
+  const renderUiCharts = () => {
+    if (!stats) return null;
+    const divisor = totalDocs || 1;
+
+    // 1. Bairros (Calculado em tempo real dos dados do SIMCT)
+    const bairrosList = Object.entries(stats.bairros || {})
+      .map(([name, val]) => ({ name: (name || 'NÃO INFORMADO').replace(/_/g, ' ').toUpperCase(), val: Number(val) }))
+      .sort((a, b) => b.val - a.val)
+      .slice(0, 10);
+    const maxBairroVal = Math.max(...bairrosList.map(b => b.val), 1);
+
+    // 2. Status / Situação (Calculado em tempo real dos dados do SIMCT)
+    const statusSource = (stats.status && Object.keys(stats.status).length > 0)
+      ? stats.status
+      : (stats.origens || {});
+    const statusList = Object.entries(statusSource)
+      .map(([name, val]) => ({ name: (name || 'OUTROS').replace(/_/g, ' ').toUpperCase(), val: Number(val) }))
+      .sort((a, b) => b.val - a.val)
+      .slice(0, 12);
+    const maxStatusVal = Math.max(...statusList.map(s => s.val), 1);
+
+    return (
+      <div className="mt-6 mb-4 space-y-4 text-slate-800">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* GRÁFICO 1 - MODELO DE LAYOUT COM DADOS DINÂMICOS DO SIMCT */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 mb-3">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-black text-slate-900 uppercase tracking-tight">
+                  GRÁFICO 1: DISTRIBUIÇÃO DE PROCEDIMENTOS POR BAIRRO
+                </span>
+                <span className="text-[10px] text-slate-400 border border-slate-300 rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold">i</span>
+              </div>
+              <span className="text-[9px] font-bold text-slate-500 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-full uppercase">
+                TOP 10 BAIRROS
+              </span>
+            </div>
+            <div className="space-y-2">
+              {bairrosList.map((item, idx) => {
+                const pct = ((item.val / divisor) * 100).toFixed(1).replace('.', ',');
+                const widthPct = Math.max((item.val / maxBairroVal) * 100, 2);
+                return (
+                  <div key={idx} className="flex items-center text-[10px]">
+                    <span className="w-36 shrink-0 text-right font-bold text-slate-700 uppercase truncate pr-2" title={item.name}>
+                      {item.name}
+                    </span>
+                    <div className="flex-1 bg-slate-100 h-3.5 rounded-full overflow-hidden">
+                      <div className="bg-blue-600 h-full rounded-full transition-all duration-300" style={{ width: `${widthPct}%` }} />
+                    </div>
+                    <span className="w-16 shrink-0 font-extrabold text-slate-900 pl-2">
+                      {item.val} ({pct}%)
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* GRÁFICO 2 - MODELO DE LAYOUT COM DADOS DINÂMICOS DO SIMCT */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 mb-3">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-black text-slate-900 uppercase tracking-tight">
+                  GRÁFICO 2: SITUAÇÃO E STATUS DOS PROCEDIMENTOS
+                </span>
+                <span className="text-[10px] text-slate-400 border border-slate-300 rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold">i</span>
+              </div>
+              <span className="text-[9px] font-bold text-slate-500 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-full uppercase">
+                TODOS OS STATUS
+              </span>
+            </div>
+            <div className="space-y-2">
+              {statusList.map((item, idx) => {
+                const pct = ((item.val / divisor) * 100).toFixed(1).replace('.', ',');
+                const widthPct = Math.max((item.val / maxStatusVal) * 100, 2);
+                const barColor = getStatusColor(item.name, idx);
+                return (
+                  <div key={idx} className="flex items-center text-[10px]">
+                    <span className="w-36 shrink-0 text-right font-bold text-slate-700 uppercase truncate pr-2" title={item.name}>
+                      {item.name}
+                    </span>
+                    <div className="flex-1 bg-slate-100 h-3.5 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-300" style={{ width: `${widthPct}%`, backgroundColor: barColor }} />
+                    </div>
+                    <span className="w-16 shrink-0 font-extrabold text-slate-900 pl-2">
+                      {item.val} ({pct}%)
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const generateClientSIMCTReport = (prompt: string, totalDocs: number, dataStats: any) => {
     const topDireitos = Object.entries(dataStats.direitos || {}).sort((a: any, b: any) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} (${v} registros)`).join(', ') || 'Convivência Familiar, Educação e Saúde';
     const topBairros = Object.entries(dataStats.bairros || {}).sort((a: any, b: any) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} (${v})`).join(', ') || 'Bairros prioritários em mapeamento socioterritorial';
     const topAgentes = Object.entries(dataStats.agentes || {}).sort((a: any, b: any) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} (${v})`).join(', ') || 'Agentes familiares e institucionais notificados';
@@ -200,14 +567,14 @@ Este Relatório Técnico tem por finalidade apresentar a análise consolidada do
 ---
 
 ### 2. METODOLOGIA
-Foram analisados ${total} prontuários ativos no SIMCT envolvendo ${dataStats.totalCriancas || 0} crianças e adolescentes, categorizados por direitos fundamentais violações, território de ocorrência, perfil etário e agente violador.
+Foram analisados ${totalDocs} prontuários ativos no SIMCT envolvendo ${dataStats.totalCriancas || 0} crianças e adolescentes, categorizados por direitos fundamentais violações, território de ocorrência, perfil etário e agente violador.
 
 ---
 
 ### 3. PANORAMA GERAL DOS INDICADORES
 | Indicador Operacional | Valor Observado no SIMCT |
 | :--- | :--- |
-| **Prontuários sob Monitoramento:** | ${total} casos cadastrados |
+| **Prontuários sob Monitoramento:** | ${totalDocs} casos cadastrados |
 | **Crianças/Adolescentes Afetados:** | ${dataStats.totalCriancas || 0} indivíduos acompanhados |
 | **Principais Direitos Violados:** | ${topDireitos} |
 | **Territórios de Maior Incidência:** | ${topBairros} |
@@ -242,7 +609,7 @@ O mapeamento socioterritorial indica que os bairros **${topBairros}** concentram
     return `### 📊 OBSERVATÓRIO INTELIGENTE SIMCT - NÍVEL 1: MONITORAMENTO DE DADOS
 Análise fundamentada no Estatuto da Criança e do Adolescente (ECA - Lei nº 8.069/1990) e diretrizes do Planalto:
 
-- **Volume de Prontuários no SIMCT:** ${total} prontuários sob monitoramento ativo.
+- **Volume de Prontuários no SIMCT:** ${totalDocs} prontuários sob monitoramento ativo.
 - **Crianças e Adolescentes Acompanhados:** ${dataStats.totalCriancas || 0} indivíduos no Sistema de Garantia de Direitos (SGDCA).
 - **Direitos Fundamentais Mais Violados:** ${topDireitos}.
 - **Territórios com Maior Incidência (Hortolândia):** ${topBairros}.
@@ -375,43 +742,93 @@ Análise fundamentada no Estatuto da Criança e do Adolescente (ECA - Lei nº 8.
                 </p>
               </div>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg pt-4">
-                <button
-                  type="button"
-                  onClick={() => handleSendMessage(undefined, "O que os dados estão dizendo?")}
-                  disabled={loading || totalDocs === 0}
-                  className="p-4 bg-slate-800/80 hover:bg-slate-800 border border-white/5 hover:border-blue-500/30 rounded-2xl text-[10px] font-black uppercase text-slate-200 hover:text-white text-left transition-all flex items-start gap-3 shadow-md active:scale-95"
-                >
-                  <span className="text-base shrink-0">📢</span>
-                  <span>O que os dados estão dizendo?</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSendMessage(undefined, "Gerar relatório para o CMDCA")}
-                  disabled={loading || totalDocs === 0}
-                  className="p-4 bg-slate-800/80 hover:bg-slate-800 border border-blue-500/40 rounded-2xl text-[10px] font-black uppercase text-blue-300 hover:text-white text-left transition-all flex items-start gap-3 shadow-md active:scale-95 bg-blue-500/10"
-                >
-                  <span className="text-base shrink-0">📑</span>
-                  <span>Gerar Relatório para o CMDCA</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSendMessage(undefined, "Quais são os bairros com maior índice de violação de direitos e quais os principais agentes violadores nesses locais?")}
-                  disabled={loading || totalDocs === 0}
-                  className="p-4 bg-slate-800/80 hover:bg-slate-800 border border-white/5 hover:border-blue-500/30 rounded-2xl text-[10px] font-black uppercase text-slate-200 hover:text-white text-left transition-all flex items-start gap-3 shadow-md active:scale-95"
-                >
-                  <span className="text-base shrink-0">🏘️</span>
-                  <span>Bairros & Agentes Violadores</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSendMessage(undefined, "Sugira uma proposta de capacitação para a rede de garantia baseada nos direitos fundamentais mais violados de acordo com os dados.")}
-                  disabled={loading || totalDocs === 0}
-                  className="p-4 bg-slate-800/80 hover:bg-slate-800 border border-white/5 hover:border-blue-500/30 rounded-2xl text-[10px] font-black uppercase text-slate-200 hover:text-white text-left transition-all flex items-start gap-3 shadow-md active:scale-95"
-                >
-                  <span className="text-base shrink-0">⚖️</span>
-                  <span>Sugestões ECA para CMDCA</span>
-                </button>
+              <div className="space-y-4 w-full max-w-2xl pt-2">
+                <div className="flex items-center justify-center gap-2 text-[10px] font-black uppercase text-blue-400 tracking-widest border-b border-white/10 pb-2">
+                  <FileText className="w-4 h-4 text-blue-400" />
+                  <span>Central de Documentos e Inteligência SIMCT</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 w-full">
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage(undefined, "O que os dados estão dizendo?")}
+                    disabled={loading || totalDocs === 0}
+                    className="p-3 bg-slate-800/90 hover:bg-slate-800 border border-white/10 hover:border-blue-500/40 rounded-2xl text-[10px] font-black uppercase text-slate-200 hover:text-white text-left transition-all flex items-center gap-2 shadow-md active:scale-95"
+                  >
+                    <span className="text-sm shrink-0">📢</span>
+                    <span className="truncate">O que os dados dizem?</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage(undefined, "Gerar relatório para o CMDCA")}
+                    disabled={loading || totalDocs === 0}
+                    className="p-3 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 rounded-2xl text-[10px] font-black uppercase text-blue-300 hover:text-white text-left transition-all flex items-center gap-2 shadow-md active:scale-95"
+                  >
+                    <span className="text-sm shrink-0">📑</span>
+                    <span className="truncate">Relatório para CMDCA</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage(undefined, "Gere um Ofício Institucional de encaminhamento de dados e relatório técnico para o CMDCA.")}
+                    disabled={loading || totalDocs === 0}
+                    className="p-3 bg-slate-800/90 hover:bg-slate-800 border border-white/10 hover:border-blue-500/40 rounded-2xl text-[10px] font-black uppercase text-slate-200 hover:text-white text-left transition-all flex items-center gap-2 shadow-md active:scale-95"
+                  >
+                    <span className="text-sm shrink-0">📄</span>
+                    <span className="truncate">Ofício de Encaminhamento</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage(undefined, "Faça uma análise temporal comparativa entre períodos e identificação de tendências no SIMCT.")}
+                    disabled={loading || totalDocs === 0}
+                    className="p-3 bg-slate-800/90 hover:bg-slate-800 border border-white/10 hover:border-blue-500/40 rounded-2xl text-[10px] font-black uppercase text-slate-200 hover:text-white text-left transition-all flex items-center gap-2 shadow-md active:scale-95"
+                  >
+                    <span className="text-sm shrink-0">📈</span>
+                    <span className="truncate">Análise Comparativa</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage(undefined, "Elabore um Diagnóstico Municipal Integrado da Infância e Adolescência para Hortolândia com base nos dados do SIMCT.")}
+                    disabled={loading || totalDocs === 0}
+                    className="p-3 bg-slate-800/90 hover:bg-slate-800 border border-white/10 hover:border-blue-500/40 rounded-2xl text-[10px] font-black uppercase text-slate-200 hover:text-white text-left transition-all flex items-center gap-2 shadow-md active:scale-95"
+                  >
+                    <span className="text-sm shrink-0">🏛️</span>
+                    <span className="truncate">Diagnóstico Municipal</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage(undefined, "Quais são os bairros com maior índice de violação de direitos (IVIA) e quais os principais agentes violadores nesses locais?")}
+                    disabled={loading || totalDocs === 0}
+                    className="p-3 bg-slate-800/90 hover:bg-slate-800 border border-white/10 hover:border-blue-500/40 rounded-2xl text-[10px] font-black uppercase text-slate-200 hover:text-white text-left transition-all flex items-center gap-2 shadow-md active:scale-95"
+                  >
+                    <span className="text-sm shrink-0">🏘️</span>
+                    <span className="truncate">Análise Territorial IVIA</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage(undefined, "Apresente a classificação do Radar de Riscos (🟢 Normal, 🟡 Atenção, 🟠 Alerta, 🔴 Crítico) para as demandas ativas do SIMCT.")}
+                    disabled={loading || totalDocs === 0}
+                    className="p-3 bg-slate-800/90 hover:bg-slate-800 border border-white/10 hover:border-blue-500/40 rounded-2xl text-[10px] font-black uppercase text-slate-200 hover:text-white text-left transition-all flex items-center gap-2 shadow-md active:scale-95"
+                  >
+                    <span className="text-sm shrink-0">🚨</span>
+                    <span className="truncate">Radar de Riscos</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage(undefined, "Proponha um plano detalhado de Políticas Públicas e Capacitação da Rede de Garantia fundamentado no ECA para o CMDCA.")}
+                    disabled={loading || totalDocs === 0}
+                    className="p-3 bg-slate-800/90 hover:bg-slate-800 border border-white/10 hover:border-blue-500/40 rounded-2xl text-[10px] font-black uppercase text-slate-200 hover:text-white text-left transition-all flex items-center gap-2 shadow-md active:scale-95"
+                  >
+                    <span className="text-sm shrink-0">💡</span>
+                    <span className="truncate">Propostas de Políticas</span>
+                  </button>
+                </div>
               </div>
             </div>
           ) : (
@@ -421,53 +838,132 @@ Análise fundamentada no Estatuto da Criança e do Adolescente (ECA - Lei nº 8.
                   {msg.role === 'user' ? <User className="w-5 h-5 text-white" /> : <Sparkles className="w-5 h-5 text-blue-400" />}
                 </div>
                 <div className={`max-w-[85%] p-6 rounded-[2rem] text-[13px] leading-relaxed ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-slate-800 text-slate-200 border border-white/5 rounded-tl-none shadow-inner'}`}>
-                  <div className="whitespace-pre-wrap">{msg.text}</div>
+                  {msg.role === 'user' ? (
+                    <div className="whitespace-pre-wrap">{msg.text}</div>
+                  ) : (
+                    <div dangerouslySetInnerHTML={{ __html: parseMarkdownToHtml(msg.text) }} />
+                  )}
                   {msg.role === 'model' && (
-                    <div className="mt-4 pt-4 border-t border-white/10 flex items-center gap-3">
-                      <button
-                        onClick={() => {
-                          const printWindow = window.open('', '_blank');
-                          if (printWindow) {
-                            printWindow.document.write(`
-                              <html>
-                                <head>
-                                  <title>Relatório SIMCT - Hortolândia</title>
-                                  <style>
-                                    body { font-family: sans-serif; padding: 40px; color: #000; line-height: 1.6; }
-                                    h1, h2, h3 { color: #1e3a8a; }
-                                    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-                                    th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
-                                    th { background-color: #f1f5f9; }
-                                    hr { border: none; border-top: 1px solid #ccc; margin: 20px 0; }
-                                  </style>
-                                </head>
-                                <body>
-                                  <pre style="white-space: pre-wrap; font-family: inherit;">${msg.text}</pre>
-                                </body>
-                              </html>
-                            `);
-                            printWindow.document.close();
-                            printWindow.print();
-                          }
-                        }}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/30 rounded-xl text-[10px] font-bold uppercase transition-all"
+                    <>
+                      {renderUiCharts()}
+                      <div className="mt-4 pt-4 border-t border-white/10 flex flex-wrap items-center gap-3">
+                        <button
+                          onClick={() => {
+                            const printWindow = window.open('', '_blank');
+                            if (printWindow) {
+                              const chartsHtml = generatePrintChartsHtml(stats, totalDocs);
+                              const formattedHtml = parseMarkdownToHtml(msg.text);
+
+                              printWindow.document.write(`
+                                <!DOCTYPE html>
+                                <html>
+                                  <head>
+                                    <title>Relatório Institucional SIMCT — Hortolândia/SP</title>
+                                    <style>
+                                      @page { size: A4; margin: 15mm; }
+                                      body { font-family: 'Segoe UI', Arial, sans-serif; padding: 15px; color: #0f172a; line-height: 1.5; font-size: 12px; }
+                                      .header { text-align: center; border-bottom: 3px double #1e3a8a; padding-bottom: 10px; margin-bottom: 16px; }
+                                      .header h2 { margin: 0; color: #1e3a8a; font-size: 15px; font-weight: bold; text-transform: uppercase; }
+                                      .header p { margin: 3px 0 0 0; font-size: 10px; color: #475569; font-weight: bold; text-transform: uppercase; }
+
+                                      .charts-section-print { margin: 16px 0; page-break-inside: avoid; }
+                                      .charts-grid-print { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+                                      .chart-card-print { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px 14px; font-family: 'Segoe UI', Arial, sans-serif; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+                                      .chart-header-print { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f1f5f9; padding-bottom: 6px; margin-bottom: 10px; }
+                                      .chart-title-box { display: flex; align-items: center; gap: 4px; }
+                                      .chart-title-text { font-size: 9.5px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: -0.2px; }
+                                      .chart-info-icon { display: inline-flex; align-items: center; justify-content: center; width: 11px; height: 11px; border-radius: 50%; border: 1px solid #cbd5e1; color: #94a3b8; font-size: 8px; font-weight: bold; }
+                                      .chart-badge-tag { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 2px 6px; font-size: 8px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+                                      .chart-body-list { display: flex; flex-direction: column; gap: 5px; }
+                                      .chart-row-item { display: flex; align-items: center; font-size: 8.5px; line-height: 1; }
+                                      .chart-label-col { width: 120px; min-width: 120px; text-align: right; font-weight: 700; color: #334155; text-transform: uppercase; padding-right: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                                      .chart-track-col { flex: 1; background-color: #f1f5f9; height: 12px; border-radius: 3px; overflow: hidden; }
+                                      .chart-fill-bar { height: 100%; border-radius: 3px; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+                                      .chart-val-col { min-width: 55px; padding-left: 6px; font-weight: 800; color: #0f172a; font-size: 8.5px; white-space: nowrap; }
+
+                                      .content { white-space: pre-wrap; word-wrap: break-word; }
+                                      table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 11px; }
+                                      th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
+                                      th { background-color: #f1f5f9; font-weight: bold; color: #1e3a8a; }
+                                      .signatures { margin-top: 30px; page-break-inside: avoid; border-top: 2px solid #e2e8f0; padding-top: 16px; }
+                                      .sig-grid { display: flex; justify-content: space-around; margin-top: 40px; text-align: center; }
+                                      .sig-box { width: 45%; border-top: 1px solid #64748b; padding-top: 4px; font-size: 10px; font-weight: bold; }
+                                      .footer { text-align: center; margin-top: 20px; font-size: 8.5px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+                                    </style>
+                                  </head>
+                                  <body>
+                                    <div class="header">
+                                      <h2>Conselho Tutelar de Hortolândia — SP</h2>
+                                      <p>Núcleo de Inteligência, Monitoramento e Observatório SIMCT</p>
+                                      <p>Estatuto da Criança e do Adolescente — ECA (Lei nº 8.069/1990)</p>
+                                    </div>
+
+                                    ${chartsHtml}
+
+                                    <div class="content">${formattedHtml}</div>
+                                    
+                                    <div class="signatures">
+                                      <p style="text-align: center; font-weight: bold; font-size: 11px; color: #475569;">
+                                        Hortolândia/SP, ${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                      </p>
+                                      <div class="sig-grid">
+                                        <div class="sig-box">
+                                          EQUIPE DO OBSERVATÓRIO SIMCT<br>
+                                          <span style="font-weight: normal; font-size: 9px;">Conselho Tutelar de Hortolândia</span>
+                                        </div>
+                                        <div class="sig-box">
+                                          PRESIDÊNCIA DO CMDCA<br>
+                                          <span style="font-weight: normal; font-size: 9px;">Conselho Municipal dos Direitos da Criança e do Adolescente</span>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div class="footer">
+                                      Documento Institucional Gerado Automaticamente pelo SIMCT Hortolândia
+                                    </div>
+                                  </body>
+                                </html>
+                              `);
+                              printWindow.document.close();
+                              setTimeout(() => { printWindow.print(); }, 500);
+                            }
+                          }}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/30 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm active:scale-95"
                       >
                         <Printer className="w-3.5 h-3.5" />
                         <span>Imprimir / Salvar PDF</span>
                       </button>
+
+                      <button
+                        onClick={() => {
+                          const element = document.createElement("a");
+                          const file = new Blob([msg.text], { type: 'text/plain;charset=utf-8' });
+                          element.href = URL.createObjectURL(file);
+                          element.download = `SIMCT_Relatorio_CMDCA_${new Date().toISOString().slice(0,10)}.doc`;
+                          document.body.appendChild(element);
+                          element.click();
+                          document.body.removeChild(element);
+                        }}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm active:scale-95"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Baixar Word (.doc)</span>
+                      </button>
+
                       <button
                         onClick={() => navigator.clipboard.writeText(msg.text)}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-xl text-[10px] font-bold uppercase transition-all"
+                        className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm active:scale-95"
                       >
                         <Copy className="w-3.5 h-3.5 text-slate-400" />
                         <span>Copiar Texto</span>
                       </button>
                     </div>
-                  )}
-                </div>
+                  </>
+                )}
               </div>
-            ))
-          )}
+            </div>
+          ))
+        )}
           {loading && <div className="flex gap-4 animate-pulse"><div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center"><Bot className="w-5 h-5 text-blue-400 animate-spin" /></div><div className="bg-slate-800 h-12 w-24 rounded-[2rem] flex items-center justify-center px-4"><span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest animate-pulse">Digitando...</span></div></div>}
           {error && <div className="p-4 bg-red-500/10 text-red-400 rounded-2xl text-center text-[10px] uppercase font-black">{error}</div>}
         </div>
