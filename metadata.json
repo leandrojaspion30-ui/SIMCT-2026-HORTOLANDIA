@@ -1,6 +1,6 @@
 {
   "name": "SIMCT Hortolândia",
-  "description": "Sistema de Informação e Monitoramento do Conselho Tutelar de Hortolândia. Gerenciamento de prontuários, documentos, monitoramento de direitos violados e rodízio automático de plantão.",
+  "description": "Sistema de Informação e Monitoramento do Conselho Tutelar de Hortolândia. Gerenciamento de prontuários, documentos, monitoramento de direitos violados, rodízio automático e JARVIS - Assistente Inteligente do Conselheiro.",
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ],

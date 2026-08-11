@@ -161,10 +161,10 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
     return { total, manual, notification, persistence, automatic };
   }, [documents, selectedUnidade]);
 
-  // Encontra quem foi o último conselheiro de referência atribuído (não manual e não notificação)
+  // Encontra quem foi o último conselheiro de referência atribuído (não manual, não notificação e não urgente)
   const lastAssignedRef = useMemo(() => {
     const newCases = documents
-      .filter(d => !d.is_manual_override && !d.notificacao && d.unidade_id === selectedUnidade)
+      .filter(d => !d.is_manual_override && !d.notificacao && !d.is_urgente && d.unidade_id === selectedUnidade)
       .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
     
     if (newCases.length === 0) return null;
@@ -187,14 +187,13 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
   }, [propNameMap]);
 
   const escalaTrio = useMemo(() => {
-    const todayDateReal = (() => {
-      const today = new Date();
-      const year = today.getFullYear();
-      const month = String(today.getMonth() + 1).padStart(2, '0');
-      const day = String(today.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    })();
-    return getEffectiveEscala(todayDateReal, '12:00', selectedUnidade, nameMap, scaleExceptions);
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const todayDateReal = `${year}-${month}-${day}`;
+    const currentTimeReal = today.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return getEffectiveEscala(todayDateReal, currentTimeReal, selectedUnidade, nameMap, scaleExceptions);
   }, [selectedUnidade, nameMap, scaleExceptions]);
 
   const activeExceptionsForUnit = useMemo(() => {
@@ -305,7 +304,8 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         const day = String(today.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
       })();
-      const virtualTrio = getEffectiveEscala(todayDateReal, '12:00', selectedUnidade, nameMap, scaleExceptions);
+      const currentTimeReal = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const virtualTrio = getEffectiveEscala(todayDateReal, currentTimeReal, selectedUnidade, nameMap, scaleExceptions);
       let currentProvName = lastAssignedImediata;
       for (let i = 0; i < simulationSize; i++) {
         const refUser = expectedRefs[i];
@@ -339,7 +339,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
 
         // Cálculo de distribuição lógica idêntico ao DocumentRegistration.tsx
         const tempNewCases = virtualDocsList
-          .filter(d => !d.is_manual_override && !d.notificacao && d.unidade_id === selectedUnidade)
+          .filter(d => !d.is_manual_override && !d.notificacao && !d.is_urgente && d.unidade_id === selectedUnidade)
           .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
         
         const lastRefId = tempNewCases[0]?.conselheiro_referencia_id;
@@ -365,7 +365,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
               return mappedRName && virtualTrio.some(n => isSameCounselorName(n, mappedRName));
             })();
             const isFamPersistence = d.is_family_persistence && !isRefOfDocInTrio;
-            return isDocOfToday && d.unidade_id === selectedUnidade && !isFamPersistence && !d.notificacao && !d.is_manual_providencia;
+            return isDocOfToday && d.unidade_id === selectedUnidade && !isFamPersistence && !d.notificacao && !d.is_manual_providencia && !d.is_urgente;
           })
           .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
 
@@ -492,7 +492,8 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
     }
 
     // For expected sequence (Imediata)
-    const liveTrio = getEffectiveEscala(todayDateReal, '12:00', selectedUnidade, nameMap, scaleExceptions);
+    const currentTimeReal = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const liveTrio = getEffectiveEscala(todayDateReal, currentTimeReal, selectedUnidade, nameMap, scaleExceptions);
     let currentProvName = lastAssignedImediata;
     for (let i = 0; i < 3; i++) {
       const refUser = testExpectedRefs[i];
@@ -519,7 +520,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         
         // Simular a consulta viva do banco para obter o conselheiro dinamicamente
         const liveNewCases = liveDocsList
-          .filter(d => !d.is_manual_override && !d.notificacao && d.unidade_id === selectedUnidade)
+          .filter(d => !d.is_manual_override && !d.notificacao && !d.is_urgente && d.unidade_id === selectedUnidade)
           .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
         
         const lastRefId = liveNewCases[0]?.conselheiro_referencia_id;
@@ -541,7 +542,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
               return mappedRName && liveTrio.some(n => isSameCounselorName(n, mappedRName));
             })();
             const isFamPersistence = d.is_family_persistence && !isRefOfDocInTrio;
-            return isDocOfToday && d.unidade_id === selectedUnidade && !isFamPersistence && !d.notificacao && !d.is_manual_providencia;
+            return isDocOfToday && d.unidade_id === selectedUnidade && !isFamPersistence && !d.notificacao && !d.is_manual_providencia && !d.is_urgente;
           })
           .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
 
@@ -814,14 +815,10 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
                     
                     // Verifica se este conselheiro está substituindo alguém na escala de hoje
                     const replacedException = activeExceptionsForUnit.find(ex => {
-                      const todayDateReal = (() => {
-                        const today = new Date();
-                        const year = today.getFullYear();
-                        const month = String(today.getMonth() + 1).padStart(2, '0');
-                        const day = String(today.getDate()).padStart(2, '0');
-                        return `${year}-${month}-${day}`;
-                      })();
-                      const originalTrioRaw = getEffectiveEscala(todayDateReal, '12:00', selectedUnidade, nameMap, []);
+                      const today = new Date();
+                      const todayDateReal = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                      const currentTimeReal = today.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                      const originalTrioRaw = getEffectiveEscala(todayDateReal, currentTimeReal, selectedUnidade, nameMap, []);
                       const isOriginalInTrio = originalTrioRaw.map(n => n.toUpperCase()).includes(ex.conselheiro_original_nome.toUpperCase());
                       return isOriginalInTrio && ex.conselheiro_substituto_nome.toUpperCase() === name.toUpperCase();
                     });

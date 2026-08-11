@@ -479,12 +479,12 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     initialData
   ]);
 
-  // DIRETRIZ 48: Escala baseada na data de Hoje para novos documentos (para não alterar a sequência ou sofrer interferência de data/hora retrativa)
+  // DIRETRIZ 48: Escala baseada na data e hora do aporte/hoje (troca de escala às 8h)
   const trioNames = useMemo(() => {
     const d = initialData ? formData.data_aporte : todayDate;
-    const t = '12:00'; // Sempre usa horário de expediente comercial padrão para alinhar com o Diagnóstico de Distribuição do dia
+    const t = initialData ? formData.hora_aporte : (formData.hora_aporte || todayTime);
     return getEffectiveEscala(d, t, formData.unidade_id, nameMap, scaleExceptions);
-  }, [initialData, formData.data_aporte, todayDate, formData.unidade_id, nameMap, scaleExceptions]);
+  }, [initialData, formData.data_aporte, formData.hora_aporte, todayDate, todayTime, formData.unidade_id, nameMap, scaleExceptions]);
 
     // DIRETRIZ 51/52: Rodízio Alfabético Estável para Referência
   const assignedReference = useMemo(() => {
@@ -504,9 +504,9 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     if (initialData) return allUsers.find(u => u.id === (formData.conselheiro_referencia_id || initialData.conselheiro_referencia_id));
     if (isReferenceLocked) return allUsers.find(u => u.id === formData.conselheiro_referencia_id);
     
-    // Filtra casos novos (sem histórico e sem notificação) ordenando descendente por data de criação para obter o último de forma consistente
+    // Filtra casos novos (sem histórico, sem notificação e não urgentes) ordenando descendente por data de criação para obter o último de forma consistente
     const newCases = documents
-      .filter(d => !d.is_manual_override && !d.notificacao && d.unidade_id === formData.unidade_id)
+      .filter(d => !d.is_manual_override && !d.notificacao && !d.is_urgente && d.unidade_id === formData.unidade_id)
       .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
     const lastAssignedRefId = newCases[0]?.conselheiro_referencia_id;
     const lastRefUser = allUsers.find(u => u.id === lastAssignedRefId);
@@ -886,19 +886,21 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
       status: initialData ? initialData.status : (formData.notificacao ? [`NOTIFICACAO_${formData.notificacao.toUpperCase()}` as DocumentStatus] : ['AGUARDANDO_ANALISE']),
       justificativa_distribuicao: initialData 
         ? initialData.justificativa_distribuicao 
-        : (formData.providencia_imediata_manual
-            ? `✍️ Imediata atribuída MANUALMENTE: [${assignedImediata?.nome}].`
-            : (formData.notificacao 
-                ? `🔔 Imediata vinculada à Notificação: ${formData.notificacao}.` 
-                : (isRefUserInTrio && finalRefUser
-                    ? `🎯 Imediata vinculada ao Conselheiro de Referência [${finalRefUser.nome}] de plantão no dia.`
-                    : (isFamilyPersistence
-                        ? (isFamilyPersistenceDiffProvRef
-                            ? `👨‍👩‍👧‍👦 Imediata mantida por vínculo familiar (Regra Conselheiro Providência !== Referência no dia).`
-                            : `👨‍👩‍👧‍👦 Imediata mantida por vínculo familiar no mesmo dia.`)
-                        : (isReferenceLocked 
-                            ? `📌 Referência mantida por vínculo histórico.` 
-                            : `✅ Atribuído por Rodízio Alfabético.`)))))
+        : (formData.is_urgente
+            ? `🚨 DOCUMENTO URGENTE: Atribuído para providência sem alterar a sequência regular de rodízio do Conselheiro de Referência nem da Providência Imediata.`
+            : (formData.providencia_imediata_manual
+                ? `✍️ Imediata atribuída MANUALMENTE: [${assignedImediata?.nome}].`
+                : (formData.notificacao 
+                    ? `🔔 Imediata vinculada à Notificação: ${formData.notificacao}.` 
+                    : (isRefUserInTrio && finalRefUser
+                        ? `🎯 Imediata vinculada ao Conselheiro de Referência [${finalRefUser.nome}] de plantão no dia.`
+                        : (isFamilyPersistence
+                            ? (isFamilyPersistenceDiffProvRef
+                                ? `👨‍👩‍👧‍👦 Imediata mantida por vínculo familiar (Regra Conselheiro Providência !== Referência no dia).`
+                                : `👨‍👩‍👧‍👦 Imediata mantida por vínculo familiar no mesmo dia.`)
+                            : (isReferenceLocked 
+                                ? `📌 Referência mantida por vínculo histórico.` 
+                                : `✅ Atribuído por Rodízio Alfabético.`))))))
     };
 
     if (!finalData.conselheiro_referencia_id) {
