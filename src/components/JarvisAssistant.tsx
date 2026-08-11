@@ -3,9 +3,19 @@ import {
   Bot, Sparkles, Send, Paperclip, FileText, Printer, Copy, Check, 
   RotateCcw, Scale, ShieldCheck, BookOpen, FileCheck2, BarChart2, 
   GraduationCap, Building2, AlertTriangle, Mic, MicOff, X, HelpCircle, 
-  ChevronRight, ArrowRight, FileSpreadsheet, Eye
+  ChevronRight, ArrowRight, FileSpreadsheet, Eye, Download, FilePlus, 
+  Search, Brain, TrendingUp, History, UserCheck
 } from 'lucide-react';
 import { Documento, User, AgendaEntry } from '../types';
+import { LegalLibraryService, LegalDocument } from '../services/legalLibrary';
+import { SIMCTDataService, SIMCTStats } from '../services/SIMCTDataService';
+import { DocumentGeneratorService, DocumentMetadata } from '../services/DocumentGeneratorService';
+import * as pdfjsLib from 'pdfjs-dist';
+import mammoth from 'mammoth';
+
+// Set worker for pdfjs
+// @ts-ignore
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 interface JarvisMessage {
   id: string;
@@ -52,8 +62,12 @@ Como posso auxiliar seu trabalho hoje? Escolha um das **Ações Rápidas** abaix
   const [copiedId, setCopiedId] = useState<string | null>(null);
   
   // Modal / Quick action states
-  const [activeModal, setActiveModal] = useState<'NONE' | 'CORRIGIR' | 'OFICIO' | 'RELATORIO' | 'CASO' | 'DOC_UPLOAD'>('NONE');
+  const [activeModal, setActiveModal] = useState<'NONE' | 'CORRIGIR' | 'OFICIO' | 'RELATORIO' | 'CASO' | 'DOC_UPLOAD' | 'ANALYTICS' | 'PREVIEW'>('NONE');
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [activeSubMode, setActiveSubMode] = useState<'GENERAL' | 'CMDCA' | 'EXECUTIVO' | 'LEGAL'>('GENERAL');
+
+  // Preview state for document before generation
+  const [documentPreview, setDocumentPreview] = useState<{ title: string; content: string; type: 'OFÍCIO' | 'RELATORIO' } | null>(null);
 
   const handleNewConversation = () => {
     setMessages([
@@ -68,6 +82,9 @@ Como posso auxiliar seu trabalho hoje? Escolha um das **Ações Rápidas** abaix
     setUploadedFileName(null);
     setUploadedFileText(null);
   };
+
+  const [isSearchingLibrary, setIsSearchingLibrary] = useState(false);
+  const [legalEvidence, setLegalEvidence] = useState<LegalDocument[]>([]);
   
   // Correction modal form
   const [textToCorrect, setTextToCorrect] = useState('');
@@ -106,47 +123,33 @@ Como posso auxiliar seu trabalho hoje? Escolha um das **Ações Rápidas** abaix
 
   // Real SIMCT Statistics context computation
   const simctStatsSummary = useMemo(() => {
-    const total = documents.length;
-    const bairrosCount: { [key: string]: number } = {};
-    const statusCount: { [key: string]: number } = {};
-    const solicitacaoCount: { [key: string]: number } = {};
-
-    documents.forEach(d => {
-      const b = (d.bairro || 'NÃO INFORMADO').toUpperCase();
-      bairrosCount[b] = (bairrosCount[b] || 0) + 1;
-
-      const st = (Array.isArray(d.status) && d.status.length > 0 ? d.status[0] : 'AGUARDANDO_ANALISE').toUpperCase().replace(/_/g, ' ');
-      statusCount[st] = (statusCount[st] || 0) + 1;
-
-      const sol = (d.origem || 'DIREITO VIOLADO').toUpperCase();
-      solicitacaoCount[sol] = (solicitacaoCount[sol] || 0) + 1;
-    });
-
-    const topBairros = Object.entries(bairrosCount)
+    const stats = SIMCTDataService.getGeneralStats(documents);
+    const topBairros = Object.entries(stats.bairrosMaisAfetados)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(([k, v]) => `${k} (${v})`)
       .join(', ');
 
-    const topStatus = Object.entries(statusCount)
+    const topStatus = Object.entries(stats.statusProcedimentos)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(([k, v]) => `${k}: ${v}`)
       .join('; ');
 
-    const topSolicitacoes = Object.entries(solicitacaoCount)
+    const topViolacoes = Object.entries(stats.violacoesPredominantes)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(([k, v]) => `${k} (${v})`)
       .join(', ');
 
     return `
-DADOS REAIS DO SIMCT HORTOLÂNDIA (EM TEMPO REAL):
-- Volume Total de Prontuários no SIMCT: ${total} prontuários sob monitoramento ativo.
-- Bairros de Maior Incidência: ${topBairros || 'N/A'}.
-- Situação dos Procedimentos: ${topStatus || 'N/A'}.
-- Tipos de Solicitação/Violações Mais Frequentes: ${topSolicitacoes || 'N/A'}.
-- Usuário Atual: Conselheiro(a) ${currentUser.nome} (${currentUser.cargo}) - Unidade ${currentUser.unidade_id || 1}.
+DADOS ATUALIZADOS DO SIMCT HORTOLÂNDIA:
+- Prontuários Ativos: ${stats.totalProntuarios}
+- Territórios Críticos: ${topBairros}
+- Violências Predominantes: ${topViolacoes}
+- Casos de Reincidência Identificados: ${stats.reincidencias}
+- Situação da Rede: ${topStatus}
+- Conselheiro Logado: ${currentUser.nome} (Unidade: ${currentUser.unidade_id || 'CENTRAL'})
 `;
   }, [documents, currentUser]);
 
@@ -232,7 +235,7 @@ DADOS REAIS DO SIMCT HORTOLÂNDIA (EM TEMPO REAL):
         }).join('');
 
         return `
-          <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 16px; padding: 16px 18px; margin: 18px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); font-family: 'Segoe UI', Arial, sans-serif; page-break-inside: avoid; color: #0f172a;">
+          <div class="simct-chart-container" style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 16px; padding: 16px 18px; margin: 18px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); font-family: 'Segoe UI', Arial, sans-serif; page-break-inside: avoid; color: #0f172a;">
             <div style="display: flex; align-items: center; justify-between; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; margin-bottom: 12px;">
               <div style="display: flex; align-items: center; gap: 6px;">
                 <span style="font-size: 11px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: -0.2px;">
@@ -334,61 +337,121 @@ DADOS REAIS DO SIMCT HORTOLÂNDIA (EM TEMPO REAL):
     setUploadedFileName(null);
     setUploadedFileText(null);
     setLoading(true);
+    // 1. Pesquisa Jurídica (LEGAL_RESEARCH_ENGINE)
+    let searchResults: LegalDocument[] = [];
+    const isLegalQuery = textToSend.length > 10 && (
+      /lei|artigo|estatuto|constituição|guarda|pena|crime|resolução|portaria|eca|conanda|jurídico|legal/i.test(textToSend)
+    );
 
-    // System instruction prompt enforcing JARVIS identity & legal search engine rules
+    if (isLegalQuery) {
+      setIsSearchingLibrary(true);
+      try {
+        searchResults = await LegalLibraryService.searchDocuments({
+          query: textToSend,
+          limit: 5
+        });
+        setLegalEvidence(searchResults);
+      } catch (e) {
+        console.error("Legal Search Error:", e);
+      } finally {
+        setIsSearchingLibrary(false);
+      }
+    }
+
+    // 2. Construção do Prompt do Sistema com Evidências Jurídicas
+    const evidenceText = searchResults.length > 0 
+      ? `\nEVIDÊNCIAS LOCALIZADAS NA BIBLIOTECA JURÍDICA VIVA:\n${searchResults.map(d => `
+DOC: ${d.name} (${d.type} ${d.number || ''}/${d.year || ''})
+STATUS: ${d.status} | ESFERA: ${d.sphere}
+RESUMO: ${d.summary}
+CONTEÚDO RELEVANTE: ${d.content.substring(0, 1500)}
+---`).join('\n')}`
+      : '\nNenhuma norma específica encontrada na biblioteca interna para esta consulta.';
+
     const jarvisSystemPrompt = `
 SISTEMA DE INTELIGÊNCIA ARTIFICIAL: JARVIS — ASSISTENTE INTELIGENTE DO CONSELHO TUTELAR (SIMCT HORTOLÂNDIA)
 SUBTÍTULO: Seu assistente técnico e jurídico especializado para proteção da infância e adolescência.
 
-NÚCLEO JURÍDICO - MOTOR DE PESQUISA, FUNDAMENTAÇÃO E INTERPRETAÇÃO LEGAL:
-1. PRINCÍPIO FUNDAMENTAL:
-   - NUNCA responda uma dúvida ou situação jurídica apenas com conhecimento genérico, opiniões ou palpites sem fundamentação.
-   - Sempre que a solicitação envolver direitos, legislação, deveres, competências, procedimentos, violações, saúde, educação, assistência social, deficiência/autismo, violência doméstica, bullying ou atuações do Conselho Tutelar/CMDCA:
-   - Siga rigorosamente o FLUXO OBRIGATÓRIO:
-     PERGUNTA -> IDENTIFICAÇÃO DO TEMA -> PESQUISA NA BASE JURÍDICA MULTINORMA -> VERIFICAÇÃO DE VIGÊNCIA -> IDENTIFICAÇÃO DOS ARTIGOS APLICÁVEIS -> INTERPRETAÇÃO HIERÁRQUICA -> RESPOSTA -> FUNDAMENTAÇÃO LEGAL -> FONTE OFICIAL.
+--------------------------------------------
+MODO JURISTA + PESQUISADOR JURÍDICO (REGRAS CRÍTICAS)
+--------------------------------------------
 
-2. REGRA "SEM FUNDAMENTAÇÃO, NÃO AFIRMAR":
-   - "NÃO EXISTE RESPOSTA JURÍDICA SEM FUNDAMENTAÇÃO."
-   - NUNCA responda apenas "Sim", "Não", "Pode", "Não pode" sem indicar os artigos e leis específicos.
-   - Estrutura obrigatória para respostas com contexto jurídico:
-     ⚖️ RESPOSTA OBJETIVA
-     📚 FUNDAMENTAÇÃO LEGAL (Norma, Artigo, Inciso, Parágrafo)
-     📝 INTERPRETAÇÃO E O QUE A LEI DIZ
-     🔎 COMO ISSO SE APLICA NA PRÁTICA (Conselho Tutelar / SIMCT)
-     🏛️ COMPETÊNCIA DO ÓRGÃO (CT x CMDCA x MP x Judiciário x Saúde x Educação x CRAS/CREAS)
-     📋 POSSÍVEIS PROVIDÊNCIAS (Art. 136 ECA, Requisições, Prazos)
-     🔗 FONTE OFICIAL (Planalto, Governo Federal, CONANDA, MDH)
+1. PERFIL E MISSÃO:
+   - Você é um Assistente Jurídico Especializado em Direitos da Criança e do Adolescente.
+   - Sua missão é pesquisar, cruzar e fundamentar respostas em diferentes ramos do Direito (Civil, Penal, Constitucional, Administrativo, etc.).
+   - Você NÃO é um chatbot genérico. Você é um Pesquisador Jurídico que compreende a linguagem natural e a transforma em termos técnicos de pesquisa.
 
-3. UNIVERSO LEGISLATIVO COMPLETO (MULTINORMA):
-   - Constituição Federal de 1988 (Art. 227 - Prioridade Absoluta e Proteção Integral);
-   - ECA (Lei Federal nº 8.069/1990);
-   - Lei da Escuta Especializada (Lei nº 13.431/2017) e Decreto nº 9.603/2018;
-   - Lei Henry Borel - Violência Doméstica contra Criança/Adolescente (Lei nº 14.344/2022);
-   - Lei Lucas - Primeiros Socorros nas Escolas/Creches (Lei nº 13.722/2018);
-   - Lei Brasileira de Inclusão - LBI (Lei nº 13.146/2015);
-   - Lei do Autismo / Berenice Piana (Lei nº 12.764/2012);
-   - Lei de Diretrizes e Bases da Educação - LDB (Lei nº 9.394/1996);
-   - Marco Legal da Primeira Infância (Lei nº 13.257/2016);
-   - Lei do Bullying/Cyberbullying e Crimes na Escola (Lei nº 14.811/2024);
-   - Código Civil, Código Penal, LOAS/SUAS, Resoluções CONANDA, Legislação Municipal de Hortolândia.
+2. FLUXO OBRIGATÓRIO DE PESQUISA (REGRA ABSOLUTA):
+   PERGUNTA JURÍDICA (MESMO EM LINGUAGEM NATURAL)
+           ↓
+   IDENTIFICAR TEMA (Ex: Guarda, Poder Familiar, Violência)
+           ↓
+   EXPANSÃO SEMÂNTICA (Ex: "mãe com guarda" -> Art. 1.583 CC, Guarda Unilateral, Poder Familiar)
+           ↓
+   CONSULTAR EVIDÊNCIAS FORNECIDAS (Biblioteca Jurídica Viva)
+           ↓
+   PESQUISA MULTINORMA (Cruzar ECA, CC, CP, CF/88, LDB, SUAS, SUS, Resoluções CONANDA)
+           ↓
+   VERIFICAÇÃO DE VIGÊNCIA E COMPETÊNCIA (CT vs Juiz vs MP)
+           ↓
+   GERAR RESPOSTA ESTRUTURADA E DIDÁTICA
 
-4. HIERARQUIA DAS NORMAS & VERIFICAÇÃO DE VIGÊNCIA:
-   - Respeite a hierarquia: Constituição Federal -> Lei Complementar/Ordinária -> Decreto -> Resolução CONANDA -> Portaria -> Norma Técnica Municipal.
-   - NUNCA invente leis, decretos, resoluções ou números de artigos. Se houver dúvida ou ausência do dispositivo exato, declare: "Não foi possível verificar a norma na fonte oficial neste momento."
+3. UNIVERSO LEGISLATIVO (PESQUISAR O CONJUNTO NORMATIVO):
+   - CONSTITUIÇÃO FEDERAL (Art. 227 - Prioridade Absoluta);
+   - ECA (Lei 8.069/90);
+   - CÓDIGO CIVIL (Guarda, Poder Familiar, Filiação, Parentesco, Alimentos);
+   - CÓDIGO PENAL (Crimes, Violência, Maus-tratos);
+   - LEGISLAÇÃO ESPECIAL (Lei 13.431/17 - Escuta, Lei 14.344/22 - Henry Borel, LDB, LOAS, LBI, Lei do Autismo).
 
-5. MODOS ESPECIALIZADOS DE PESQUISA E COMANDO:
-   - 🔎 PESQUISA JURÍDICA: Apresenta análise passo-a-passo (Pergunta -> Normas -> Artigos -> Análise -> Conclusão -> Fontes).
-   - ⚖️ FUNDAMENTAR: Analisa a situação/texto e acrescenta a fundamentação legal precisa, leis e artigos.
-   - 🔎 VERIFICAR LEI: Verifica vigência, data, número, situação, alterações e artigos-chave no Planalto.
-   - ⚖️ QUAL LEI SE APLICA?: Analisa uma situação prática e cruza todas as leis do universo legislativo aplicáveis.
+4. IDENTIFICAÇÃO DE COMPETÊNCIA (REGRA DE OURO):
+   - Quando o Conselheiro perguntar "Eu posso fazer isso?", identifique se a competência é do CONSELHO TUTELAR (Administrativa), do JUDICIÁRIO (Decisão Judicial) ou do MP.
+   - NUNCA presuma que o CT pode resolver judicialmente questões de competência do Juiz (Ex: mudar guarda, destituir poder familiar).
 
-6. DADOS DO SIMCT E ESTATÍSTICAS:
-   - Use os dados consolidados do SIMCT para análises socioterritoriais de Hortolândia:
+5. PADRÃO FINAL DE RESPOSTA (OBRIGATÓRIO):
+   ━━━━━━━━━━━━━━━━━━━━━━
+   ⚖️ RESPOSTA DIRETA (Didática e simples)
+   ━━━━━━━━━━━━━━━━━━━━━━
+   [Resposta simples em 1-2 parágrafos]
+
+   ━━━━━━━━━━━━━━━━━━━━━━
+   📚 FUNDAMENTAÇÃO LEGAL
+   ━━━━━━━━━━━━━━━━━━━━━━
+   [Norma, Artigo, Inciso/Parágrafo exato - SEM INVENTAR. Se usar a Biblioteca, cite-a.]
+
+   ━━━━━━━━━━━━━━━━━━━━━━
+   🔎 EXPLICAÇÃO TÉCNICA (MODO JURISTA)
+   ━━━━━━━━━━━━━━━━━━━━━━
+   [Explicação profunda do dispositivo legal e cruzamento com outras leis]
+
+   ━━━━━━━━━━━━━━━━━━━━━━
+   👶 IMPACTO PARA A CRIANÇA/ADOLESCENTE
+   ━━━━━━━━━━━━━━━━━━━━━━
+   [O que isso muda na vida do menor]
+
+   ━━━━━━━━━━━━━━━━━━━━━━
+   🏛️ ATUAÇÃO DO CONSELHO TUTELAR (MODO CONSELHEIRO)
+   ━━━━━━━━━━━━━━━━━━━━━━
+   [Como o CT deve agir, limites de competência e aplicação prática no SIMCT]
+
+   ━━━━━━━━━━━━━━━━━━━━━━
+   📋 POSSÍVEIS PROVIDÊNCIAS
+   ━━━━━━━━━━━━━━━━━━━━━━
+   [Lista de requisições ou encaminhamentos práticos]
+
+   ━━━━━━━━━━━━━━━━━━━━━━
+   🔗 FONTES OFICIAIS
+   ━━━━━━━━━━━━━━━━━━━━━━
+   [Planalto, Câmara, Senado, CONANDA, MDH]
+
+6. PROIBIÇÃO DE ALUCINAÇÃO:
+   - NUNCA invente números de artigos, leis ou competências. Se não encontrar, diga claramente que não localizou a norma específica para o caso.
+   - Utilize as EVIDÊNCIAS abaixo como prioridade documental.
+
+7. BIBLIOTECA JURÍDICA VIVA (EVIDÊNCIAS):
+${evidenceText}
+
+8. DADOS DO SIMCT HORTOLÂNDIA:
 ${simctStatsSummary}
-   - Emita estatísticas em TABELAS MARKDOWN para renderização automática dos gráficos de barras do SIMCT.
-
-7. AVISO FINAL DE RESPONSABILIDADE:
-   - Encerre pareceres jurídicos/técnicos com: "Esta é uma orientação técnica baseada nas fontes oficiais consultadas. A decisão e a adoção da providência cabem à autoridade/profissional competente."
 `;
 
     try {
@@ -400,7 +463,7 @@ ${simctStatsSummary}
 
       let responseData: any = null;
       try {
-        const res = await fetch("/api/ai/analyze", {
+                const res = await fetch("/api/ai/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ contents: contentsHistory, model: "gemini-3.6-flash" })
@@ -441,132 +504,212 @@ ${simctStatsSummary}
   const generateJarvisFallbackResponse = (query: string, statsCtx: string): string => {
     const qUpper = query.toUpperCase();
 
-    // 1. MODO PESQUISA JURÍDICA
-    if (qUpper.includes('PESQUISA JURÍDICA') || qUpper.includes('PESQUISA JURIDICA')) {
-      return `### 🔎 RELATÓRIO DE PESQUISA JURÍDICA E FUNDAMENTAÇÃO — JARVIS
-      
-**SOLICITAÇÃO DO CONSELHEIRO:** "${query.replace(/pesquisa jurídica|pesquisa juridica/gi, '').trim() || 'Consulta geral de normas da Infância e Adolescência'}"
+    // 1. MODO PESQUISA JURÍDICA / GUARDA / PODER FAMILIAR
+    if (qUpper.includes('PESQUISA JURÍDICA') || qUpper.includes('PESQUISA JURIDICA') || qUpper.includes('GUARDA') || qUpper.includes('PODER FAMILIAR')) {
+      return `----------------------
+⚖️ RESPOSTA DIRETA
+----------------------
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. 📌 TEMA E PERGUNTA PROCESSADA
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- **Assunto:** Direitos fundamentais, competências do Conselho Tutelar e Rede de Proteção no SGDCA.
+A **Guarda Unilateral** (ou o tema de guarda/poder familiar consultado) refere-se ao dever de cuidado e proteção exercido por um dos pais ou alguém que o substitua. No Brasil, a regra é a guarda compartilhada, sendo a unilateral uma exceção baseada no melhor interesse da criança.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-2. 📚 NORMAS LOCALIZADAS NO UNIVERSO LEGISLATIVO
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. **Constituição Federal de 1988:** Art. 227 (Doutrina da Proteção Integral e Prioridade Absoluta).
-2. **ECA (Lei Federal nº 8.069/1990):** Arts. 18, 70, 98, 101, 129, 131 e 136 (Atribuições Requisitórias).
-3. **Lei da Escuta Especializada (Lei nº 13.431/2017) & Dec. 9.603/2018:** Proteção contra violência e não revitimização.
-4. **Lei Henry Borel (Lei nº 14.344/2022):** Mecanismos de prevenção e enfrentamento da violência doméstica.
+----------------------
+📚 FUNDAMENTAÇÃO LEGAL
+----------------------
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-3. 📌 ARTIGOS RELEVANTES E CONTEÚDO NORMATIVO
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- **Art. 136, III, 'a' do ECA:** Requisitar serviços públicos nas áreas de saúde, educação, serviço social, previdência, trabalho e segurança.
-- **Art. 227 da CF/88:** É dever da família, da sociedade e do Estado assegurar à criança e ao adolescente, com absoluta prioridade, o direito à vida, à saúde, à alimentação, à educação, ao lazer, à profissionalização e à convivência familiar.
+- **Código Civil (Lei 10.406/02):** Arts. 1.583, 1.584 e 1.634.
+- **ECA (Lei 8.069/90):** Arts. 33 e 129.
+- **CF/88:** Art. 227.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-4. 🔎 ANÁLISE HIERÁRQUICA E CONCLUSÃO
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- A legislação pátria estabelece a eficácia plena das requisições do Conselho Tutelar. Os órgãos do Poder Executivo municipal possuem a obrigação legal de prestar atendimento prioritário.
+----------------------
+🔎 EXPLICAÇÃO TÉCNICA (MODO JURISTA)
+----------------------
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-5. 🔗 FONTES OFICIAIS CONSULTADAS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- **Planalto:** Legislação Federal (http://www.planalto.gov.br)
-- **CONANDA:** Resoluções e Parâmetros de Atuação.
+A guarda unilateral é atribuída a apenas um dos genitores ou a alguém que o substitua (Art. 1.583, §1º CC). Importante notar que a guarda não se confunde com o **Poder Familiar**; mesmo quem não tem a guarda mantém o poder familiar e o dever de supervisionar os interesses do filho (Art. 1.583, §5º CC).
 
----
+----------------------
+👶 IMPACTO PARA A CRIANÇA/ADOLESCENTE
+----------------------
+
+Garante estabilidade na rotina de moradia, mas exige que o direito de convivência (visitas) seja preservado para evitar alienação parental e garantir o desenvolvimento emocional saudável.
+
+----------------------
+🏛️ ATUAÇÃO DO CONSELHO TUTELAR (MODO CONSELHEIRO)
+----------------------
+
+**ATENÇÃO:** O Conselho Tutelar **NÃO TEM COMPETÊNCIA** para alterar ou fixar guarda unilateral. Esta é uma competência exclusiva do **Poder Judiciário** (Juiz de Família).
+- O CT deve atuar apenas se houver violação de direitos (Art. 136 ECA).
+- Caso identifique necessidade de mudança, deve encaminhar ao MP ou Defensoria.
+
+----------------------
+📋 POSSÍVEIS PROVIDÊNCIAS
+----------------------
+
+1. Encaminhar para orientação jurídica (Defensoria/OAB).
+2. Requisição de relatório psicossocial no CREAS se houver risco.
+3. Notificar os pais sobre deveres do Art. 129 do ECA.
+
+----------------------
+🔗 FONTES OFICIAIS
+----------------------
+
+- Planalto (Legislação Federal)
+- Manual de Atuação do Conselho Tutelar (CONANDA)
+
 ⚠️ *Esta é uma orientação técnica baseada nas fontes oficiais consultadas. A decisão e a adoção da providência cabem à autoridade/profissional competente.*`;
     }
 
-    // 2. MODO QUAL LEI SE APLICA?
-    if (qUpper.includes('QUAL LEI SE APLICA') || qUpper.includes('QUAL LEI') || qUpper.includes('MULTINORMA')) {
-      return `### ⚖️ ANÁLISE MULTINORMA — QUAL LEI SE APLICA? — JARVIS
+    // 2. MODO QUAL LEI SE APLICA? / MULTINORMA
+    if (qUpper.includes('QUAL LEI SE APLICA') || qUpper.includes('QUAL LEI') || qUpper.includes('MULTINORMA') || qUpper.includes('AUTISMO') || qUpper.includes('ESCOLA')) {
+      return `----------------------
+⚖️ RESPOSTA DIRETA
+----------------------
 
-**SITUAÇÃO EXAMINADA:** "${query.replace(/qual lei se aplica|qual lei/gi, '').trim() || 'Situação de violação de direitos em ambiente de saúde, educação ou convivência'}"
+Para situações que envolvem inclusão escolar, autismo ou violações no ambiente educacional, aplica-se um conjunto de leis que garantem a proteção integral e a prioridade absoluta.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📚 CONJUNTO DE NORMAS APLICÁVEIS CONJUNTAMENTE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+----------------------
+📚 FUNDAMENTAÇÃO LEGAL
+----------------------
 
-1. 🏛️ **CONSTITUIÇÃO FEDERAL DE 1988 (Art. 227)**
-   - *Aplicação:* Garante prioridade absoluta no atendimento e destinação de recursos públicos.
+- **CF/88:** Art. 227 e 208.
+- **ECA:** Arts. 53, 54 e 136.
+- **LDB (9.394/96):** Art. 59.
+- **Lei do Autismo (12.764/12):** Art. 3º.
+- **LBI (13.146/15):** Art. 28.
 
-2. 📜 **ESTATUTO DA CRIANÇA E DO ADOLESCENTE (Lei Federal nº 8.069/1990)**
-   - *Arts. 98, 101 e 136:* Aplicação de medidas de proteção e emissão de requisições fundamentadas.
+----------------------
+🔎 EXPLICAÇÃO TÉCNICA (MODO JURISTA)
+----------------------
 
-3. 🏫 **LEI DE DIRETRIZES E BASES DA EDUCAÇÃO — LDB (Lei nº 9.394/1996)**
-   - *Arts. 5º e 12:* Obrigatoriedade de vaga na escola pública próxima à residência e notificação de faltas.
+O cruzamento das normas revela que a recusa de matrícula ou a falta de apoio especializado (mediador) para alunos com deficiência/TEA é ilegal e pode configurar crime ou infração administrativa grave. A CF e o ECA estabelecem a escola como dever do Estado.
 
-4. ♿ **LEI BRASILEIRA DE INCLUSÃO (Lei nº 13.146/2015) & LEI DO AUTISMO (Lei nº 12.764/2012)**
-   - *Aplicação:* Garantia de acompanhante especializado, acessibilidade e vedação de recusa de matrícula.
+----------------------
+👶 IMPACTO PARA A CRIANÇA/ADOLESCENTE
+----------------------
 
-5. 🚨 **LEI HENRY BOREL (Lei nº 14.344/2022) & LEI LUCAS (Lei nº 13.722/2018)**
-   - *Aplicação:* Medidas protetivas de urgência e treinamento para primeiros socorros em estabelecimentos escolares.
+Garante o acesso ao conhecimento e ao desenvolvimento social em igualdade de condições, combatendo a exclusão e o isolamento.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 PROVIDÊNCIAS SUGERIDAS AO CONSELHO TUTELAR
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Expedição de Ofício Requisitório fundamentado nos dispositivos apontados com fixação de prazo (Art. 136, III do ECA).
+----------------------
+🏛️ ATUAÇÃO DO CONSELHO TUTELAR (MODO CONSELHEIRO)
+----------------------
 
----
+O CT pode **REQUISITAR** a vaga ou o suporte especializado diretamente à Secretaria de Educação (Art. 136, III, 'a' do ECA).
+- Se houver descumprimento, o CT deve representar ao Ministério Público por infração administrativa (Art. 249 ECA).
+
+----------------------
+📋 POSSÍVEIS PROVIDÊNCIAS
+----------------------
+
+1. Expedir Ofício Requisitório à Secretaria de Educação (Prazo de 5 dias).
+2. Encaminhar para o MP se a requisição não for atendida.
+
+----------------------
+🔗 FONTES OFICIAIS
+----------------------
+
+- Portal do MEC
+- Planalto (Legislação Federal)
+
 ⚠️ *Esta é uma orientação técnica baseada nas fontes oficiais consultadas. A decisão e a adoção da providência cabem à autoridade/profissional competente.*`;
     }
 
-    // 3. MODO VERIFICAR LEI
-    if (qUpper.includes('VERIFICAR LEI') || qUpper.includes('VERIFIQUE A LEI') || qUpper.includes('VIGÊNCIA') || qUpper.includes('VIGENCIA')) {
-      return `### 🔎 RELATÓRIO DE VERIFICAÇÃO DE LEI E VIGÊNCIA — JARVIS
+    // 3. MODO VERIFICAR LEI / VIGÊNCIA
+    if (qUpper.includes('VERIFICAR LEI') || qUpper.includes('VERIFIQUE A LEI') || qUpper.includes('VIGÊNCIA') || qUpper.includes('VIGENCIA') || qUpper.includes('HENRY BOREL')) {
+      return `----------------------
+⚖️ RESPOSTA DIRETA
+----------------------
 
-**NORMA CONSULTADA:** "${query.replace(/verificar lei|verifique a lei|vigência|vigencia/gi, '').trim() || 'ECA - Lei Federal nº 8.069/1990'}"
+A legislação consultada (Ex: Lei Henry Borel / ECA) está plenamente vigente e possui aplicação imediata para a proteção de crianças e adolescentes em situação de risco.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📄 FICHA TÉCNICA DA NORMA
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- **Identificação:** Lei Federal nº 8.069, de 13 de Julho de 1990.
-- **Nome Oficial:** Estatuto da Criança e do Adolescente (ECA).
-- **Status de Vigência:** 🟢 **PLENAMENTE VIGENTE** (Com alterações atualizadas do Planalto).
-- **Principais Atualizações:**
-  - Alterada pela Lei nº 13.431/2017 (Escuta Especializada).
-  - Alterada pela Lei nº 14.344/2022 (Lei Henry Borel).
-  - Alterada pela Lei nº 14.811/2024 (Medidas de combate à violência em estabelecimentos educacionais).
+----------------------
+📚 FUNDAMENTAÇÃO LEGAL
+----------------------
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📌 DISPOSITIVOS-CHAVE PARA O CONSELHO TUTELAR
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- **Art. 131:** Definição do Conselho Tutelar como órgão autônomo, permanente e não jurisdicional.
-- **Art. 136:** Atribuições legais (requisição de serviços, aplicação de medidas protetivas, representação ao MP).
+- **Lei Federal nº 8.069/1990** (ECA).
+- **Lei Federal nº 14.344/2022** (Lei Henry Borel).
+- **Lei Federal nº 13.431/2017** (Escuta Especializada).
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔗 FONTE OFICIAL
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- **Presidência da República — Casa Civil / Subchefia para Assuntos Jurídicos:** [http://www.planalto.gov.br](http://www.planalto.gov.br)
+----------------------
+🔎 EXPLICAÇÃO TÉCNICA (MODO JURISTA)
+----------------------
 
----
+As atualizações recentes (2022 e 2024) endureceram as penas para crimes contra menores e ampliaram o rol de medidas protetivas de urgência. A Lei Henry Borel, por exemplo, estabelece mecanismos de prevenção e enfrentamento da violência doméstica e familiar contra a criança e o adolescente.
+
+----------------------
+👶 IMPACTO PARA A CRIANÇA/ADOLESCENTE
+----------------------
+
+Cessação imediata de ciclos de violência e garantia de que o relato da vítima seja colhido sem revitimização.
+
+----------------------
+🏛️ ATUAÇÃO DO CONSELHO TUTELAR (MODO CONSELHEIRO)
+----------------------
+
+O CT deve estar atualizado sobre as novas atribuições da Lei Henry Borel, que permite ao CT representar diretamente ao Juiz por medidas protetivas de urgência (Art. 136 e 130 do ECA).
+
+----------------------
+📋 POSSÍVEIS PROVIDÊNCIAS
+----------------------
+
+1. Noticiar crime à Autoridade Policial.
+2. Representar por afastamento do agressor.
+3. Aplicar medida de proteção de acolhimento se houver risco iminente.
+
+----------------------
+🔗 FONTES OFICIAIS
+----------------------
+
+- Planalto (Legislação Federal)
+- Ministério dos Direitos Humanos
+
 ⚠️ *Esta é uma orientação técnica baseada nas fontes oficiais consultadas. A decisão e a adoção da providência cabem à autoridade/profissional competente.*`;
     }
 
     // 4. MODO FUNDAMENTAR
     if (qUpper.includes('FUNDAMENTAR') || qUpper.includes('FUNDAMENTE')) {
-      return `### ⚖️ PARECER DE FUNDAMENTAÇÃO JURÍDICA — JARVIS
+      return `----------------------
+⚖️ RESPOSTA DIRETA
+----------------------
 
-**TEXTO/SOLICITAÇÃO SUBMETIDA:**
-> "${query.replace(/fundamentar|fundamente/gi, '').trim() || 'Minuta de solicitação de providências ao Poder Executivo'}"
+Para fundamentar tecnicamente sua requisição ou relatório, utilizamos a Doutrina da Proteção Integral e a competência requisitória do Conselho Tutelar.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📚 FUNDAMENTAÇÃO LEGAL APLICÁVEL
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- **Constituição Federal de 1988:** Artigo 227 (*Garantia de prioridade absoluta na prestação de serviços públicos*).
-- **ECA (Lei Federal nº 8.069/1990):** Artigo 136, Inciso III, Alínea 'a' (*Competência de requisitar serviços públicos de saúde, educação, serviço social, previdência, trabalho e segurança*).
-- **Artigo 249 do ECA:** Incorre em infração administrativa deixar de cumprir, dolosa ou culposamente, as determinações do Conselho Tutelar.
+----------------------
+📚 FUNDAMENTAÇÃO LEGAL
+----------------------
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📝 MINUTA FUNDAMENTADA SUGERIDA
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-> "Com fundamento no **Art. 227 da Constituição Federal/88** e no **Art. 136, III, 'a' da Lei Federal nº 8.069/1990 (ECA)**, REQUISITA-SE a Vossa Senhoria a adoção de providências imediatas para atendimento do caso em tela no prazo de 05 (cinco) dias úteis."
+- **Constituição Federal:** Art. 227.
+- **ECA:** Art. 136, III, 'a' e Art. 249.
 
----
+----------------------
+🔎 EXPLICAÇÃO TÉCNICA (MODO JURISTA)
+----------------------
+
+A fundamentação legal baseia-se no dever do Estado em assegurar prioridade absoluta. O descumprimento de requisição do CT configura infração administrativa punível com multa (Art. 249 ECA).
+
+----------------------
+👶 IMPACTO PARA A CRIANÇA/ADOLESCENTE
+----------------------
+
+Garante que o direito (saúde, educação, etc.) seja efetivado com a celeridade que a condição de pessoa em desenvolvimento exige.
+
+----------------------
+🏛️ ATUAÇÃO DO CONSELHO TUTELAR (MODO CONSELHEIRO)
+----------------------
+
+Ao fundamentar, o Conselheiro deve sempre citar o Art. 136 do ECA para reforçar sua autoridade requisitória frente aos órgãos da administração pública.
+
+----------------------
+📋 POSSÍVEIS PROVIDÊNCIAS
+----------------------
+
+> "Com fundamento no **Art. 227 da CF/88** e no **Art. 136, III, 'a' do ECA**, REQUISITAMOS atendimento prioritário no prazo de 48 horas."
+
+----------------------
+🔗 FONTES OFICIAIS
+----------------------
+
+- STJ (Jurisprudência sobre CT)
+- Planalto
+
 ⚠️ *Esta é uma orientação técnica baseada nas fontes oficiais consultadas. A decisão e a adoção da providência cabem à autoridade/profissional competente.*`;
     }
 
@@ -640,7 +783,7 @@ Análise extraída diretamente da base de monitoramento ativo do SIMCT:
 | **DIREITO NÃO VIOLADO** | 18 | 4,9% |
 
 ---
-🔎 **Destaques e Recomendações:**
+📌 **Destaques e Recomendações:**
 - Foco em busca ativa nos territórios descentralizados de Hortolândia.
 - Articulação com CRAS/CREAS nos bairros com maior incidência.
 
@@ -670,8 +813,7 @@ Análise técnica pautada no Estatuto da Criança e do Adolescente (ECA - Lei n�
 ⚠️ *Esta é uma orientação técnica baseada nas fontes consultadas. A decisão e a adoção da providência cabem à autoridade/profissional competente.*`;
   };
 
-  // Printing report / message in clean print view
-  const handlePrintMessage = (msg: JarvisMessage) => {
+const handlePrintMessage = (msg: JarvisMessage) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
@@ -701,7 +843,7 @@ Análise técnica pautada no Estatuto da Criança e do Adolescente (ECA - Lei n�
           <div>
             <h1 class="title">CONSELHO TUTELAR DE HORTOLÂNDIA - SP</h1>
             <div class="subtitle">SIMCT — Sistema de Informação e Monitoramento do Conselho Tutelar</div>
-            <div class="subtitle" style="color: #2563eb;">JARVIS — ASSISTENTE INTELIGENTE DO CONSELHEIRO</div>
+            <div class="subtitle" style="color: #2563eb;">JARVIS â ASSISTENTE INTELIGENTE DO CONSELHEIRO</div>
           </div>
           <div class="meta">
             <strong>Data:</strong> ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}<br/>
@@ -744,33 +886,60 @@ Análise técnica pautada no Estatuto da Criança e do Adolescente (ECA - Lei n�
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // File upload reader
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Export Document to PDF with Institutional Branding and Charts
+  const handleExportPDF = async (title: string, content: string, type: 'OFÍCIO' | 'RELATORIO') => {
+    const metadata: DocumentMetadata = {
+      type: type,
+      year: new Date().getFullYear(),
+      subject: title,
+      date: new Date().toLocaleDateString('pt-BR'),
+      author: currentUser.nome,
+      institution: 'Conselho Tutelar de Hortolândia - SP'
+    };
+
+    // Find all charts in the current chat messages to include in PDF
+    const charts = Array.from(document.querySelectorAll('.simct-chart-container')) as HTMLElement[];
+    
+    await DocumentGeneratorService.generateInstitutionalPDF(title, content, metadata, charts);
+    setActiveModal('NONE');
+    setDocumentPreview(null);
+  };
+
+  // File upload reader with PDF and Word support
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsReadingFile(true);
     setUploadedFileName(file.name);
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      setUploadedFileText(content || `[Conteúdo do arquivo ${file.name} extraído com sucesso. Tamanho: ${Math.round(file.size / 1024)} KB]`);
-      setIsReadingFile(false);
-    };
-    reader.onerror = () => {
+    try {
+      if (file.type === 'application/pdf') {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let fullText = "";
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const strings = content.items.map((item: any) => item.str);
+          fullText += strings.join(" ") + "\n";
+        }
+        setUploadedFileText(fullText);
+      } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        setUploadedFileText(result.value);
+      } else if (file.type.includes('text') || file.name.endsWith('.txt')) {
+        const text = await file.text();
+        setUploadedFileText(text);
+      } else {
+        setUploadedFileText(`[DOCUMENTO ANEXADO: ${file.name} - Formato não extraível automaticamente]`);
+      }
+    } catch (err) {
+      console.error("Error reading file:", err);
       setUploadedFileText(`[Falha na leitura do arquivo ${file.name}]`);
+    } finally {
       setIsReadingFile(false);
-    };
-
-    if (file.type.includes('text') || file.name.endsWith('.txt') || file.name.endsWith('.json') || file.name.endsWith('.csv')) {
-      reader.readAsText(file);
-    } else {
-      // For PDF or DOCX binary fallback simulation
-      setTimeout(() => {
-        setUploadedFileText(`[DOCUMENTO ANEXADO: ${file.name} (${Math.round(file.size / 1024)} KB)]\nTexto extraído do documento para análise jurídica e resumo pelo JARVIS.`);
-        setIsReadingFile(false);
-      }, 500);
     }
   };
 
@@ -822,14 +991,14 @@ Análise técnica pautada no Estatuto da Criança e do Adolescente (ECA - Lei n�
                   🤖 JARVIS — IA CONSELHEIRO
                 </span>
                 <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 text-[9px] font-bold rounded-full uppercase">
-                  ONLINE & OPERACIONAL
+                  CENTRAL DE INTELIGÊNCIA OPERACIONAL
                 </span>
               </div>
               <h1 className="text-xl lg:text-2xl font-black tracking-tight text-white uppercase">
-                JARVIS — ASSISTENTE INTELIGENTE DO CONSELHO
+                🤖 CENTRAL DO JARVIS
               </h1>
               <p className="text-xs lg:text-sm font-semibold text-blue-200/80">
-                "Seu assistente técnico para proteção da infância e adolescência."
+                "Assistente Técnico, Jurídico e Analista de Dados do SIMCT"
               </p>
             </div>
           </div>
@@ -837,178 +1006,100 @@ Análise técnica pautada no Estatuto da Criança e do Adolescente (ECA - Lei n�
           <div className="flex flex-col items-end gap-3">
             <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={handleNewConversation}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-[11px] font-bold shadow-md transition-all active:scale-95 border border-blue-400/30"
+                onClick={() => setActiveModal("ANALYTICS")}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[11px] font-bold shadow-md transition-all active:scale-95 border border-indigo-400/30"
               >
-                <RotateCcw className="w-3.5 h-3.5" /> + NOVA CONVERSA
+                <TrendingUp className="w-3.5 h-3.5" /> ANÁLISE DE DADOS
               </button>
               <button
-                onClick={() => setIsHelpOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-blue-200 rounded-xl text-[11px] font-bold transition-all border border-white/15"
+                onClick={handleNewConversation}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-[11px] font-bold shadow-md transition-all active:scale-95 border border-slate-600/30"
               >
-                <HelpCircle className="w-3.5 h-3.5 text-blue-400" /> O QUE CONSEGUIMOS FAZER?
+                <RotateCcw className="w-3.5 h-3.5" /> NOVA CONVERSA
               </button>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold text-slate-300 bg-white/5 backdrop-blur-md p-2.5 rounded-2xl border border-white/10">
-              <span className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-600/30 rounded-lg text-blue-200">
-                <ShieldCheck className="w-3.5 h-3.5 text-blue-400" /> ECA (Lei 8.069/90)
-              </span>
-              <span className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-600/30 rounded-lg text-purple-200">
-                <BookOpen className="w-3.5 h-3.5 text-purple-400" /> Escuta Esp. (13.431/17)
-              </span>
-              <span className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-600/30 rounded-lg text-emerald-200">
-                <BarChart2 className="w-3.5 h-3.5 text-emerald-400" /> SIMCT Real-Time
-              </span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* BARRA DE AÇÕES RÁPIDAS (ATALHOS) */}
-      <div className="bg-white rounded-3xl p-4 lg:p-6 shadow-sm border border-slate-200">
-        <div className="text-[11px] font-black uppercase text-slate-500 tracking-wider mb-3 flex items-center justify-between">
-          <span className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-blue-600" /> AÇÕES RÁPIDAS & ATALHOS DO CONSELHEIRO
-          </span>
-          <span className="text-[10px] text-slate-400 font-bold">CLIQUE PARA EXECUTAR</span>
-        </div>
+      {/* QUICK ACTIONS PANEL (CENTRAL JARVIS) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <button 
+          onClick={() => setActiveModal("DOC_UPLOAD")}
+          className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-3xl hover:border-blue-500 hover:shadow-xl hover:shadow-blue-500/10 transition-all group"
+        >
+          <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+            <Paperclip className="w-5 h-5 text-blue-600" />
+          </div>
+          <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider text-center">Anexar Documento</span>
+        </button>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2.5">
-          <button
-            onClick={() => handleSendMessage('🔎 PESQUISA JURÍDICA: Qual a fundamentação legal e competências do Conselho Tutelar para requisição de serviços de saúde, educação e acolhimento?')}
-            className="flex items-center gap-2.5 p-3 bg-blue-600 text-white hover:bg-blue-700 border border-blue-500 rounded-2xl text-left transition-all shadow-sm group"
-          >
-            <Scale className="w-4 h-4 text-blue-200 shrink-0 group-hover:scale-110 transition-transform" />
-            <div className="min-w-0">
-              <div className="text-[11px] font-black uppercase tracking-tight truncate">🔎 Pesquisa Jurídica</div>
-              <div className="text-[9px] font-semibold text-blue-100 truncate">Busca Passo-a-Passo</div>
-            </div>
-          </button>
+        <button 
+          onClick={() => setActiveModal("OFICIO")}
+          className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-3xl hover:border-indigo-500 hover:shadow-xl hover:shadow-indigo-500/10 transition-all group"
+        >
+          <div className="w-10 h-10 rounded-2xl bg-indigo-50 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+            <FilePlus className="w-5 h-5 text-indigo-600" />
+          </div>
+          <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider text-center">Criar Ofício</span>
+        </button>
 
-          <button
-            onClick={() => handleSendMessage('⚖️ QUAL LEI SE APLICA? Criança com deficiência ou autismo enfrentando recusa de matrícula ou de acompanhante em escola e faltas à vacinação.')}
-            className="flex items-center gap-2.5 p-3 bg-indigo-600 text-white hover:bg-indigo-700 border border-indigo-500 rounded-2xl text-left transition-all shadow-sm group"
-          >
-            <BookOpen className="w-4 h-4 text-indigo-200 shrink-0 group-hover:scale-110 transition-transform" />
-            <div className="min-w-0">
-              <div className="text-[11px] font-black uppercase tracking-tight truncate">⚖️ Qual Lei se Aplica?</div>
-              <div className="text-[9px] font-semibold text-indigo-100 truncate">Análise Multinorma</div>
-            </div>
-          </button>
+        <button 
+          onClick={() => setActiveModal("RELATORIO")}
+          className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-3xl hover:border-emerald-500 hover:shadow-xl hover:shadow-emerald-500/10 transition-all group"
+        >
+          <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+            <FileText className="w-5 h-5 text-emerald-600" />
+          </div>
+          <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider text-center">Criar Relatório</span>
+        </button>
 
-          <button
-            onClick={() => handleSendMessage('🔎 VERIFICAR LEI: Verifique a vigência, alterações recentes do Planalto e artigos-chave do Estatuto da Criança e do Adolescente e Lei Henry Borel.')}
-            className="flex items-center gap-2.5 p-3 bg-purple-600 text-white hover:bg-purple-700 border border-purple-500 rounded-2xl text-left transition-all shadow-sm group"
-          >
-            <ShieldCheck className="w-4 h-4 text-purple-200 shrink-0 group-hover:scale-110 transition-transform" />
-            <div className="min-w-0">
-              <div className="text-[11px] font-black uppercase tracking-tight truncate">🔎 Verificar Lei</div>
-              <div className="text-[9px] font-semibold text-purple-100 truncate">Status & Vigência</div>
-            </div>
-          </button>
+        <button 
+          onClick={() => {
+            handleSendMessage("JARVIS, prepare o Relatório Trimestral para o CMDCA com gráficos e análise territorial.");
+          }}
+          className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-3xl hover:border-amber-500 hover:shadow-xl hover:shadow-amber-500/10 transition-all group"
+        >
+          <div className="w-10 h-10 rounded-2xl bg-amber-50 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+            <Building2 className="w-5 h-5 text-amber-600" />
+          </div>
+          <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider text-center">Relatório CMDCA</span>
+        </button>
 
-          <button
-            onClick={() => handleSendMessage('⚖️ FUNDAMENTAR: Insira a fundamentação legal precisa do ECA e Constituição para uma requisição urgente de vaga escolar e atendimento médico.')}
-            className="flex items-center gap-2.5 p-3 bg-amber-600 text-white hover:bg-amber-700 border border-amber-500 rounded-2xl text-left transition-all shadow-sm group"
-          >
-            <FileCheck2 className="w-4 h-4 text-amber-200 shrink-0 group-hover:scale-110 transition-transform" />
-            <div className="min-w-0">
-              <div className="text-[11px] font-black uppercase tracking-tight truncate">⚖️ Fundamentar</div>
-              <div className="text-[9px] font-semibold text-amber-100 truncate">Inserir Artigos & Leis</div>
-            </div>
-          </button>
+        <button 
+          onClick={() => setActiveModal("CORRIGIR")}
+          className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-3xl hover:border-purple-500 hover:shadow-xl hover:shadow-purple-500/10 transition-all group"
+        >
+          <div className="w-10 h-10 rounded-2xl bg-purple-50 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+            <Brain className="w-5 h-5 text-purple-600" />
+          </div>
+          <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider text-center">Corrigir Texto</span>
+        </button>
 
-          <button
-            onClick={() => setActiveModal('CASO')}
-            className="flex items-center gap-2.5 p-3 bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200 rounded-2xl text-left transition-all group"
-          >
-            <FileCheck2 className="w-4 h-4 text-slate-600 shrink-0 group-hover:scale-110 transition-transform" />
-            <div className="min-w-0">
-              <div className="text-[11px] font-black uppercase tracking-tight truncate">🔍 Analisar Caso</div>
-              <div className="text-[9px] font-semibold text-slate-500 truncate">Roteiro Completo</div>
-            </div>
-          </button>
+        <button 
+          onClick={() => {
+            handleSendMessage("JARVIS, faça uma análise completa dos dados do SIMCT identificando fragilidades e propondo políticas públicas.");
+          }}
+          className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-3xl hover:border-rose-500 hover:shadow-xl hover:shadow-rose-500/10 transition-all group"
+        >
+          <div className="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+            <Sparkles className="w-5 h-5 text-rose-600" />
+          </div>
+          <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider text-center">Modo Faça Tudo</span>
+        </button>
 
-          <button
-            onClick={() => setActiveModal('CORRIGIR')}
-            className="flex items-center gap-2.5 p-3 bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200 rounded-2xl text-left transition-all group"
-          >
-            <Check className="w-4 h-4 text-slate-600 shrink-0 group-hover:scale-110 transition-transform" />
-            <div className="min-w-0">
-              <div className="text-[11px] font-black uppercase tracking-tight truncate">✍️ Corrigir Texto</div>
-              <div className="text-[9px] font-semibold text-slate-500 truncate">Ortografia e Estilo</div>
-            </div>
-          </button>
-
-          <button
-            onClick={() => setActiveModal('OFICIO')}
-            className="flex items-center gap-2.5 p-3 bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200 rounded-2xl text-left transition-all group"
-          >
-            <FileText className="w-4 h-4 text-emerald-600 shrink-0 group-hover:scale-110 transition-transform" />
-            <div className="min-w-0">
-              <div className="text-[11px] font-black uppercase tracking-tight truncate">📝 Gerar Ofício</div>
-              <div className="text-[9px] font-semibold text-slate-500 truncate">Minuta Institucional</div>
-            </div>
-          </button>
-
-          <button
-            onClick={() => setActiveModal('RELATORIO')}
-            className="flex items-center gap-2.5 p-3 bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200 rounded-2xl text-left transition-all group"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-purple-600 shrink-0 group-hover:scale-110 transition-transform" />
-            <div className="min-w-0">
-              <div className="text-[11px] font-black uppercase tracking-tight truncate">📑 Relatórios</div>
-              <div className="text-[9px] font-semibold text-slate-500 truncate">Atendimento / Técnico</div>
-            </div>
-          </button>
-
-          <button
-            onClick={() => handleSendMessage('Faça um diagnóstico completo com tabela de indicadores dos dados atuais de violações e procedimentos do SIMCT.')}
-            className="flex items-center gap-2.5 p-3 bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200 rounded-2xl text-left transition-all group"
-          >
-            <BarChart2 className="w-4 h-4 text-sky-600 shrink-0 group-hover:scale-110 transition-transform" />
-            <div className="min-w-0">
-              <div className="text-[11px] font-black uppercase tracking-tight truncate">📊 Dados SIMCT</div>
-              <div className="text-[9px] font-semibold text-slate-500 truncate">Estatísticas Reais</div>
-            </div>
-          </button>
-
-          <button
-            onClick={() => handleSendMessage('Quero aprender com o JARVIS. Explique de forma simples e didática as principais regras do ECA sobre acolhimento e requisição de serviços.')}
-            className="flex items-center gap-2.5 p-3 bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200 rounded-2xl text-left transition-all group"
-          >
-            <GraduationCap className="w-4 h-4 text-rose-600 shrink-0 group-hover:scale-110 transition-transform" />
-            <div className="min-w-0">
-              <div className="text-[11px] font-black uppercase tracking-tight truncate">🎓 Modo Professor</div>
-              <div className="text-[9px] font-semibold text-slate-500 truncate">Estudo & Questões</div>
-            </div>
-          </button>
-
-          <button
-            onClick={() => handleSendMessage('Como funciona a divisão de competências entre Conselho Tutelar, Ministério Público, Judiciário, CRAS/CREAS e Educação na Rede de Proteção?')}
-            className="flex items-center gap-2.5 p-3 bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200 rounded-2xl text-left transition-all group"
-          >
-            <Building2 className="w-4 h-4 text-slate-600 shrink-0 group-hover:scale-110 transition-transform" />
-            <div className="min-w-0">
-              <div className="text-[11px] font-black uppercase tracking-tight truncate">🏛️ Rede Proteção</div>
-              <div className="text-[9px] font-semibold text-slate-500 truncate">Competências</div>
-            </div>
-          </button>
-
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-2.5 p-3 bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200 rounded-2xl text-left transition-all group"
-          >
-            <Paperclip className="w-4 h-4 text-teal-600 shrink-0 group-hover:scale-110 transition-transform" />
-            <div className="min-w-0">
-              <div className="text-[11px] font-black uppercase tracking-tight truncate">📎 Enviar Arquivo</div>
-              <div className="text-[9px] font-semibold text-slate-500 truncate">PDF, TXT, DOCX</div>
-            </div>
-          </button>
-        </div>
+        <button 
+          onClick={() => {
+            handleSendMessage("JARVIS, pesquise a fundamentação jurídica mais recente sobre Guarda e Poder Familiar na Biblioteca Jurídica Viva.");
+          }}
+          className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-3xl hover:border-cyan-500 hover:shadow-xl hover:shadow-cyan-500/10 transition-all group"
+        >
+          <div className="w-10 h-10 rounded-2xl bg-cyan-50 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+            <Search className="w-5 h-5 text-cyan-600" />
+          </div>
+          <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider text-center">Pesquisa Jurídica</span>
+        </button>
       </div>
-
       {/* ÁREA PRINCIPAL DO CHAT / MENSSAGENS */}
       <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] flex flex-col h-[650px] shadow-2xl overflow-hidden">
         {/* CHAT MESSAGES SCROLL AREA */}
@@ -1465,6 +1556,185 @@ Análise técnica pautada no Estatuto da Criança e do Adolescente (ECA - Lei n�
         </div>
       )}
 
+      {/* MODAL ANALYTICS (DADOS SIMCT) */}
+      {activeModal === 'ANALYTICS' && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col border border-slate-200">
+            <div className="p-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-100 rounded-2xl flex items-center justify-center">
+                  <TrendingUp className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Análise de Dados SIMCT</h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase">Diagnóstico e Tendências em Tempo Real</p>
+                </div>
+              </div>
+              <button onClick={() => setActiveModal('NONE')} className="p-2 hover:bg-slate-200 rounded-full transition-all">
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-5 bg-blue-50 rounded-3xl border border-blue-100">
+                  <span className="text-[10px] font-black text-blue-600 uppercase">Total de Casos</span>
+                  <div className="text-3xl font-black text-blue-900 mt-1">{documents.length}</div>
+                  <div className="text-[10px] text-blue-500 font-bold mt-1">Prontuários no Sistema</div>
+                </div>
+                <div className="p-5 bg-rose-50 rounded-3xl border border-rose-100">
+                  <span className="text-[10px] font-black text-rose-600 uppercase">Bairro Crítico</span>
+                  <div className="text-xl font-black text-rose-900 mt-1 truncate">
+                    {Object.entries(SIMCTDataService.getGeneralStats(documents).bairrosMaisAfetados)
+                      .sort((a,b) => b[1]-a[1])[0]?.[0] || 'N/A'}
+                  </div>
+                  <div className="text-[10px] text-rose-500 font-bold mt-1">Maior Concentração de Demandas</div>
+                </div>
+                <div className="p-5 bg-amber-50 rounded-3xl border border-amber-100">
+                  <span className="text-[10px] font-black text-amber-600 uppercase">Reincidência</span>
+                  <div className="text-3xl font-black text-amber-900 mt-1">
+                    {SIMCTDataService.getGeneralStats(documents).reincidencias}
+                  </div>
+                  <div className="text-[10px] text-amber-500 font-bold mt-1">Grupos Familiares Reincidentes</div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ações de Análise Profunda</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button 
+                    onClick={() => {
+                      handleSendMessage("JARVIS, gere um relatório completo para o CMDCA com análise territorial, faixas etárias e principais violações.");
+                      setActiveModal('NONE');
+                    }}
+                    className="flex items-center gap-3 p-4 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:bg-blue-50 transition-all text-left"
+                  >
+                    <Building2 className="w-5 h-5 text-blue-600" />
+                    <div>
+                      <div className="text-xs font-black text-slate-900">Relatório para o CMDCA</div>
+                      <div className="text-[10px] text-slate-500">Documento institucional para conselhos de direitos.</div>
+                    </div>
+                  </button>
+                  <button 
+                    onClick={() => {
+                      handleSendMessage("JARVIS, compare o volume de atendimentos deste mês com o mês anterior, destacando aumentos e reduções.");
+                      setActiveModal('NONE');
+                    }}
+                    className="flex items-center gap-3 p-4 bg-white border border-slate-200 rounded-2xl hover:border-indigo-500 hover:bg-indigo-50 transition-all text-left"
+                  >
+                    <History className="w-5 h-5 text-indigo-600" />
+                    <div>
+                      <div className="text-xs font-black text-slate-900">Comparação de Períodos</div>
+                      <div className="text-[10px] text-slate-500">Identificar novos padrões e variações.</div>
+                    </div>
+                  </button>
+                  <button 
+                    onClick={() => {
+                      handleSendMessage("JARVIS, analise as fragilidades da rede de proteção em Hortolândia baseada nos atrasos e reincidências.");
+                      setActiveModal('NONE');
+                    }}
+                    className="flex items-center gap-3 p-4 bg-white border border-slate-200 rounded-2xl hover:border-rose-500 hover:bg-rose-50 transition-all text-left"
+                  >
+                    <AlertTriangle className="w-5 h-5 text-rose-600" />
+                    <div>
+                      <div className="text-xs font-black text-slate-900">Análise de Fragilidades</div>
+                      <div className="text-[10px] text-slate-500">Identificar gargalos e sugerir políticas públicas.</div>
+                    </div>
+                  </button>
+                  <button 
+                    onClick={() => {
+                      handleSendMessage("JARVIS, crie uma proposta de política pública baseada no aumento de casos no território crítico.");
+                      setActiveModal('NONE');
+                    }}
+                    className="flex items-center gap-3 p-4 bg-white border border-slate-200 rounded-2xl hover:border-emerald-500 hover:bg-emerald-50 transition-all text-left"
+                  >
+                    <Sparkles className="w-5 h-5 text-emerald-600" />
+                    <div>
+                      <div className="text-xs font-black text-slate-900">Proposta de Políticas</div>
+                      <div className="text-[10px] text-slate-500">Transformar dados em soluções práticas.</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 bg-slate-50 border-t border-slate-200 flex justify-end">
+              <button onClick={() => setActiveModal('NONE')} className="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-wider">Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PREVIEW (REVISÃO ANTES DE GERAR PDF) */}
+      {activeModal === 'PREVIEW' && documentPreview && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col border border-slate-200">
+            <div className="p-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-2xl flex items-center justify-center">
+                  <Eye className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Revisão do Documento</h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase">Verifique o conteúdo antes de finalizar a geração institucional</p>
+                </div>
+              </div>
+              <button onClick={() => setActiveModal('NONE')} className="p-2 hover:bg-slate-200 rounded-full transition-all">
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+
+            <div className="p-8 overflow-y-auto bg-slate-50/50 flex-1">
+              <div className="bg-white shadow-lg border border-slate-200 p-10 min-h-[600px] rounded-sm max-w-[210mm] mx-auto">
+                <div className="text-center border-b-2 border-blue-900 pb-4 mb-8">
+                  <h2 className="text-lg font-black text-blue-900 uppercase">Conselho Tutelar de Hortolândia - SP</h2>
+                  <p className="text-[10px] font-bold text-slate-500 tracking-widest mt-1 uppercase">Sistema de Informação e Monitoramento — SIMCT</p>
+                </div>
+                
+                <div className="flex justify-between mb-8 text-[11px] font-bold text-slate-600">
+                  <span>{documentPreview.type} Nº ____/{new Date().getFullYear()}</span>
+                  <span>Hortolândia, {new Date().toLocaleDateString('pt-BR')}</span>
+                </div>
+
+                <div className="mb-6">
+                  <span className="text-[11px] font-black text-slate-900 uppercase">Assunto: {documentPreview.title}</span>
+                </div>
+
+                <div className="prose prose-slate max-w-none prose-sm">
+                  <div 
+                    className="text-[12px] leading-relaxed text-slate-800 whitespace-pre-wrap"
+                    dangerouslySetInnerHTML={{ __html: parseMarkdownToHtml(documentPreview.content) }}
+                  />
+                </div>
+
+                <div className="mt-20 text-center">
+                  <div className="w-48 h-px bg-slate-400 mx-auto mb-2" />
+                  <div className="text-[11px] font-black text-slate-900 uppercase">{currentUser.nome}</div>
+                  <div className="text-[9px] font-bold text-slate-500 uppercase">Conselheiro(a) Tutelar</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 bg-white border-t border-slate-200 flex justify-between items-center gap-4">
+              <button 
+                onClick={() => setActiveModal('NONE')}
+                className="px-6 py-3 bg-slate-100 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
+              >
+                Voltar para Editar
+              </button>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => handleExportPDF(documentPreview.title, documentPreview.content, documentPreview.type)}
+                  className="flex items-center gap-2 px-8 py-3 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 shadow-lg shadow-blue-500/20 transition-all"
+                >
+                  <Download className="w-4 h-4" /> Gerar PDF Final
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL O QUE O JARVIS PODE FAZER */}
       {isHelpOpen && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
@@ -1472,7 +1742,7 @@ Análise técnica pautada no Estatuto da Criança e do Adolescente (ECA - Lei n�
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold">
-                  🤖
+                  ð¤
                 </div>
                 <div>
                   <h3 className="text-base font-black uppercase text-slate-900">
@@ -1570,3 +1840,4 @@ Análise técnica pautada no Estatuto da Criança e do Adolescente (ECA - Lei n�
 };
 
 export default JarvisAssistant;
+

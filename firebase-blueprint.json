@@ -85,6 +85,37 @@
         "fim_hora": { "type": "string" }
       },
       "required": ["id", "data", "unidade_id", "conselheiro_original_id", "conselheiro_substituto_id"]
+    },
+    "LegalDocument": {
+      "title": "LegalDocument",
+      "description": "Stored legal norms and documentation for JARVIS knowledge base",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "number": { "type": "string" },
+        "year": { "type": "string" },
+        "authority": { "type": "string" },
+        "publicationDate": { "type": "string" },
+        "updateDate": { "type": "string" },
+        "consultationDate": { "type": "string" },
+        "status": { "type": "string", "enum": ["VIGENTE", "ALTERADA", "REVOGADA", "NÃO VERIFICADA"] },
+        "sphere": { "type": "string", "enum": ["FEDERAL", "ESTADUAL", "MUNICIPAL", "OUTRO"] },
+        "state": { "type": "string" },
+        "municipality": { "type": "string" },
+        "source": { "type": "string" },
+        "url": { "type": "string" },
+        "summary": { "type": "string" },
+        "subjects": { "type": "array", "items": { "type": "string" } },
+        "keywords": { "type": "array", "items": { "type": "string" } },
+        "content": { "type": "string" },
+        "relevantArticles": { "type": "array", "items": { "type": "string" } },
+        "category": { "type": "string" },
+        "isPublic": { "type": "boolean" },
+        "confidentiality": { "type": "string", "enum": ["PÚBLICO", "INSTITUCIONAL", "RESTRITO", "CONFIDENCIAL"] }
+      },
+      "required": ["id", "name", "type", "status", "sphere", "category"]
     }
   },
   "firestore": {
@@ -107,6 +138,10 @@
     "/scale_exceptions/{exceptionId}": {
       "schema": "ScaleException",
       "description": "Duty scale exception swaps"
+    },
+    "/legal_library/{docId}": {
+      "schema": "LegalDocument",
+      "description": "Legal documents for JARVIS"
     }
   }
 }

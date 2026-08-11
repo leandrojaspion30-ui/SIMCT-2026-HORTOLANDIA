@@ -54,5 +54,8 @@ service cloud.firestore {
     match /chat_messages/{msgId} {
       allow read, write: if true;
     }
+    match /legal_library/{docId} {
+      allow read, write: if true;
+    }
   }
 }

@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, ArrowLeft, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart, Timer, Save, Eye, EyeOff, RefreshCw, MessageSquare, Bot } from 'lucide-react';
+import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, ArrowLeft, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart, Timer, Save, Eye, EyeOff, RefreshCw, MessageSquare, Bot, Scale } from 'lucide-react';
 import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada, ScaleException, ChatMessage } from './types';
 import { INITIAL_USERS, UserWithPassword, INITIAL_AGENDA, getUnidadeByBairro, STATUS_LABELS, getEffectiveEscala, isSameCounselorName } from './constants';
 import { db, ensureAuthenticated } from './lib/firebase';
@@ -24,6 +24,7 @@ import UserManagementPanel from './components/UserManagementPanel';
 import { DistributionSimulator } from './components/DistributionSimulator';
 import { InternalChatWidget } from './components/InternalChatWidget';
 import JarvisAssistant from './components/JarvisAssistant';
+import { LegalLibrary } from './components/LegalLibrary';
 
 const CT_LOGO_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR6A8u03A307V8A6_vC3B0C77z1u5w8rW6pLg&s";
 
@@ -94,7 +95,7 @@ const App: React.FC = () => {
       console.error('Failed to persist user session:', err);
     }
   }, [currentUser]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'register' | 'my-docs' | 'monitoring' | 'logs' | 'search' | 'settings' | 'agenda' | 'statistics' | 'edit' | 'user-management' | 'plantao' | 'global-statistics' | 'distribution-test' | 'jarvis'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'register' | 'my-docs' | 'monitoring' | 'logs' | 'search' | 'settings' | 'agenda' | 'statistics' | 'edit' | 'user-management' | 'plantao' | 'global-statistics' | 'distribution-test' | 'jarvis' | 'library'>('dashboard');
   const [dashboardViewMode, setDashboardViewMode] = useState<'ALL' | 'REF' | 'IMED' | 'VALID'>('ALL');
   const [dashboardFilters, setDashboardFilters] = useState({ term: '', bairro: '', status: '', conselheiro_ref_id: '', data_registro: '' });
   const [dashboardExpandedFolders, setDashboardExpandedFolders] = useState<Record<string, boolean>>({});
@@ -1431,6 +1432,7 @@ const App: React.FC = () => {
           );
         }
         return <JarvisAssistant documents={documents} agenda={agenda} users={filteredUsers} currentUser={currentUser} />;
+      case 'library': return <LegalLibrary />;
       default: return null;
     }
   };
@@ -1599,6 +1601,7 @@ const App: React.FC = () => {
         </div>
         <nav className="flex-1 px-4 mt-8 space-y-2 overflow-y-auto min-h-0">
           <NavItem icon={<LayoutDashboard className="w-5 h-5" />} label="Painel Geral" active={activeTab === 'dashboard'} onClick={() => { handleNavigate('dashboard'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
+          <NavItem icon={<Scale className="w-5 h-5 text-indigo-400" />} label="BIBLIOTECA" active={activeTab === 'library'} onClick={() => { handleNavigate('library'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
           {(currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE') && (
             <NavItem icon={<Bot className="w-5 h-5 text-blue-400 animate-pulse" />} label="🤖 JARVIS" active={activeTab === 'jarvis'} onClick={() => { handleNavigate('jarvis'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
           )}
