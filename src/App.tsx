@@ -1601,7 +1601,6 @@ const App: React.FC = () => {
         </div>
         <nav className="flex-1 px-4 mt-8 space-y-2 overflow-y-auto min-h-0">
           <NavItem icon={<LayoutDashboard className="w-5 h-5" />} label="Painel Geral" active={activeTab === 'dashboard'} onClick={() => { handleNavigate('dashboard'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
-          <NavItem icon={<Scale className="w-5 h-5 text-indigo-400" />} label="BIBLIOTECA" active={activeTab === 'library'} onClick={() => { handleNavigate('library'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
           {(currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE') && (
             <NavItem icon={<Bot className="w-5 h-5 text-blue-400 animate-pulse" />} label="🤖 JARVIS" active={activeTab === 'jarvis'} onClick={() => { handleNavigate('jarvis'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
           )}
