@@ -206,7 +206,7 @@ const App: React.FC = () => {
 
   const normalizedDocuments = useMemo(() => {
     return allDocuments.map(d => {
-      const realUnit = d.bairro ? getUnidadeByBairro(d.bairro) : (d.unidade_id || 1);
+      const realUnit = d.unidade_id || (d.bairro ? getUnidadeByBairro(d.bairro) : 1);
       if (d.unidade_id !== realUnit) {
         return { ...d, unidade_id: realUnit };
       }
@@ -216,29 +216,29 @@ const App: React.FC = () => {
 
   const documents = useMemo(() => {
     if (isLud) return normalizedDocuments;
-    return normalizedDocuments.filter(d => d.unidade_id === currentUser?.unidade_id);
+    return normalizedDocuments.filter(d => d.unidade_id === (currentUser?.unidade_id || 1));
   }, [normalizedDocuments, currentUser, isLud]);
 
   const logs = useMemo(() => {
-    if (isSuperAdmin) return allLogs;
-    return allLogs.filter(l => (l.unidade_id || 1) === currentUser?.unidade_id);
-  }, [allLogs, currentUser, isSuperAdmin]);
+    if (isLud) return allLogs;
+    return allLogs.filter(l => (l.unidade_id || 1) === (currentUser?.unidade_id || 1));
+  }, [allLogs, currentUser, isLud]);
 
   const files = useMemo(() => {
-    if (isSuperAdmin) return allFiles;
-    return allFiles.filter(f => (f.unidade_id || 1) === currentUser?.unidade_id);
-  }, [allFiles, currentUser, isSuperAdmin]);
+    if (isLud) return allFiles;
+    return allFiles.filter(f => (f.unidade_id || 1) === (currentUser?.unidade_id || 1));
+  }, [allFiles, currentUser, isLud]);
 
   const agenda = useMemo(() => {
-    if (isSuperAdmin) return allAgenda;
-    return allAgenda.filter(e => (e.unidade_id || 1) === currentUser?.unidade_id);
-  }, [allAgenda, currentUser, isSuperAdmin]);
+    if (isLud) return allAgenda;
+    return allAgenda.filter(e => (e.unidade_id || 1) === (currentUser?.unidade_id || 1));
+  }, [allAgenda, currentUser, isLud]);
 
   const filteredUsers = useMemo(() => {
     const activeUsers = users.filter(u => u.status !== 'EXCLUIDO');
-    if (isSuperAdmin) return activeUsers;
-    return activeUsers.filter(u => (u.unidade_id || 1) === currentUser?.unidade_id);
-  }, [users, currentUser, isSuperAdmin]);
+    if (isLud) return activeUsers;
+    return activeUsers.filter(u => (u.unidade_id || 1) === (currentUser?.unidade_id || 1));
+  }, [users, currentUser, isLud]);
 
   const imminentEvent = useMemo(() => {
     if (!currentUser) return null;

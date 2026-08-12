@@ -500,16 +500,16 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
       .map(u => u.nome.toUpperCase())
       .sort();
     
-    if (isManualReference && formData.conselheiro_referencia_id) return allUsers.find(u => u.id === formData.conselheiro_referencia_id);
-    if (initialData) return allUsers.find(u => u.id === (formData.conselheiro_referencia_id || initialData.conselheiro_referencia_id));
-    if (isReferenceLocked) return allUsers.find(u => u.id === formData.conselheiro_referencia_id);
+    if (isManualReference && formData.conselheiro_referencia_id) return allUsers.find(u => u.id === formData.conselheiro_referencia_id && (u.unidade_id || 1) === formData.unidade_id);
+    if (initialData) return allUsers.find(u => u.id === (formData.conselheiro_referencia_id || initialData.conselheiro_referencia_id) && (u.unidade_id || 1) === formData.unidade_id);
+    if (isReferenceLocked) return allUsers.find(u => u.id === formData.conselheiro_referencia_id && (u.unidade_id || 1) === formData.unidade_id);
     
     // Filtra casos novos (sem histórico, sem notificação e não urgentes) ordenando descendente por data de criação para obter o último de forma consistente
     const newCases = documents
       .filter(d => !d.is_manual_override && !d.notificacao && !d.is_urgente && d.unidade_id === formData.unidade_id)
       .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
     const lastAssignedRefId = newCases[0]?.conselheiro_referencia_id;
-    const lastRefUser = allUsers.find(u => u.id === lastAssignedRefId);
+    const lastRefUser = allUsers.find(u => u.id === lastAssignedRefId && (u.unidade_id || 1) === formData.unidade_id);
     const lastRefNameRaw = lastRefUser?.nome.toUpperCase();
     const lastRefName = (lastRefNameRaw && nameMap && nameMap[lastRefNameRaw]) ? nameMap[lastRefNameRaw] : lastRefNameRaw;
 
@@ -517,13 +517,13 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     const nextIndex = activeConselheiros.length > 0 ? (currentIndex + 1) % activeConselheiros.length : 0;
     const nextName = activeConselheiros[nextIndex];
     
-    return allUsers.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === nextName && u.unidade_id === formData.unidade_id);
+    return allUsers.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === nextName && (u.unidade_id || 1) === formData.unidade_id);
   }, [allUsers, documents, isReferenceLocked, formData.conselheiro_referencia_id, initialData, formData.unidade_id, isManualReference, nameMap]);
 
   const assignedImediata = useMemo(() => {
     // 0. SOBRESCRITA MANUAL: Se houver providência manual acionada
     if (formData.providencia_imediata_manual) {
-      return allUsers.find(u => u.id === formData.providencia_imediata_manual);
+      return allUsers.find(u => u.id === formData.providencia_imediata_manual && (u.unidade_id || 1) === formData.unidade_id);
     }
 
     // 1. PRIORIDADE ABSOLUTA: Notificação desbloqueia e define a imediata
@@ -565,11 +565,11 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     }
 
     if (initialData) {
-      const origUser = allUsers.find(u => u.id === initialData.conselheiro_providencia_id);
+      const origUser = allUsers.find(u => u.id === initialData.conselheiro_providencia_id && (u.unidade_id || 1) === formData.unidade_id);
       const origName = origUser?.nome || initialData.conselheiro_providencia_nome;
       const mappedName = (origName && nameMap && nameMap[origName.toUpperCase()]) ? nameMap[origName.toUpperCase()] : origName;
       if (mappedName) {
-        const substituteUser = allUsers.find(u => u.status === 'ATIVO' && u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, mappedName));
+        const substituteUser = allUsers.find(u => u.status === 'ATIVO' && (u.unidade_id || 1) === formData.unidade_id && isSameCounselorName(u.nome, mappedName));
         if (substituteUser) return substituteUser;
       }
       return origUser;
@@ -581,13 +581,13 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     // 2. SE O CONSELHEIRO DE REFERÊNCIA ESTÁ NO TRIO/PLANTÃO DE HOJE:
     // O sistema DEVE SEMPRE reconhecer e atribuir a providência imediata para ele (ou para seu substituto de plantão).
     // Esta atribuição NÃO consome o turno da distribuição sequencial.
-    const refUser = (formData.conselheiro_referencia_id ? allUsers.find(u => u.id === formData.conselheiro_referencia_id) : undefined) || assignedReference;
+    const refUser = (formData.conselheiro_referencia_id ? allUsers.find(u => u.id === formData.conselheiro_referencia_id && (u.unidade_id || 1) === formData.unidade_id) : undefined) || assignedReference;
     const refUserName = refUser?.nome?.toUpperCase();
     const mappedRefName = (refUserName && nameMap && nameMap[refUserName]) ? nameMap[refUserName] : refUserName;
     const isRefUserInTrio = mappedRefName && trioNames.some(n => isSameCounselorName(n, mappedRefName));
 
     if (isRefUserInTrio && refUser) {
-      const activeSubstituteUser = mappedRefName ? allUsers.find(u => u.status === 'ATIVO' && u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, mappedRefName)) : undefined;
+      const activeSubstituteUser = mappedRefName ? allUsers.find(u => u.status === 'ATIVO' && (u.unidade_id || 1) === formData.unidade_id && isSameCounselorName(u.nome, mappedRefName)) : undefined;
       return activeSubstituteUser || refUser;
     }
 
@@ -627,7 +627,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     const sameFamilyTodayDirect = sameFamilyTodayDiffProvRef || sameFamilyTodayDocs[0];
 
     if (sameFamilyTodayDirect) {
-      return allUsers.find(u => u.id === sameFamilyTodayDirect.conselheiro_providencia_id);
+      return allUsers.find(u => u.id === sameFamilyTodayDirect.conselheiro_providencia_id && (u.unidade_id || 1) === formData.unidade_id);
     }
     
     // 4. Lógica de Distribuição Justa (Rodízio de Providência Imediata)
@@ -645,7 +645,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     const lastAutoDoc = todayDocs[0];
     
     const lastImediataId = lastAutoDoc?.conselheiro_providencia_id;
-    const lastImediataUser = allUsers.find(u => u.id === lastImediataId);
+    const lastImediataUser = allUsers.find(u => u.id === lastImediataId && (u.unidade_id || 1) === formData.unidade_id);
     const lastImediataNameRaw = lastImediataUser?.nome.toUpperCase();
     const lastImediataName = (lastImediataNameRaw && nameMap && nameMap[lastImediataNameRaw]) ? nameMap[lastImediataNameRaw] : lastImediataNameRaw;
     
@@ -799,7 +799,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     const finalRefId = (isManualReference && formData.conselheiro_referencia_id)
       ? formData.conselheiro_referencia_id
       : (initialData ? (formData.conselheiro_referencia_id || initialData.conselheiro_referencia_id) : ((isManualReference || isReferenceLocked) ? formData.conselheiro_referencia_id : (assignedReference?.id || formData.conselheiro_referencia_id)));
-    const finalRefUser = allUsers.find(u => u.id === finalRefId);
+    const finalRefUser = allUsers.find(u => u.id === finalRefId && (u.unidade_id || 1) === formData.unidade_id);
     
     const finalRefName = finalRefUser?.nome?.toUpperCase();
     const mappedFinalRefName = (finalRefName && nameMap && nameMap[finalRefName]) ? nameMap[finalRefName] : finalRefName;
@@ -858,15 +858,15 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
       conselheiro_referencia_id: (canEditCouncillors && (isManualReference || (initialData && formData.conselheiro_referencia_id))) 
         ? (formData.conselheiro_referencia_id || (initialData ? initialData.conselheiro_referencia_id : finalRefId)) 
         : (initialData ? initialData.conselheiro_referencia_id : finalRefId),
-      conselheiro_referencia_nome: (allUsers.find(u => u.id === ((canEditCouncillors && (isManualReference || (initialData && formData.conselheiro_referencia_id))) ? (formData.conselheiro_referencia_id || initialData?.conselheiro_referencia_id || finalRefId) : (initialData ? initialData.conselheiro_referencia_id : finalRefId)))?.nome) || initialData?.conselheiro_referencia_nome || '',
+      conselheiro_referencia_nome: (allUsers.find(u => u.id === ((canEditCouncillors && (isManualReference || (initialData && formData.conselheiro_referencia_id))) ? (formData.conselheiro_referencia_id || initialData?.conselheiro_referencia_id || finalRefId) : (initialData ? initialData.conselheiro_referencia_id : finalRefId)) && (u.unidade_id || 1) === formData.unidade_id)?.nome) || initialData?.conselheiro_referencia_nome || '',
       is_manual_override: (canEditCouncillors && isManualReference) || (initialData ? initialData.is_manual_override : isReferenceLocked),
       conselheiro_providencia_id: (canEditCouncillors && formData.providencia_imediata_manual)
         ? formData.providencia_imediata_manual
         : (initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || '')),
-      conselheiro_providencia_nome: (allUsers.find(u => u.id === ((canEditCouncillors && formData.providencia_imediata_manual) ? formData.providencia_imediata_manual : (initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || ''))))?.nome) || initialData?.conselheiro_providencia_nome || '',
+      conselheiro_providencia_nome: (allUsers.find(u => u.id === ((canEditCouncillors && formData.providencia_imediata_manual) ? formData.providencia_imediata_manual : (initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || ''))) && (u.unidade_id || 1) === formData.unidade_id)?.nome) || initialData?.conselheiro_providencia_nome || '',
       conselheiros_providencia_nomes: (canEditCouncillors && formData.providencia_imediata_manual)
         ? (() => {
-            const manualUser = allUsers.find(u => u.id === formData.providencia_imediata_manual);
+            const manualUser = allUsers.find(u => u.id === formData.providencia_imediata_manual && (u.unidade_id || 1) === formData.unidade_id);
             const manualName = manualUser?.nome?.toUpperCase();
             return manualName ? [manualName, ...trioNames.filter(n => n.toUpperCase() !== manualName)] : finalValidators;
           })()
@@ -1204,15 +1204,13 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                   disabled={isReadOnly}
                   className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold uppercase text-[11px]"
                   placeholder="SELECIONE O BAIRRO..."
-                  options={BAIRROS}
+                  options={getBairrosByUnidade(formData.unidade_id)}
                   value={formData.bairro}
                   onChange={val => {
-                    const resolvedUnit = getUnidadeByBairro(val);
-                    setFormData({
-                      ...formData,
-                      bairro: val,
-                      unidade_id: resolvedUnit
-                    });
+                    setFormData(prev => ({
+                      ...prev,
+                      bairro: val
+                    }));
                   }}
                 />
               </div>
@@ -1492,7 +1490,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
               ) : (
                 <div className="p-4 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 flex items-center justify-between">
                   <span>
-                    {allUsers.find(u => u.id === (formData.conselheiro_referencia_id || assignedReference?.id))?.nome || assignedReference?.nome || 'Aguardando...'}
+                    {allUsers.find(u => u.id === (formData.conselheiro_referencia_id || assignedReference?.id) && (u.unidade_id || 1) === formData.unidade_id)?.nome || assignedReference?.nome || 'Aguardando...'}
                   </span>
                   <span className={`text-[9px] px-2 py-1 flex items-center gap-1 rounded-md uppercase font-black ${initialData && !isManualReference ? 'bg-slate-200 text-slate-700 border border-slate-300' : (isReferenceLocked ? 'bg-amber-50 text-amber-600' : (formData.notificacao ? 'bg-blue-50 text-blue-600' : 'bg-indigo-50 text-indigo-600'))}`}>
                     {(!canEditCouncillors || !isManualReference) && <Lock className="w-3 h-3 text-slate-500" />}
@@ -1590,7 +1588,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                   ) : null}
                   <span className={formData.is_urgente ? 'font-black text-rose-950 text-sm flex items-center gap-1.5 pt-1' : ''}>
                     {formData.is_urgente && <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />}
-                    {allUsers.find(u => u.id === (formData.providencia_imediata_manual || (initialData?.conselheiro_providencia_id) || assignedImediata?.id))?.nome || assignedImediata?.nome || 'Aguardando...'}
+                    {allUsers.find(u => u.id === (formData.providencia_imediata_manual || (initialData?.conselheiro_providencia_id) || assignedImediata?.id) && (u.unidade_id || 1) === formData.unidade_id)?.nome || assignedImediata?.nome || 'Aguardando...'}
                   </span>
                   <span className={`text-[9px] px-2 py-1 flex items-center gap-1 rounded-md uppercase font-black ${
                     formData.is_urgente 
