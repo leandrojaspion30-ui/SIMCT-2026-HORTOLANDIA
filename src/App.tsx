@@ -97,7 +97,7 @@ const App: React.FC = () => {
   }, [currentUser]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'register' | 'my-docs' | 'monitoring' | 'logs' | 'search' | 'settings' | 'agenda' | 'statistics' | 'edit' | 'user-management' | 'plantao' | 'global-statistics' | 'distribution-test' | 'jarvis' | 'library'>('dashboard');
   const [dashboardViewMode, setDashboardViewMode] = useState<'ALL' | 'REF' | 'IMED' | 'VALID'>('ALL');
-  const [dashboardFilters, setDashboardFilters] = useState({ term: '', bairro: '', status: '', conselheiro_ref_id: '', data_registro: '', pasta_guardada: 'NAO' });
+  const [dashboardFilters, setDashboardFilters] = useState<{ term: string; bairro: string; status: string; conselheiro_ref_id: string; data_registro: string; pasta_guardada?: string }>({ term: '', bairro: '', status: '', conselheiro_ref_id: '', data_registro: '', pasta_guardada: 'NAO' });
   const [dashboardExpandedFolders, setDashboardExpandedFolders] = useState<Record<string, boolean>>({});
   const [dashboardFocusedFolderKey, setDashboardFocusedFolderKey] = useState<string | null>(null);
   const [dashboardIsGroupedByFamily, setDashboardIsGroupedByFamily] = useState<boolean>(true);
@@ -658,6 +658,7 @@ const App: React.FC = () => {
     }
 
     await saveDocument({
+      ...targetDoc,
       id: docId,
       ciência_registrada_por: updatedScience,
       alertas_status_referencia: updatedAlerts
@@ -777,8 +778,9 @@ const App: React.FC = () => {
   const handleDocumentSubmit = async (data: any, files: File[]) => {
     if (editingDocId) {
       const savedId = editingDocId;
-      await saveDocument({ ...data, id: savedId });
-      addLog(savedId, `EDIÇÃO: Registro de prontuário atualizado administrativamente.`, 'DOCUMENTO');
+      const existingDoc = allDocuments.find(d => d.id === savedId);
+      await saveDocument({ ...existingDoc, ...data, id: savedId });
+      addLog(savedId, `EDIÇÃO: Registro de prontuário atualizado administrativamente sem alterar histórico de status ou registros anteriores.`, 'DOCUMENTO');
       setEditingDocId(null);
       setSelectedDocId(savedId);
       // Remove telas temporárias de edição do histórico
@@ -823,7 +825,7 @@ const App: React.FC = () => {
     const latestStatus = newStatus[newStatus.length - 1];
     
     if (prevStatus === latestStatus) {
-      await saveDocument({ id, status: newStatus });
+      await saveDocument({ ...docObj, id, status: newStatus });
       return;
     }
 
@@ -849,6 +851,7 @@ const App: React.FC = () => {
     }
 
     await saveDocument({ 
+      ...docObj,
       id, 
       status: newStatus,
       alertas_status_referencia: updatedAlerts
@@ -1231,7 +1234,7 @@ const App: React.FC = () => {
           addLog(id, `EXCLUSÃO: Documento removido permanentemente do banco de dados SIMCT.`, 'DOCUMENTO');
           await deleteDocument(id);
           goBack();
-      }} onUpdateStatus={handleUpdateStatus} onUpdateDocument={async (id, fields) => await saveDocument({ ...fields, id })} onAddLog={addLog} onScience={handleScience} nameMap={userNameMap} scaleExceptions={scaleExceptions} />;
+      }} onUpdateStatus={handleUpdateStatus} onUpdateDocument={async (id, fields) => { const existingDoc = allDocuments.find(d => d.id === id); await saveDocument({ ...existingDoc, ...fields, id }); }} onAddLog={addLog} onScience={handleScience} nameMap={userNameMap} scaleExceptions={scaleExceptions} />;
     }
 
     if (activeTab === 'logs' && !(isSuperAdmin || isAdministrative)) {

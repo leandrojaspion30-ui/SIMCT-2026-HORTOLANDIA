@@ -217,7 +217,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
     }
   };
 
-  const initialFilters = { term: '', bairro: '', status: '', conselheiro_ref_id: '', data_registro: '', pasta_guardada: 'NAO' };
+  const initialFilters: { term: string; bairro: string; status: string; conselheiro_ref_id: string; data_registro: string; pasta_guardada?: string } = { term: '', bairro: '', status: '', conselheiro_ref_id: '', data_registro: '', pasta_guardada: 'NAO' };
   const [localFilters, setLocalFilters] = useState(initialFilters);
   const filters = propFilters !== undefined ? propFilters : localFilters;
   const setFilters = (newFilters: typeof initialFilters) => {
