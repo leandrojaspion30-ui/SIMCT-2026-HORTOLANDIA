@@ -145,6 +145,7 @@ const getStatusStyle = (status: DocumentStatus, isImprocedente?: boolean, valida
     case 'AVALIAR_EM_COLEGIADO': return { color: 'bg-amber-600', border: 'border-l-amber-600', icon: <Users className="w-4 h-4" /> };
     case 'SOLICITAR_REUNIAO_REDE':
     case 'SOLICITAR_REUNIAO_DE_REDE': return { color: 'bg-purple-600', border: 'border-l-purple-600', icon: <Building2 className="w-4 h-4" /> };
+    case 'RESPONDER_OFICIO_JUDICIARIO_MP': return { color: 'bg-blue-700', border: 'border-l-blue-700', icon: <FileText className="w-4 h-4" /> };
     case 'CONCLUIDO': return { color: 'bg-emerald-600', border: 'border-l-emerald-600', icon: <CheckCircle2 className="w-4 h-4" /> };
     case 'ENCERRADO': return { color: 'bg-slate-700', border: 'border-l-slate-700', icon: <FileCheck2 className="w-4 h-4" /> };
     case 'NAO_LIDO': return { color: 'bg-[#2563EB]', border: 'border-l-[#2563EB]', icon: <Activity className="w-4 h-4" /> };
@@ -522,7 +523,8 @@ const DocumentList: React.FC<DocumentListProps> = ({
       'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
       'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
       'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
-      'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE'
+      'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE',
+      'RESPONDER_OFICIO_JUDICIARIO_MP'
     ].includes(mainStatus) || mainStatus.startsWith('NOTIFICACAO_');
     
     if (isAdminDespacho) {
@@ -556,6 +558,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
       'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
       'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
       'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE',
+      'RESPONDER_OFICIO_JUDICIARIO_MP',
       'NENHUMA', 'AGUARDANDO_AVALIACAO'
     ].includes(s) || s.startsWith('NOTIFICACAO_'));
 
@@ -750,6 +753,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                     <option value="MEDIDA_PENDENTE">📋 MEDIDA PENDENTE</option>
                     <option value="NOTIFICADO">🔕 NOTIFICADO</option>
                     <option value="NOTIFICAR">🔔 NOTIFICAR</option>
+                    <option value="RESPONDER_OFICIO_JUDICIARIO_MP">⚖️ RESPONDER OFÍCIO DO JUDICIÁRIO/MP</option>
                     <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
                   </select>
                 </div>
@@ -857,6 +861,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
             <option value="MEDIDA_PENDENTE">📋 MEDIDA PENDENTE</option>
             <option value="NOTIFICADO">🔕 NOTIFICADO</option>
             <option value="NOTIFICAR">🔔 NOTIFICAR</option>
+            <option value="RESPONDER_OFICIO_JUDICIARIO_MP">⚖️ RESPONDER OFÍCIO DO JUDICIÁRIO/MP</option>
             <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
           </select>
           <select 
@@ -1060,6 +1065,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                 'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
                 'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
                 'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE',
+                'RESPONDER_OFICIO_JUDICIARIO_MP', 'PROMOVER_REUNIAO_REDE',
                 'NENHUMA', 'AGUARDANDO_AVALIACAO'
               ].includes(s) || s.startsWith('NOTIFICACAO_'));
 

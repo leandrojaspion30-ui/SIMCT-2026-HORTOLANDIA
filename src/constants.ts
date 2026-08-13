@@ -480,6 +480,7 @@ export const STATUS_LABELS: Record<string, string> = {
   'ENCAMINHAR_NOTICIA_FATO': 'Encaminhar Notícia de Fato',
   'OFICIO_RESPONDIDO': 'Ofício Respondido',
   'RESPONDER_EMAIL': 'Responder E-mail',
+  'RESPONDER_OFICIO_JUDICIARIO_MP': 'Responder Ofício do Judiciário/MP',
   'NOTIFICACAO_LEANDRO': 'NOTIFICAÇÃO LEANDRO',
   'NOTIFICACAO_LUIZA': 'NOTIFICAÇÃO LUIZA',
   'NOTIFICACAO_MILENA': 'NOTIFICAÇÃO MILENA',
