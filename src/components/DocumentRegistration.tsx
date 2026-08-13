@@ -181,7 +181,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          model: "gemini-1.5-flash" 
+          model: "gemini-3.6-flash" 
         })
       });
 

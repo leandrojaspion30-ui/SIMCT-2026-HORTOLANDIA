@@ -1415,6 +1415,10 @@ const App: React.FC = () => {
           await saveUser({ id: currentUser.id, senha: p }); 
           addLog('SISTEMA', `SEGURANÇA: Senha e assinatura digital alterada pelo próprio usuário.`, 'SEGURANÇA');
           return true; 
+      }} onUpdatePhoto={async (fotoUrl) => {
+          await saveUser({ id: currentUser.id, fotoUrl });
+          addLog('SISTEMA', `PERFIL: Foto de perfil atualizada pelo usuário.`, 'SISTEMA');
+          return true;
       }} />;
       case 'statistics': return <StatisticsView documents={documents} agenda={agenda} users={users} currentUser={currentUser} />;
       case 'global-statistics': return <StatisticsView documents={normalizedDocuments} agenda={allAgenda} users={users} currentUser={currentUser} isGlobal />;
@@ -1600,10 +1604,10 @@ const App: React.FC = () => {
           )}
         </div>
         <nav className="flex-1 px-4 mt-8 space-y-2 overflow-y-auto min-h-0">
-          <NavItem icon={<LayoutDashboard className="w-5 h-5" />} label="Painel Geral" active={activeTab === 'dashboard'} onClick={() => { handleNavigate('dashboard'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
           {(currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE') && (
             <NavItem icon={<Bot className="w-5 h-5 text-blue-400 animate-pulse" />} label="🤖 JARVIS" active={activeTab === 'jarvis'} onClick={() => { handleNavigate('jarvis'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
           )}
+          <NavItem icon={<LayoutDashboard className="w-5 h-5" />} label="Painel Geral" active={activeTab === 'dashboard'} onClick={() => { handleNavigate('dashboard'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />
           {(currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO') && <NavItem icon={<FilePlus className="w-5 h-5" />} label="NOVO PROCEDIMENTO" active={activeTab === 'register'} onClick={() => { handleNavigate('register'); if (windowWidth < 1024) setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && windowWidth >= 1024} />}
           {(currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE') && (
             <>
@@ -1638,11 +1642,30 @@ const App: React.FC = () => {
                   <span className="hidden sm:inline">Voltar</span>
                 </button>
               )}
-              <div className="min-w-0">
-                <h2 className="text-[10px] lg:text-[13px] font-medium text-[#4B5563] uppercase tracking-widest truncate">ZELAR PELO CUMPRIMENTO DO DIREITO</h2>
-                <div className="flex flex-col lg:flex-row lg:items-center gap-0 lg:gap-2 mt-1">
-                  <span className="text-[14px] lg:text-[16px] font-bold text-[#111827] uppercase truncate">{currentUser.nome}</span>
-                  <span className="text-[12px] lg:text-[14px] font-medium text-[#2563EB] uppercase whitespace-nowrap">({currentUser.cargo})</span>
+              <div className="flex items-center gap-3 min-w-0">
+                <button 
+                  onClick={() => handleNavigate('settings')} 
+                  className="relative group shrink-0" 
+                  title="Alterar Foto de Perfil / Configurações"
+                >
+                  {currentUser.fotoUrl ? (
+                    <img 
+                      src={currentUser.fotoUrl} 
+                      alt={currentUser.nome} 
+                      className="w-10 h-10 lg:w-11 lg:h-11 rounded-full object-cover border-2 border-blue-600 shadow-sm transition-transform group-hover:scale-105" 
+                    />
+                  ) : (
+                    <div className="w-10 h-10 lg:w-11 lg:h-11 rounded-full bg-blue-100 text-blue-700 font-black flex items-center justify-center border-2 border-blue-300 shadow-sm transition-transform group-hover:scale-105 text-sm lg:text-base">
+                      {currentUser.nome ? currentUser.nome.charAt(0).toUpperCase() : 'U'}
+                    </div>
+                  )}
+                </button>
+                <div className="min-w-0">
+                  <h2 className="text-[10px] lg:text-[13px] font-medium text-[#4B5563] uppercase tracking-widest truncate">ZELAR PELO CUMPRIMENTO DO DIREITO</h2>
+                  <div className="flex flex-col lg:flex-row lg:items-center gap-0 lg:gap-2 mt-1">
+                    <span className="text-[14px] lg:text-[16px] font-bold text-[#111827] uppercase truncate">{currentUser.nome}</span>
+                    <span className="text-[12px] lg:text-[14px] font-medium text-[#2563EB] uppercase whitespace-nowrap">({currentUser.cargo})</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1726,7 +1749,7 @@ const App: React.FC = () => {
       {currentUser && (
         <InternalChatWidget
           currentUser={currentUser}
-          users={filteredUsers}
+          users={users.filter(u => u.status !== 'EXCLUIDO')}
           messages={allChatMessages}
           isOpen={isChatOpen}
           onToggleOpen={() => setIsChatOpen(!isChatOpen)}

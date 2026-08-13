@@ -215,6 +215,10 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
 
   const filteredDocuments = useMemo(() => {
     let docs = documents;
+    
+    // Regra da UNIDADE II: Zerar todos os casos que aparecem no relatório estatístico da UNIDADE II
+    docs = docs.filter(d => (d.unidade_id || 1) !== 2);
+
     if (isGlobal && selectedUnidadeFilter !== 'all') {
       docs = docs.filter(d => (d.unidade_id || 1) === selectedUnidadeFilter);
     }
@@ -264,6 +268,10 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
 
   const filteredAgenda = useMemo(() => {
     let ags = agenda;
+
+    // Regra da UNIDADE II: Zerar todos os casos de agenda da UNIDADE II no relatório estatístico
+    ags = ags.filter(a => (a.unidade_id || 1) !== 2);
+
     if (isGlobal && selectedUnidadeFilter !== 'all') {
       ags = ags.filter(a => (a.unidade_id || 1) === selectedUnidadeFilter);
     }
@@ -948,7 +956,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
           </div>
           <div className="mt-4">
             <p className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-none">
-              {filteredDocuments.length || 265}
+              {filteredDocuments.length}
             </p>
             <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1 mt-2">
               <ArrowUp className="w-3 h-3" /> 18% em relação ao período anterior
@@ -968,7 +976,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
           </div>
           <div className="mt-4">
             <p className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-none">
-              {filteredDocuments.filter(d => d.status[d.status.length - 1]?.includes('MONITORAMENTO')).length || 7}
+              {filteredDocuments.filter(d => d.status[d.status.length - 1]?.includes('MONITORAMENTO')).length}
             </p>
             <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1 mt-2">
               <ArrowRight className="w-3 h-3 text-slate-300" /> Sem alteração
@@ -988,7 +996,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
           </div>
           <div className="mt-4">
             <p className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-none">
-              {filteredDocuments.filter(d => d.status[d.status.length - 1]?.includes('AGUARDANDO_VALIDACAO')).length || 44}
+              {filteredDocuments.filter(d => d.status[d.status.length - 1]?.includes('AGUARDANDO_VALIDACAO')).length}
             </p>
             <span className="text-[11px] font-bold text-amber-600 flex items-center gap-1 mt-2">
               <ArrowUp className="w-3 h-3" /> 10% em relação ao período anterior
@@ -1008,7 +1016,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
           </div>
           <div className="mt-4">
             <p className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-none">
-              {aiStats.requisicoes136III || 9}
+              {aiStats.requisicoes136III}
             </p>
             <span className="text-[11px] font-bold text-rose-600 flex items-center gap-1 mt-2">
               <ArrowDown className="w-3 h-3" /> 18% em relação ao período anterior

@@ -84,7 +84,8 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
         cargo: editingUser.cargo.toUpperCase(),
         perfil: editingUser.perfil,
         unidade_id: editingUser.unidade_id,
-        senha: editingUser.senha
+        senha: editingUser.senha,
+        fotoUrl: editingUser.fotoUrl
       });
       setEditingUser(null);
     }
@@ -299,8 +300,14 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
           <div key={user.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col justify-between group hover:border-blue-200 transition-all min-h-[350px]">
             <div>
               <div className="flex justify-between items-start mb-6">
-                <div className={`p-4 rounded-2xl ${user.status === 'ATIVO' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
-                  <UserIcon className="w-6 h-6" />
+                <div className={`p-1 rounded-2xl ${user.status === 'ATIVO' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                  {user.fotoUrl ? (
+                    <img src={user.fotoUrl} alt={user.nome} className="w-12 h-12 rounded-xl object-cover border border-slate-200" />
+                  ) : (
+                    <div className="w-12 h-12 flex items-center justify-center">
+                      <UserIcon className="w-6 h-6" />
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <button 

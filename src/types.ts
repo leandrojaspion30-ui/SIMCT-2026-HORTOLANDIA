@@ -9,6 +9,7 @@ export interface User {
   perfil: UserRole;
   cargo: string;
   unidade_id?: number;
+  fotoUrl?: string;
   status?: UserStatus;
   tentativas_login?: number;
   substituicao_ativa?: boolean;

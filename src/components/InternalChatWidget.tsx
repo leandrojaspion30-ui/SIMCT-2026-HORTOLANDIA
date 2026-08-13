@@ -31,9 +31,7 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
   const [viewMode, setViewMode] = useState<'LIST' | 'CHAT'>('LIST');
   const [activeChannel, setActiveChannel] = useState<string>(defaultChannel);
   
-  const [unitFilter, setUnitFilter] = useState<'U1' | 'U2' | 'ALL'>(
-    currentUser.unidade_id === 2 ? 'U2' : 'U1'
-  );
+  const [unitFilter, setUnitFilter] = useState<'U1' | 'U2' | 'ALL'>('ALL');
   
   const [textInput, setTextInput] = useState('');
   const [isMinimized, setIsMinimized] = useState(false);
@@ -541,10 +539,24 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
               )}
               {viewMode === 'CHAT' ? (
                 <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center border border-white/10">
-                      {activeChannelInfo.icon}
-                    </div>
+                  <div className="relative shrink-0">
+                    {(() => {
+                      const targetUser = users.find(u => u.id === activeChannel);
+                      if (targetUser?.fotoUrl) {
+                        return (
+                          <img 
+                            src={targetUser.fotoUrl} 
+                            alt={targetUser.nome} 
+                            className="w-10 h-10 rounded-full object-cover border border-white/30 shadow-sm"
+                          />
+                        );
+                      }
+                      return (
+                        <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center border border-white/10">
+                          {activeChannelInfo.icon}
+                        </div>
+                      );
+                    })()}
                     {(() => {
                       const targetUser = users.find(u => u.id === activeChannel);
                       return targetUser && isOnline(targetUser) && (
@@ -717,9 +729,17 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
                           className="w-full flex items-center gap-3 p-3 hover:bg-[#F5F6F6] transition-colors rounded-xl group"
                         >
                           <div className="relative shrink-0">
-                            <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center font-black text-lg border border-indigo-100">
-                              {u.nome.charAt(0).toUpperCase()}
-                            </div>
+                            {u.fotoUrl ? (
+                              <img 
+                                src={u.fotoUrl} 
+                                alt={u.nome} 
+                                className="w-12 h-12 rounded-full object-cover border border-slate-200 shadow-sm"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center font-black text-lg border border-indigo-100">
+                                {u.nome ? u.nome.charAt(0).toUpperCase() : 'U'}
+                              </div>
+                            )}
                             {online && (
                               <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-[#25D366] border-2 border-white rounded-full shadow-sm" />
                             )}
@@ -791,6 +811,8 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
 
                       {channelMessages.map((msg, idx) => {
                         const isMe = String(msg.sender_id) === String(currentUser.id);
+                        const senderUser = users.find(u => String(u.id) === String(msg.sender_id) || u.nome === msg.sender_name) || (isMe ? currentUser : null);
+                        const senderPhotoUrl = senderUser?.fotoUrl;
                         const msgDate = new Date(msg.created_at);
                         const timeStr = msgDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
                         
@@ -810,13 +832,23 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
                               </div>
                             )}
                             <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} animate-fadeIn group relative`}>
-                              {!isMe && (
-                                <div className="flex items-center gap-1 mb-1 px-2">
-                                  <span className="text-[10px] font-black uppercase tracking-wider text-[#075E54]">
-                                    {msg.sender_name}
-                                  </span>
-                                </div>
-                              )}
+                              <div className="flex items-center gap-1.5 mb-1 px-1">
+                                {!isMe && (
+                                  senderPhotoUrl ? (
+                                    <img src={senderPhotoUrl} alt="" className="w-5 h-5 rounded-full object-cover border border-emerald-300 shrink-0" />
+                                  ) : (
+                                    <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-[9px] border border-emerald-200 shrink-0">
+                                      {msg.sender_name ? msg.sender_name.charAt(0).toUpperCase() : 'U'}
+                                    </div>
+                                  )
+                                )}
+                                <span className="text-[10px] font-black uppercase tracking-wider text-[#075E54]">
+                                  {msg.sender_name}
+                                </span>
+                                {isMe && senderPhotoUrl && (
+                                  <img src={senderPhotoUrl} alt="" className="w-5 h-5 rounded-full object-cover border border-emerald-400 shrink-0 ml-0.5" />
+                                )}
+                              </div>
                               <div className={`max-w-[85%] min-w-[70px] relative rounded-xl px-3 py-1.5 shadow-sm text-[14.5px] font-medium leading-normal ${
                                 isMe 
                                   ? 'bg-[#D9FDD3] text-[#111B21] rounded-tr-none border border-[#B7E4A9]' 

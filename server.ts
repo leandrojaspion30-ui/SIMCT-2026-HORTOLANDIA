@@ -148,7 +148,7 @@ async function startServer() {
   app.post("/api/ai/analyze", async (req, res) => {
     res.setHeader("Content-Type", "application/json");
     try {
-      const { contents } = req.body || {};
+      const { contents, model: requestedModel } = req.body || {};
       const apiKey = process.env.GEMINI_API_KEY;
 
       if (!apiKey) {
@@ -165,28 +165,57 @@ async function startServer() {
         },
       });
 
-      let responseText = "";
-      try {
-        const response = await ai.models.generateContent({
-          model: "gemini-3.6-flash",
-          contents,
-        });
-        responseText = response.text || "";
-      } catch (e1: any) {
-        console.warn(`Tentativa com gemini-3.6-flash falhou: ${e1?.message}. Tentando gemini-flash-latest...`);
-        try {
-          const response = await ai.models.generateContent({
-            model: "gemini-flash-latest",
-            contents,
-          });
-          responseText = response.text || "";
-        } catch (e2: any) {
-          console.warn(`Todas as chamadas à API Gemini falharam: ${e2?.message}. Gerando resposta de inteligência SIMCT.`);
-          responseText = generateSIMCTFallbackResponse(contents);
+      const normalizeModel = (m: string) => {
+        if (!m || typeof m !== "string") return "gemini-3.6-flash";
+        if (m.includes("1.5") || m.includes("2.0") || m.includes("2.5") || m.includes("gemini-pro")) {
+          return "gemini-3.6-flash";
         }
+        return m;
+      };
+
+      const primaryModels = ["gemini-3.6-flash", "gemini-3.6-pro", "gemini-flash-latest"];
+      const candidateModels = [
+        ...(requestedModel ? [normalizeModel(requestedModel)] : []),
+        ...primaryModels
+      ];
+      const uniqueModels = Array.from(new Set(candidateModels));
+
+      let responseText = "";
+      let lastError: any = null;
+
+      for (const modelName of uniqueModels) {
+        const maxAttempts = 4;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          try {
+            const response = await ai.models.generateContent({
+              model: modelName,
+              contents,
+            });
+            if (response && response.text) {
+              responseText = response.text;
+              break;
+            }
+          } catch (err: any) {
+            lastError = err;
+            const is503 = err?.status === "UNAVAILABLE" || err?.message?.includes("503") || err?.message?.includes("high demand");
+            console.warn(`Tentativa ${attempt}/${maxAttempts} com o modelo ${modelName} falhou (${is503 ? '503 Alta Demanda' : 'Erro'}): ${err?.message || err}`);
+            if (attempt < maxAttempts) {
+              // Longer delay for 503 high demand spikes (1.5s, 3s, 4.5s)
+              const baseDelay = is503 ? 1500 : 800;
+              const delay = Math.min(baseDelay * Math.pow(1.5, attempt - 1) + Math.floor(Math.random() * 500), 5000);
+              await new Promise(r => setTimeout(r, delay));
+            }
+          }
+        }
+        if (responseText) break;
       }
 
-      return res.json({ text: responseText || generateSIMCTFallbackResponse(contents) });
+      if (!responseText) {
+        console.warn(`Todas as chamadas aos modelos Gemini falharam. Último erro: ${lastError?.message}. Usando inteligência SIMCT.`);
+        responseText = generateSIMCTFallbackResponse(contents);
+      }
+
+      return res.json({ text: responseText });
     } catch (error: any) {
       console.error("Gemini Endpoint Error:", error);
       return res.json({ text: generateSIMCTFallbackResponse(req.body?.contents) });
