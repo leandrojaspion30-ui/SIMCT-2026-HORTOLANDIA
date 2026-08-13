@@ -504,9 +504,9 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     if (initialData) return allUsers.find(u => u.id === (formData.conselheiro_referencia_id || initialData.conselheiro_referencia_id) && (u.unidade_id || 1) === formData.unidade_id);
     if (isReferenceLocked) return allUsers.find(u => u.id === formData.conselheiro_referencia_id && (u.unidade_id || 1) === formData.unidade_id);
     
-    // Filtra casos novos (sem histórico, sem notificação e não urgentes) ordenando descendente por data de criação para obter o último de forma consistente
+    // Filtra casos novos (sem histórico e sem notificação) ordenando descendente por data de criação para obter o último de forma consistente
     const newCases = documents
-      .filter(d => !d.is_manual_override && !d.notificacao && !d.is_urgente && d.unidade_id === formData.unidade_id)
+      .filter(d => !d.is_manual_override && !d.notificacao && d.unidade_id === formData.unidade_id)
       .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
     const lastAssignedRefId = newCases[0]?.conselheiro_referencia_id;
     const lastRefUser = allUsers.find(u => u.id === lastAssignedRefId && (u.unidade_id || 1) === formData.unidade_id);
@@ -557,7 +557,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
 
     const isPlantao = timeInfo.isNightShift || timeInfo.isWeekend;
 
-    if ((formData.is_urgente || isPlantao) && trioNames.length > 0) {
+    if (isPlantao && trioNames.length > 0) {
       // Se for noite ou final de semana, o "Primeiro Plantonista" (trioNames[0]) assume tudo.
       const targetName = trioNames[0];
       const targetUser = allUsers.find(u => u.status === 'ATIVO' && u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, targetName));
@@ -638,7 +638,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
         if (!isDocOfToday || d.unidade_id !== formData.unidade_id) {
           return false;
         }
-        return !d.is_family_persistence && !d.is_manual_providencia && !d.is_reference_in_trio && !d.notificacao && !d.is_plantao && !d.is_urgente;
+        return !d.is_family_persistence && !d.is_manual_providencia && !d.is_reference_in_trio && !d.notificacao && !d.is_plantao;
       })
       .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
 
@@ -886,21 +886,19 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
       status: initialData ? initialData.status : (formData.notificacao ? [`NOTIFICACAO_${formData.notificacao.toUpperCase()}` as DocumentStatus] : ['AGUARDANDO_ANALISE']),
       justificativa_distribuicao: initialData 
         ? initialData.justificativa_distribuicao 
-        : (formData.is_urgente
-            ? `🚨 DOCUMENTO URGENTE: Atribuído para providência sem alterar a sequência regular de rodízio do Conselheiro de Referência nem da Providência Imediata.`
-            : (formData.providencia_imediata_manual
-                ? `✍️ Imediata atribuída MANUALMENTE: [${assignedImediata?.nome}].`
-                : (formData.notificacao 
-                    ? `🔔 Imediata vinculada à Notificação: ${formData.notificacao}.` 
-                    : (isRefUserInTrio && finalRefUser
-                        ? `🎯 Imediata vinculada ao Conselheiro de Referência [${finalRefUser.nome}] de plantão no dia.`
-                        : (isFamilyPersistence
-                            ? (isFamilyPersistenceDiffProvRef
-                                ? `👨‍👩‍👧‍👦 Imediata mantida por vínculo familiar (Regra Conselheiro Providência !== Referência no dia).`
-                                : `👨‍👩‍👧‍👦 Imediata mantida por vínculo familiar no mesmo dia.`)
-                            : (isReferenceLocked 
-                                ? `📌 Referência mantida por vínculo histórico.` 
-                                : `✅ Atribuído por Rodízio Alfabético.`))))))
+        : (formData.providencia_imediata_manual
+            ? `✍️ Imediata atribuída MANUALMENTE: [${assignedImediata?.nome}].`
+            : (formData.notificacao 
+                ? `🔔 Imediata vinculada à Notificação: ${formData.notificacao}.` 
+                : (isRefUserInTrio && finalRefUser
+                    ? `🎯 Imediata vinculada ao Conselheiro de Referência [${finalRefUser.nome}] de plantão no dia.`
+                    : (isFamilyPersistence
+                        ? (isFamilyPersistenceDiffProvRef
+                            ? `👨‍👩‍👧‍👦 Imediata mantida por vínculo familiar (Regra Conselheiro Providência !== Referência no dia).`
+                            : `👨‍👩‍👧‍👦 Imediata mantida por vínculo familiar no mesmo dia.`)
+                        : (isReferenceLocked 
+                            ? `📌 Referência mantida por vínculo histórico.` 
+                            : `✅ Atribuído por Rodízio Alfabético.`))))) + (formData.is_urgente ? ' (🚨 Alerta de Documento Urgente Ativado)' : '')
     };
 
     if (!finalData.conselheiro_referencia_id) {
@@ -1003,7 +1001,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                       DOCUMENTO URGENTE
                     </span>
                     <span className="text-[9px] font-bold text-red-600 uppercase tracking-tighter">
-                      Marque se este documento requer providência imediata
+                      Aciona alerta visual de urgência para providência imediata (sem alterar a sequência da distribuição)
                     </span>
                   </div>
                 </label>

@@ -161,10 +161,10 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
     return { total, manual, notification, persistence, automatic };
   }, [documents, selectedUnidade]);
 
-  // Encontra quem foi o último conselheiro de referência atribuído (não manual, não notificação e não urgente)
+  // Encontra quem foi o último conselheiro de referência atribuído (não manual, não notificação)
   const lastAssignedRef = useMemo(() => {
     const newCases = documents
-      .filter(d => !d.is_manual_override && !d.notificacao && !d.is_urgente && d.unidade_id === selectedUnidade)
+      .filter(d => !d.is_manual_override && !d.notificacao && d.unidade_id === selectedUnidade)
       .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
     
     if (newCases.length === 0) return null;
@@ -339,7 +339,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
 
         // Cálculo de distribuição lógica idêntico ao DocumentRegistration.tsx
         const tempNewCases = virtualDocsList
-          .filter(d => !d.is_manual_override && !d.notificacao && !d.is_urgente && d.unidade_id === selectedUnidade)
+          .filter(d => !d.is_manual_override && !d.notificacao && d.unidade_id === selectedUnidade)
           .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
         
         const lastRefId = tempNewCases[0]?.conselheiro_referencia_id;
@@ -365,7 +365,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
               return mappedRName && virtualTrio.some(n => isSameCounselorName(n, mappedRName));
             })();
             const isFamPersistence = d.is_family_persistence && !isRefOfDocInTrio;
-            return isDocOfToday && d.unidade_id === selectedUnidade && !isFamPersistence && !d.notificacao && !d.is_manual_providencia && !d.is_urgente;
+            return isDocOfToday && d.unidade_id === selectedUnidade && !isFamPersistence && !d.notificacao && !d.is_manual_providencia;
           })
           .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
 
@@ -520,7 +520,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         
         // Simular a consulta viva do banco para obter o conselheiro dinamicamente
         const liveNewCases = liveDocsList
-          .filter(d => !d.is_manual_override && !d.notificacao && !d.is_urgente && d.unidade_id === selectedUnidade)
+          .filter(d => !d.is_manual_override && !d.notificacao && d.unidade_id === selectedUnidade)
           .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
         
         const lastRefId = liveNewCases[0]?.conselheiro_referencia_id;
@@ -542,7 +542,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
               return mappedRName && liveTrio.some(n => isSameCounselorName(n, mappedRName));
             })();
             const isFamPersistence = d.is_family_persistence && !isRefOfDocInTrio;
-            return isDocOfToday && d.unidade_id === selectedUnidade && !isFamPersistence && !d.notificacao && !d.is_manual_providencia && !d.is_urgente;
+            return isDocOfToday && d.unidade_id === selectedUnidade && !isFamPersistence && !d.notificacao && !d.is_manual_providencia;
           })
           .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
 
