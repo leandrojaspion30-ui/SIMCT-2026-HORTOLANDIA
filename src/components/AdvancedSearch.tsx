@@ -23,7 +23,8 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ documents, users, curre
     status: '',
     conselheiro_ref_id: '',
     servico_rede: '',
-    data_registro: ''
+    data_registro: '',
+    pasta_guardada: 'TODAS'
   };
 
   const [filters, setFilters] = useState(initialFilters);
@@ -110,8 +111,15 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ documents, users, curre
 
         const matchDataInicio = !filters.dataInicio || doc.data_aporte >= filters.dataInicio;
         const matchDataFim = !filters.dataFim || doc.data_aporte <= filters.dataFim;
+
+        const matchPastaGuardada = (() => {
+          if (!filters.pasta_guardada || filters.pasta_guardada === 'TODAS') return true;
+          if (filters.pasta_guardada === 'SIM') return !!doc.is_pasta_guardada;
+          if (filters.pasta_guardada === 'NAO') return !doc.is_pasta_guardada;
+          return true;
+        })();
         
-        return matchCat && matchGenitora && matchCrianca && matchCpf && matchBairro && matchStatus && matchRef && matchServico && matchDate && matchDataInicio && matchDataFim;
+        return matchCat && matchGenitora && matchCrianca && matchCpf && matchBairro && matchStatus && matchRef && matchServico && matchDate && matchDataInicio && matchDataFim && matchPastaGuardada;
       })
       .sort((a, b) => {
         const aTime = a.criado_em ? new Date(a.criado_em).getTime() : 0;
@@ -182,6 +190,14 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ documents, users, curre
               <label className="text-[10px] font-black text-slate-400 uppercase">Data de Registro</label>
               <input type="date" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] font-bold uppercase text-slate-700" value={filters.data_registro} onChange={e => setFilters({...filters, data_registro: e.target.value})} />
             </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase">Situação da Pasta</label>
+              <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] font-bold uppercase text-slate-700 outline-none focus:border-blue-500" value={filters.pasta_guardada} onChange={e => setFilters({...filters, pasta_guardada: e.target.value})}>
+                <option value="TODAS">📁 TODAS (VISÍVEIS + GUARDADAS)</option>
+                <option value="SIM">📦 APENAS PASTAS GUARDADAS</option>
+                <option value="NAO">📂 APENAS PASTAS VISÍVEIS (ATIVAS)</option>
+              </select>
+            </div>
         </div>
       </div>
 
@@ -206,7 +222,12 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ documents, users, curre
                   <td className="px-8 py-6 font-black text-slate-800 text-[13px] uppercase">{doc.genitora_nome}</td>
                   <td className="px-8 py-6 text-[10px] text-slate-500 font-bold uppercase">{doc.bairro}</td>
                   <td className="px-8 py-6">
-                    <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase">{STATUS_LABELS[doc.status[doc.status.length - 1]]}</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase">{STATUS_LABELS[doc.status[doc.status.length - 1]]}</span>
+                      {doc.is_pasta_guardada && (
+                        <span className="px-2.5 py-1 bg-amber-100 text-amber-800 rounded-lg text-[9px] font-black uppercase border border-amber-300">📦 Guardada</span>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

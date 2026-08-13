@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, ChevronUp, Folder, FolderOpen, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database, Trash2, Timer, Calendar, GraduationCap, Stethoscope, HandHeart, Phone, Mail, Siren, PhoneCall, Bell, BellRing, AlertCircle } from 'lucide-react';
+import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, ChevronUp, Folder, FolderOpen, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database, Trash2, Timer, Calendar, GraduationCap, Stethoscope, HandHeart, Phone, Mail, Siren, PhoneCall, Bell, BellRing, AlertCircle, Archive } from 'lucide-react';
 import { Documento, User as UserType, DocumentStatus, ScaleException } from '../types';
 import { STATUS_LABELS, INITIAL_USERS, BAIRROS, getBairrosByUnidade, isSameCounselorName, getEffectiveEscala } from '../constants';
 import { formatLocalDateString, parseLocalDate, formatCadastroDateTime } from '../lib/dateUtils';
@@ -164,12 +164,13 @@ interface DocumentListProps {
   onDeleteDoc: (id: string) => void;
   onScience: (id: string, alertId?: string) => void;
   onUpdateStatus: (id: string, status: DocumentStatus[]) => void;
+  onToggleGuardarPasta?: (docIds: string[], guardar: boolean) => void;
   isReadOnly?: boolean;
   isMyReferenceView?: boolean;
   viewMode?: 'ALL' | 'REF' | 'IMED' | 'VALID';
   onViewModeChange?: (mode: 'ALL' | 'REF' | 'IMED' | 'VALID') => void;
-  filters?: { term: string; bairro: string; status: string; conselheiro_ref_id: string; data_registro: string };
-  onFiltersChange?: (filters: { term: string; bairro: string; status: string; conselheiro_ref_id: string; data_registro: string }) => void;
+  filters?: { term: string; bairro: string; status: string; conselheiro_ref_id: string; data_registro: string; pasta_guardada?: string };
+  onFiltersChange?: (filters: { term: string; bairro: string; status: string; conselheiro_ref_id: string; data_registro: string; pasta_guardada?: string }) => void;
   isGroupedByFamily?: boolean;
   onIsGroupedByFamilyChange?: (grouped: boolean) => void;
   expandedFolders?: Record<string, boolean>;
@@ -189,6 +190,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
   onDeleteDoc, 
   onScience = () => {},
   onUpdateStatus,
+  onToggleGuardarPasta,
   isReadOnly, 
   isMyReferenceView,
   viewMode: propViewMode,
@@ -214,7 +216,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
     }
   };
 
-  const initialFilters = { term: '', bairro: '', status: '', conselheiro_ref_id: '', data_registro: '' };
+  const initialFilters = { term: '', bairro: '', status: '', conselheiro_ref_id: '', data_registro: '', pasta_guardada: 'NAO' };
   const [localFilters, setLocalFilters] = useState(initialFilters);
   const filters = propFilters !== undefined ? propFilters : localFilters;
   const setFilters = (newFilters: typeof initialFilters) => {
@@ -377,8 +379,15 @@ const DocumentList: React.FC<DocumentListProps> = ({
           
           return false;
         })();
+
+        const filterPasta = filters.pasta_guardada || 'NAO';
+        const matchPasta = (() => {
+          if (filterPasta === 'SIM') return !!doc.is_pasta_guardada;
+          if (filterPasta === 'NAO') return !doc.is_pasta_guardada;
+          return true;
+        })();
         
-        return matchTerm && matchBairro && matchStatus && matchRef && matchDate;
+        return matchTerm && matchBairro && matchStatus && matchRef && matchDate && matchPasta;
       })
       .sort((a, b) => {
         const aTime = a.criado_em ? new Date(a.criado_em).getTime() : 0;
@@ -575,6 +584,11 @@ const DocumentList: React.FC<DocumentListProps> = ({
           <div className="space-y-2.5 flex-1">
             {/* Status Chips Row */}
             <div className="flex flex-wrap items-center gap-2">
+              {doc.is_pasta_guardada && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-100 border border-amber-300 text-amber-900 text-[12px] font-bold shadow-2xs">
+                  <Archive className="w-3.5 h-3.5 text-amber-700" /> Pasta Guardada
+                </span>
+              )}
               {doc.is_urgente && (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-rose-600 text-white text-[12px] font-black uppercase tracking-wider animate-pulse shadow-sm">
                   <AlertCircle className="w-3.5 h-3.5 text-white" /> URGENTE - PROVIDÊNCIA IMEDIATA
@@ -742,6 +756,15 @@ const DocumentList: React.FC<DocumentListProps> = ({
              )}
 
              <div className="flex items-center justify-end gap-2 shrink-0">
+                {onToggleGuardarPasta && !isReadOnly && (
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); onToggleGuardarPasta([doc.id], !doc.is_pasta_guardada); }} 
+                    className={`p-2.5 md:p-2 border rounded-lg transition-all cursor-pointer ${doc.is_pasta_guardada ? 'bg-amber-100 border-amber-300 text-amber-900 hover:bg-amber-200' : 'bg-slate-50 border-slate-200/80 text-slate-600 hover:bg-amber-50 hover:text-amber-800'}`} 
+                    title={doc.is_pasta_guardada ? "Mostrar Pasta (Restaurar)" : "Guardar Pasta (Ocultar)"}
+                  >
+                    <Archive className="w-4 h-4" />
+                  </button>
+                )}
                 {!isReadOnly && (
                   <button 
                     onClick={(e) => { e.stopPropagation(); onEditDoc(doc.id); }} 
@@ -806,8 +829,8 @@ const DocumentList: React.FC<DocumentListProps> = ({
            </button>
         </div>
 
-        {/* 5 Filter inputs row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        {/* 6 Filter inputs row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
             <input 
@@ -861,7 +884,45 @@ const DocumentList: React.FC<DocumentListProps> = ({
               onChange={(e) => setFilters({...filters, data_registro: e.target.value})} 
             />
           </div>
+          <select 
+            className={`h-10 px-3 border rounded-xl text-xs font-bold outline-none transition-all cursor-pointer ${
+              (filters.pasta_guardada === 'SIM' || filters.pasta_guardada === 'TODAS') 
+                ? 'bg-amber-50 border-amber-300 text-amber-900 focus:ring-2 focus:ring-amber-500/20' 
+                : 'bg-slate-50 border-slate-200/80 text-slate-800 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
+            }`} 
+            value={filters.pasta_guardada || 'NAO'} 
+            onChange={(e) => setFilters({...filters, pasta_guardada: e.target.value})}
+          >
+            <option value="NAO">📂 Pastas Visíveis (Ativas)</option>
+            <option value="SIM">📦 Pastas Guardadas</option>
+            <option value="TODAS">📁 Todas (Visíveis + Guardadas)</option>
+          </select>
         </div>
+
+        {filters.pasta_guardada === 'SIM' && (
+          <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-amber-100 border border-amber-200 rounded-xl flex items-center justify-center shrink-0">
+                <Archive className="w-4 h-4 text-amber-800" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                  Consulta a Pastas Guardadas
+                </span>
+                <p className="text-xs text-amber-800 font-medium mt-0.5">
+                  Exibindo apenas procedimentos de pastas familiares guardadas/ocultas.
+                </p>
+              </div>
+            </div>
+            <button 
+              onClick={() => setFilters({ ...filters, pasta_guardada: 'NAO' })} 
+              className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-xs shrink-0"
+            >
+              <span>Voltar para Pastas Visíveis</span>
+            </button>
+          </div>
+        )}
 
         {/* View mode tabs and grouping toggle button */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
@@ -1065,13 +1126,20 @@ const DocumentList: React.FC<DocumentListProps> = ({
                 <div className={`absolute left-0 top-0 bottom-0 w-2 ${hasAlert ? 'bg-red-500' : 'bg-indigo-500'}`}></div>
 
                 {/* Header Container */}
-                <div className="p-5 md:p-6 pl-6 sm:pl-7 flex flex-col md:flex-row md:items-center justify-between gap-5">
-                  <div className="space-y-3 flex-1">
+                <div className="p-5 md:p-6 pl-6 sm:pl-7 space-y-3">
+                  {/* Top Bar: Badges on Left, Guardar Pasta on Top Right */}
+                  <div className="flex items-start justify-between gap-3">
                     {/* Badge Row */}
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-medium px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200/60">
                         Pasta Familiar
                       </span>
+                      {group.docs.some(d => d.is_pasta_guardada) && (
+                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1.5 shadow-2xs">
+                          <Archive className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Pasta Guardada</span>
+                        </span>
+                      )}
                       <span className="text-xs font-medium px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/60">
                         {group.docs.length} {group.docs.length === 1 ? 'Procedimento' : 'Procedimentos'}
                       </span>
@@ -1086,93 +1154,132 @@ const DocumentList: React.FC<DocumentListProps> = ({
                       )}
                     </div>
 
-                    {/* Responsável - 22px font weight 700 */}
-                    <h3 className="text-[22px] font-bold text-slate-900 tracking-tight leading-snug">
-                      RESPONSÁVEL: {group.genitora_nome}
-                    </h3>
-
-                    {/* Criança - 18px font weight 600 */}
-                    {childNames.length > 0 && (
-                      <div className="text-[18px] font-semibold text-slate-800 flex items-center gap-2">
-                        <Baby className="w-5 h-5 text-indigo-600 shrink-0" />
-                        <span>
-                          {childNames.length === 1 ? 'Criança / Adolescente:' : 'Crianças / Adolescentes:'}{' '}
-                          <span className="text-indigo-900 font-semibold">{childNames.join(', ')}</span>
-                        </span>
-                      </div>
-                    )}
-
-                    {/* CPF • Bairro • Titular - 14px font weight 500 */}
-                    <div className="text-[14px] font-medium text-slate-600 flex flex-wrap items-center gap-4">
-                      {group.cpf_genitora && <span>CPF: {group.cpf_genitora}</span>}
-                      {group.bairro && (
-                        <span className="flex items-center gap-1 text-emerald-700">
-                          <MapPin className="w-3.5 h-3.5" /> Bairro: {group.bairro}
-                        </span>
-                      )}
-                      {refCouncilor && (
-                        <span className="text-blue-700">
-                          <UserCheck className="w-3.5 h-3.5 inline mr-1" /> Titular: {refCouncilor.nome}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Etiquetas / Chips - 12px font weight 500 */}
-                    <div className="flex flex-wrap items-center gap-2 pt-1">
-                      {Array.from(new Set(group.docs.map(d => d.origem).filter(Boolean))).map(orig => {
-                        const info = getOrigemIconAndStyle(orig);
+                    {/* Top Right: Guardar / Mostrar Pasta */}
+                    {onToggleGuardarPasta && !isReadOnly && (() => {
+                      const isFolderGuardada = group.docs.every(d => d.is_pasta_guardada);
+                      if (isFolderGuardada) {
                         return (
-                          <span key={orig} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200/80 text-slate-700 text-[12px] font-medium" title="Origem do Caso">
-                            {info.icon} <span>{info.label}</span>
-                          </span>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleGuardarPasta(group.docs.map(d => d.id), false);
+                            }}
+                            className="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                            title="Mostrar/Restaurar esta Pasta Familiar na lista de visíveis"
+                          >
+                            <FolderOpen className="w-3.5 h-3.5 text-white" />
+                            <span>Mostrar Pasta</span>
+                          </button>
                         );
-                      })}
-                      {Array.from(new Set(group.docs.map(d => d.canal_comunicado).filter(Boolean))).map(canal => {
-                        const info = getCanalIconAndStyle(canal);
+                      } else {
                         return (
-                          <span key={canal} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200/80 text-slate-700 text-[12px] font-medium" title="Canal do Comunicado">
-                            {info.icon} <span>{info.label}</span>
-                          </span>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleGuardarPasta(group.docs.map(d => d.id), true);
+                            }}
+                            className="shrink-0 px-3.5 py-1.5 bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 border border-slate-200/80 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                            title="Guardar esta pasta para deixar a tela principal mais limpa"
+                          >
+                            <Archive className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Guardar Pasta</span>
+                          </button>
                         );
-                      })}
-                    </div>
-
-                    {/* Motivos de alerta resumidos (12px) */}
-                    {hasAlert && (
-                      <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
-                        {myImediataCount > 0 && (
-                          <span className="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200/80 text-[12px] font-medium rounded-lg">
-                            ⚠️ Sua Providência Imediata ({myImediataCount})
-                          </span>
-                        )}
-                        {pendingValidationCount > 0 && (
-                          <span className="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200/80 text-[12px] font-medium rounded-lg">
-                            📋 Validação Colegiado ({pendingValidationCount})
-                          </span>
-                        )}
-                        {revalidacaoCount > 0 && (
-                          <span className="px-2.5 py-1 bg-red-50 text-red-800 border border-red-200/80 text-[12px] font-medium rounded-lg">
-                            ⚡ Revalidação ({revalidacaoCount})
-                          </span>
-                        )}
-                        {expiredMonitoramentoCount > 0 && (
-                          <span className="px-2.5 py-1 bg-amber-50 text-amber-900 border border-amber-200/80 text-[12px] font-medium rounded-lg">
-                            ⏱️ Prazo Expirado ({expiredMonitoramentoCount})
-                          </span>
-                        )}
-                      </div>
-                    )}
+                      }
+                    })()}
                   </div>
-                  
-                  {/* Botão Abrir / Recolher Pasta */}
-                  <div className="shrink-0 self-start md:self-center">
-                    <button 
-                      onClick={() => toggleFolder(group.key)}
-                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl font-medium text-xs flex items-center gap-2 transition-all cursor-pointer border border-slate-200/60"
-                    >
-                      <span>{isExpanded ? 'Recolher Pasta' : 'Abrir Pasta'}</span>
-                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </button>
+
+                  {/* Main Header Content & Abrir Pasta Button */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-3 flex-1">
+                      {/* Responsável - 22px font weight 700 */}
+                      <h3 className="text-[22px] font-bold text-slate-900 tracking-tight leading-snug">
+                        RESPONSÁVEL: {group.genitora_nome}
+                      </h3>
+
+                      {/* Criança - 18px font weight 600 */}
+                      {childNames.length > 0 && (
+                        <div className="text-[18px] font-semibold text-slate-800 flex items-center gap-2">
+                          <Baby className="w-5 h-5 text-indigo-600 shrink-0" />
+                          <span>
+                            {childNames.length === 1 ? 'Criança / Adolescente:' : 'Crianças / Adolescentes:'}{' '}
+                            <span className="text-indigo-900 font-semibold">{childNames.join(', ')}</span>
+                          </span>
+                        </div>
+                      )}
+
+                      {/* CPF • Bairro • Titular - 14px font weight 500 */}
+                      <div className="text-[14px] font-medium text-slate-600 flex flex-wrap items-center gap-4">
+                        {group.cpf_genitora && <span>CPF: {group.cpf_genitora}</span>}
+                        {group.bairro && (
+                          <span className="flex items-center gap-1 text-emerald-700">
+                            <MapPin className="w-3.5 h-3.5" /> Bairro: {group.bairro}
+                          </span>
+                        )}
+                        {refCouncilor && (
+                          <span className="text-blue-700">
+                            <UserCheck className="w-3.5 h-3.5 inline mr-1" /> Titular: {refCouncilor.nome}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Etiquetas / Chips - 12px font weight 500 */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        {Array.from(new Set(group.docs.map(d => d.origem).filter(Boolean))).map(orig => {
+                          const info = getOrigemIconAndStyle(orig);
+                          return (
+                            <span key={orig} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200/80 text-slate-700 text-[12px] font-medium" title="Origem do Caso">
+                              {info.icon} <span>{info.label}</span>
+                            </span>
+                          );
+                        })}
+                        {Array.from(new Set(group.docs.map(d => d.canal_comunicado).filter(Boolean))).map(canal => {
+                          const info = getCanalIconAndStyle(canal);
+                          return (
+                            <span key={canal} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200/80 text-slate-700 text-[12px] font-medium" title="Canal do Comunicado">
+                              {info.icon} <span>{info.label}</span>
+                            </span>
+                          );
+                        })}
+                      </div>
+
+                      {/* Motivos de alerta resumidos (12px) */}
+                      {hasAlert && (
+                        <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                          {myImediataCount > 0 && (
+                            <span className="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200/80 text-[12px] font-medium rounded-lg">
+                              ⚠️ Sua Providência Imediata ({myImediataCount})
+                            </span>
+                          )}
+                          {pendingValidationCount > 0 && (
+                            <span className="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200/80 text-[12px] font-medium rounded-lg">
+                              📋 Validação Colegiado ({pendingValidationCount})
+                            </span>
+                          )}
+                          {revalidacaoCount > 0 && (
+                            <span className="px-2.5 py-1 bg-red-50 text-red-800 border border-red-200/80 text-[12px] font-medium rounded-lg">
+                              ⚡ Revalidação ({revalidacaoCount})
+                            </span>
+                          )}
+                          {expiredMonitoramentoCount > 0 && (
+                            <span className="px-2.5 py-1 bg-amber-50 text-amber-900 border border-amber-200/80 text-[12px] font-medium rounded-lg">
+                              ⏱️ Prazo Expirado ({expiredMonitoramentoCount})
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Botão Abrir / Recolher Pasta */}
+                    <div className="shrink-0 self-start md:self-center">
+                      <button 
+                        onClick={() => toggleFolder(group.key)}
+                        className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl font-medium text-xs flex items-center gap-2 transition-all cursor-pointer border border-slate-200/60"
+                      >
+                        <span>{isExpanded ? 'Recolher Pasta' : 'Abrir Pasta'}</span>
+                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
 

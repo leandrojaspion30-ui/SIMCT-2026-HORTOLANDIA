@@ -219,6 +219,7 @@ export interface Documento {
   providencia_imediata_manual?: string;
   local_ocorrencia?: string;
   alertas_status_referencia?: AlertaStatusReferencia[];
+  is_pasta_guardada?: boolean;
 }
 
 export interface Atribuicao136Entry {

@@ -97,7 +97,7 @@ const App: React.FC = () => {
   }, [currentUser]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'register' | 'my-docs' | 'monitoring' | 'logs' | 'search' | 'settings' | 'agenda' | 'statistics' | 'edit' | 'user-management' | 'plantao' | 'global-statistics' | 'distribution-test' | 'jarvis' | 'library'>('dashboard');
   const [dashboardViewMode, setDashboardViewMode] = useState<'ALL' | 'REF' | 'IMED' | 'VALID'>('ALL');
-  const [dashboardFilters, setDashboardFilters] = useState({ term: '', bairro: '', status: '', conselheiro_ref_id: '', data_registro: '' });
+  const [dashboardFilters, setDashboardFilters] = useState({ term: '', bairro: '', status: '', conselheiro_ref_id: '', data_registro: '', pasta_guardada: 'NAO' });
   const [dashboardExpandedFolders, setDashboardExpandedFolders] = useState<Record<string, boolean>>({});
   const [dashboardFocusedFolderKey, setDashboardFocusedFolderKey] = useState<string | null>(null);
   const [dashboardIsGroupedByFamily, setDashboardIsGroupedByFamily] = useState<boolean>(true);
@@ -1207,6 +1207,23 @@ const App: React.FC = () => {
     if (activeTab === 'register' || activeTab === 'plantao') return <DocumentRegistration documents={documents} users={filteredUsers} agenda={agenda} currentUser={currentUser} onSubmit={handleDocumentSubmit} onCancel={goBack} isReadOnly={activeTab === 'register' ? !isAdministrative : false} title={activeTab === 'plantao' ? 'SIMCT - Novo Proced/Plantão' : undefined} nameMap={userNameMap} allUsers={filteredUsers} scaleExceptions={scaleExceptions} />;
     if (activeTab === 'edit' && editingDocId) return <DocumentRegistration documents={documents} users={filteredUsers} agenda={agenda} currentUser={currentUser} initialData={documents.find(d => d.id === editingDocId)} onSubmit={handleDocumentSubmit} onCancel={goBack} isReadOnly={!isAdministrative} nameMap={userNameMap} allUsers={filteredUsers} scaleExceptions={scaleExceptions} />;
     
+    const handleToggleGuardarPasta = async (docIds: string[], guardar: boolean) => {
+      try {
+        for (const id of docIds) {
+          await saveDocument({ id, is_pasta_guardada: guardar });
+        }
+        setAllDocuments(prev => prev.map(d => docIds.includes(d.id) ? { ...d, is_pasta_guardada: guardar } : d));
+        const logDesc = guardar 
+          ? `PASTA FAMILIAR: Pasta com ${docIds.length} procedimento(s) guardada/ocultada na tela principal.`
+          : `PASTA FAMILIAR: Pasta com ${docIds.length} procedimento(s) restaurada/exibida na tela principal.`;
+        if (docIds[0]) {
+          addLog(docIds[0], logDesc, 'DOCUMENTO');
+        }
+      } catch (err) {
+        console.error('Erro ao guardar/restaurar pasta familiar:', err);
+      }
+    };
+
     if (selectedDocId) {
       const doc = documents.find(d => d.id === selectedDocId);
       if (!doc) return null;
@@ -1327,6 +1344,7 @@ const App: React.FC = () => {
               }} 
               onScience={handleScience} 
               onUpdateStatus={handleUpdateStatus} 
+              onToggleGuardarPasta={handleToggleGuardarPasta}
               viewMode={dashboardViewMode}
               onViewModeChange={setDashboardViewMode}
               filters={dashboardFilters}
@@ -1381,6 +1399,7 @@ const App: React.FC = () => {
             }} 
             onScience={handleScience} 
             onUpdateStatus={handleUpdateStatus}  
+            onToggleGuardarPasta={handleToggleGuardarPasta}
             isMyReferenceView={true} 
             expandedFolders={myDocsExpandedFolders}
             onExpandedFoldersChange={setMyDocsExpandedFolders}
