@@ -206,6 +206,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
   onFocusedFolderKeyChange
 }) => {
   const [docToDelete, setDocToDelete] = useState<string | null>(null);
+  const [confirmGuardarPasta, setConfirmGuardarPasta] = useState<{ docIds: string[]; guardar: boolean; label?: string } | null>(null);
   
   const [localViewMode, setLocalViewMode] = useState<'ALL' | 'REF' | 'IMED' | 'VALID'>(isMyReferenceView ? 'REF' : 'ALL');
   const myViewMode = propViewMode !== undefined ? propViewMode : localViewMode;
@@ -762,7 +763,14 @@ const DocumentList: React.FC<DocumentListProps> = ({
              <div className="flex items-center justify-end gap-2 shrink-0">
                 {onToggleGuardarPasta && !isReadOnly && (
                   <button 
-                    onClick={(e) => { e.stopPropagation(); onToggleGuardarPasta([doc.id], !doc.is_pasta_guardada); }} 
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      setConfirmGuardarPasta({
+                        docIds: [doc.id],
+                        guardar: !doc.is_pasta_guardada,
+                        label: `o procedimento #${doc.informacoes_documento || doc.id.slice(0, 6)}`
+                      });
+                    }} 
                     className={`p-2.5 md:p-2 border rounded-lg transition-all cursor-pointer ${doc.is_pasta_guardada ? 'bg-amber-100 border-amber-300 text-amber-900 hover:bg-amber-200' : 'bg-slate-50 border-slate-200/80 text-slate-600 hover:bg-amber-50 hover:text-amber-800'}`} 
                     title={doc.is_pasta_guardada ? "Mostrar Pasta (Restaurar)" : "Guardar Pasta (Ocultar)"}
                   >
@@ -1168,7 +1176,11 @@ const DocumentList: React.FC<DocumentListProps> = ({
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
-                              onToggleGuardarPasta(group.docs.map(d => d.id), false);
+                              setConfirmGuardarPasta({
+                                docIds: group.docs.map(d => d.id),
+                                guardar: false,
+                                label: `a pasta familiar (${group.docs.length} procedimento${group.docs.length > 1 ? 's' : ''})`
+                              });
                             }}
                             className="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
                             title="Mostrar/Restaurar esta Pasta Familiar na lista de visíveis"
@@ -1182,7 +1194,11 @@ const DocumentList: React.FC<DocumentListProps> = ({
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
-                              onToggleGuardarPasta(group.docs.map(d => d.id), true);
+                              setConfirmGuardarPasta({
+                                docIds: group.docs.map(d => d.id),
+                                guardar: true,
+                                label: `a pasta familiar (${group.docs.length} procedimento${group.docs.length > 1 ? 's' : ''})`
+                              });
                             }}
                             className="shrink-0 px-3.5 py-1.5 bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 border border-slate-200/80 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
                             title="Guardar esta pasta para deixar a tela principal mais limpa"
@@ -1333,6 +1349,44 @@ const DocumentList: React.FC<DocumentListProps> = ({
               </button>
               <button
                 onClick={() => setDocToDelete(null)}
+                className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-semibold text-xs transition-all text-center cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmGuardarPasta && (
+        <div id="guardar-pasta-confirm-modal" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-200">
+            <div className={`w-12 h-12 ${confirmGuardarPasta.guardar ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'} rounded-xl flex items-center justify-center mx-auto mb-4 border flex items-center justify-center`}>
+              {confirmGuardarPasta.guardar ? <Archive className="w-6 h-6" /> : <FolderOpen className="w-6 h-6" />}
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 text-center tracking-tight mb-2">
+              {confirmGuardarPasta.guardar ? 'Confirmar Guardar Pasta?' : 'Confirmar Restaurar Pasta?'}
+            </h3>
+            <p className="text-xs font-medium text-slate-600 text-center mb-6 leading-relaxed">
+              {confirmGuardarPasta.guardar
+                ? `Você confirma que deseja GUARDAR ${confirmGuardarPasta.label || 'esta pasta'}? Ela será oculta da tela principal e armazenada na seção de Pastas Guardadas.`
+                : `Você confirma que deseja MOSTRAR/RESTAURAR ${confirmGuardarPasta.label || 'esta pasta'} na tela principal?`
+              }
+            </p>
+            <div className="flex flex-col gap-2.5">
+              <button
+                onClick={() => {
+                  if (onToggleGuardarPasta) {
+                    onToggleGuardarPasta(confirmGuardarPasta.docIds, confirmGuardarPasta.guardar);
+                  }
+                  setConfirmGuardarPasta(null);
+                }}
+                className={`w-full py-3 ${confirmGuardarPasta.guardar ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'} text-white rounded-xl font-semibold text-xs tracking-wide transition-all text-center cursor-pointer shadow-xs flex items-center justify-center gap-2`}
+              >
+                {confirmGuardarPasta.guardar ? 'Sim, Guardar Pasta' : 'Sim, Mostrar Pasta'}
+              </button>
+              <button
+                onClick={() => setConfirmGuardarPasta(null)}
                 className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-semibold text-xs transition-all text-center cursor-pointer"
               >
                 Cancelar
