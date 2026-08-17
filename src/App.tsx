@@ -74,6 +74,13 @@ const NavItem: React.FC<{ icon: React.ReactNode; label: string; active: boolean;
 
 const App: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
+  const [initialSyncsDone, setInitialSyncsDone] = useState({
+    users: false,
+    documents: false,
+    logs: false,
+    agenda: false
+  });
+
   const hasCleanedUpUsers = useRef(false);
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
@@ -83,6 +90,24 @@ const App: React.FC = () => {
       return null;
     }
   });
+
+  // Determinar se já podemos liberar a tela de carregamento
+  useEffect(() => {
+    if (!isInitializing) return;
+    
+    const isDone = currentUser ? 
+      (initialSyncsDone.users && initialSyncsDone.documents) : 
+      initialSyncsDone.users; // Se não está logado, basta os usuários carregarem para o login funcionar
+
+    if (isDone) {
+      const timer = setTimeout(() => setIsInitializing(false), 800);
+      return () => clearTimeout(timer);
+    }
+    
+    // Timeout de segurança (fallback se o Firestore demorar muito ou estiver offline)
+    const safetyTimer = setTimeout(() => setIsInitializing(false), 5000);
+    return () => clearTimeout(safetyTimer);
+  }, [initialSyncsDone, currentUser, isInitializing]);
 
   useEffect(() => {
     try {
@@ -280,13 +305,22 @@ const App: React.FC = () => {
     ensureAuthenticated();
 
     // Listeners for real-time synchronization
-    const unsubDocs = syncCollection<Documento>('documents', setAllDocuments);
-    const unsubLogs = syncCollection<Log>('logs', setAllLogs, {
+    const unsubDocs = syncCollection<Documento>('documents', (docs) => {
+      setAllDocuments(docs);
+      setInitialSyncsDone(prev => ({ ...prev, documents: true }));
+    });
+    const unsubLogs = syncCollection<Log>('logs', (logs) => {
+      setAllLogs(logs);
+      setInitialSyncsDone(prev => ({ ...prev, logs: true }));
+    }, {
       orderByField: 'data_hora',
       orderDirection: 'desc',
       limitCount: 150
     });
-    const unsubAgenda = syncCollection<AgendaEntry>('agenda', setAllAgenda);
+    const unsubAgenda = syncCollection<AgendaEntry>('agenda', (agenda) => {
+      setAllAgenda(agenda);
+      setInitialSyncsDone(prev => ({ ...prev, agenda: true }));
+    });
     const unsubScaleExceptions = syncCollection<ScaleException>('scale_exceptions', setScaleExceptions);
     const unsubChat = syncCollection<ChatMessage>('chat_messages', (serverMsgs) => {
       setAllChatMessages(prev => {
@@ -348,14 +382,13 @@ const App: React.FC = () => {
       ];
       
       setUsers(merged);
+      setInitialSyncsDone(prev => ({ ...prev, users: true }));
     });
 
     const savedAck = localStorage.getItem('pt_ack_events');
     const savedAckRem = localStorage.getItem('pt_ack_reminders');
     if (savedAck) setAcknowledgedEventIds(JSON.parse(savedAck));
     if (savedAckRem) setAcknowledgedReminderIds(JSON.parse(savedAckRem));
-
-    setTimeout(() => setIsInitializing(false), 1500);
 
     return () => {
       unsubDocs();
@@ -452,8 +485,11 @@ const App: React.FC = () => {
           freshUser.status !== currentUser.status ||
           (!currentUser.is_suplente_active && freshUser.nome !== currentUser.nome) ||
           (currentUser as any).senha !== freshUser.senha;
+
+        // NOVO: Verifica se o termo foi aceito no freshUser mas não no currentUser
+        const termStatusChanged = !currentUser.termo_aceito_em && freshUser.termo_aceito_em;
           
-        if (hasStatusOrCargoOrNameChanged) {
+        if (hasStatusOrCargoOrNameChanged || termStatusChanged) {
           if (freshUser.status === 'BLOQUEADO' || freshUser.status === 'INATIVO' || freshUser.status === 'EXCLUIDO') {
             setCurrentUser(null);
             alert("Sua conta foi inativada/bloqueada administrativamente.");
@@ -463,10 +499,19 @@ const App: React.FC = () => {
               setCurrentUser(prev => prev ? {
                 ...prev,
                 status: freshUser.status,
-                senha: freshUser.senha
+                senha: freshUser.senha,
+                termo_aceito_em: freshUser.termo_aceito_em || prev.termo_aceito_em,
+                termo_versao: freshUser.termo_versao || prev.termo_versao
               } as any : null);
             } else {
-              setCurrentUser(freshUser);
+              // Mescla para não perder propriedades locais se o freshUser (da sincronização inicial ou INITIAL_USERS) estiver incompleto
+              setCurrentUser(prev => prev ? {
+                ...prev,
+                ...freshUser,
+                // Prioriza o que já estiver aceito
+                termo_aceito_em: freshUser.termo_aceito_em || prev.termo_aceito_em,
+                termo_versao: freshUser.termo_versao || prev.termo_versao
+              } : freshUser);
             }
           }
         }
