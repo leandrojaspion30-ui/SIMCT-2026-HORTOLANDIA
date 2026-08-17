@@ -322,6 +322,12 @@ const App: React.FC = () => {
         ...baseUsers.map(bu => {
           const found = storedUsers.find(s => s.id === bu.id);
           const mergedUser = found ? { ...bu, ...found } : bu;
+          // Preserva aceite de termo do localStorage se já aceito previamente neste dispositivo
+          const localAccepted = localStorage.getItem(`simct_term_accepted_${mergedUser.id}`) || 
+                                (mergedUser.nome ? localStorage.getItem(`simct_term_accepted_${mergedUser.nome.toUpperCase()}`) : null);
+          if (!mergedUser.termo_aceito_em && localAccepted) {
+            mergedUser.termo_aceito_em = localAccepted;
+          }
           // Se for suplente e não estiver ativamente substituindo, desvincula de qualquer unidade
           if (mergedUser.perfil === 'SUPLENTE' && !mergedUser.substituicao_ativa) {
             mergedUser.unidade_id = undefined;
@@ -329,6 +335,11 @@ const App: React.FC = () => {
           return mergedUser;
         }),
         ...storedUsers.filter(s => !baseUsers.some(bu => bu.id === s.id)).map(s => {
+          const localAccepted = localStorage.getItem(`simct_term_accepted_${s.id}`) || 
+                                (s.nome ? localStorage.getItem(`simct_term_accepted_${s.nome.toUpperCase()}`) : null);
+          if (!s.termo_aceito_em && localAccepted) {
+            s.termo_aceito_em = localAccepted;
+          }
           if (s.perfil === 'SUPLENTE' && !s.substituicao_ativa) {
             s.unidade_id = undefined;
           }
@@ -691,20 +702,59 @@ const App: React.FC = () => {
     setActiveTab('dashboard');
   };
 
+  const isTermAlreadyAccepted = useMemo(() => {
+    if (!currentUser) return true;
+    const realId = currentUser.real_user_id || currentUser.id;
+    const byUserRecord = Boolean(currentUser.termo_aceito_em);
+    const byLocalRealId = Boolean(localStorage.getItem(`simct_term_accepted_${realId}`));
+    const byLocalCurrentId = Boolean(localStorage.getItem(`simct_term_accepted_${currentUser.id}`));
+    const byLocalName = Boolean(currentUser.nome && localStorage.getItem(`simct_term_accepted_${currentUser.nome.toUpperCase()}`));
+    
+    return byUserRecord || byLocalRealId || byLocalCurrentId || byLocalName;
+  }, [currentUser]);
+
   const handleAcceptTerm = async (version: string) => {
     if (!currentUser) return;
     
     const timestamp = new Date().toISOString();
-    const updatedUser = { 
+    const realId = currentUser.real_user_id || currentUser.id;
+    
+    const updatedUser: User = { 
       ...currentUser, 
       termo_aceito_em: timestamp,
       termo_versao: version
     };
     
-    setCurrentUser(updatedUser);
-    await saveUser(updatedUser);
+    try {
+      localStorage.setItem(`simct_term_accepted_${realId}`, timestamp);
+      localStorage.setItem(`simct_term_accepted_${currentUser.id}`, timestamp);
+      if (currentUser.nome) {
+        localStorage.setItem(`simct_term_accepted_${currentUser.nome.toUpperCase()}`, timestamp);
+      }
+    } catch (e) {
+      console.warn("Falha ao registrar aceite do termo no localStorage:", e);
+    }
     
-    addLog('SISTEMA', `Aceite do Termo de Sigilo e Confidencialidade (Versão: ${version})`, 'SEGURANÇA');
+    setCurrentUser(updatedUser);
+
+    try {
+      await saveUser({
+        id: realId,
+        termo_aceito_em: timestamp,
+        termo_versao: version
+      });
+      if (currentUser.real_user_id && currentUser.id !== currentUser.real_user_id) {
+        await saveUser({
+          id: currentUser.id,
+          termo_aceito_em: timestamp,
+          termo_versao: version
+        });
+      }
+    } catch (err) {
+      console.warn("Falha ao salvar aceite do termo no banco:", err);
+    }
+    
+    addLog('SISTEMA', `Aceite do Termo de Proteção e Sigilo (Primeiro Acesso) pelo usuário [${currentUser.nome}]`, 'SEGURANÇA', updatedUser);
   };
 
   const pushStateToHistory = useCallback((currentTab: typeof activeTab, currentSelectedDocId: string | null, currentEditingDocId: string | null, currentForceEdit: boolean) => {
@@ -1601,8 +1651,8 @@ const App: React.FC = () => {
     </div>
   );
 
-  // NOVO: Fluxo de Aceite do Termo Obrigatório (Especialista em Dados Sensíveis)
-  if (currentUser && (!currentUser.termo_aceito_em || currentUser.termo_versao !== "2026.2-ECA-LGPD")) {
+  // Fluxo de Aceite do Termo Obrigatório: Apenas no primeiro acesso do usuário ao sistema (quando ainda não foi aceito)
+  if (currentUser && !isTermAlreadyAccepted) {
     return (
       <ConfidentialityTermModal 
         userName={currentUser.nome} 
