@@ -843,19 +843,19 @@ const DocumentList: React.FC<DocumentListProps> = ({
         </div>
 
         {/* 6 Filter inputs row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <div className="relative">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+          <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
             <input 
               type="text" 
               placeholder="Pesquisar..." 
-              className="w-full h-10 pl-9 pr-3 bg-slate-50 border border-slate-200/80 rounded-xl outline-none font-medium text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all" 
+              className="w-full h-11 pl-9 pr-3 bg-slate-50 border border-slate-200/80 rounded-xl outline-none font-medium text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all shadow-sm" 
               value={filters.term} 
               onChange={(e) => setFilters({...filters, term: e.target.value})} 
             />
           </div>
           <select 
-            className="h-10 px-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer" 
+            className="w-full h-11 px-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer shadow-sm" 
             value={filters.status} 
             onChange={(e) => setFilters({...filters, status: e.target.value})}
           >
@@ -874,7 +874,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
             <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
           </select>
           <select 
-            className="h-10 px-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer" 
+            className="w-full h-11 px-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer shadow-sm" 
             value={filters.bairro} 
             onChange={(e) => setFilters({...filters, bairro: e.target.value})}
           >
@@ -882,18 +882,18 @@ const DocumentList: React.FC<DocumentListProps> = ({
             {getBairrosByUnidade(currentUser.unidade_id).map(b => <option key={b} value={b}>{b}</option>)}
           </select>
           <select 
-            className="h-10 px-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer" 
+            className="w-full h-11 px-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer shadow-sm" 
             value={filters.conselheiro_ref_id} 
             onChange={(e) => setFilters({...filters, conselheiro_ref_id: e.target.value})}
           >
             <option value="">Qualquer Conselheiro</option>
             {users.filter(u => u.status !== 'EXCLUIDO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === currentUser.unidade_id).map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
           </select>
-          <div className="relative">
+          <div className="relative w-full">
             <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
             <input 
               type="date" 
-              className="w-full h-10 pl-9 pr-3 bg-slate-50 border border-slate-200/80 rounded-xl outline-none font-medium text-xs text-slate-800 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all" 
+              className="w-full h-11 pl-9 pr-3 bg-slate-50 border border-slate-200/80 rounded-xl outline-none font-medium text-xs text-slate-800 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all shadow-sm" 
               value={filters.data_registro} 
               onChange={(e) => setFilters({...filters, data_registro: e.target.value})} 
             />

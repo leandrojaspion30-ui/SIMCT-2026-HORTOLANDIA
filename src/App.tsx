@@ -95,17 +95,19 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isInitializing) return;
     
+    // Se logado, aguarda sincronização completa de todos os pilares de dados
     const isDone = currentUser ? 
-      (initialSyncsDone.users && initialSyncsDone.documents) : 
-      initialSyncsDone.users; // Se não está logado, basta os usuários carregarem para o login funcionar
+      (initialSyncsDone.users && initialSyncsDone.documents && initialSyncsDone.logs && initialSyncsDone.agenda) : 
+      initialSyncsDone.users;
 
     if (isDone) {
-      const timer = setTimeout(() => setIsInitializing(false), 800);
+      // Delay mais conservador para garantir que todos os componentes React tenham tempo de renderizar e estabilizar o layout
+      const timer = setTimeout(() => setIsInitializing(false), 1500);
       return () => clearTimeout(timer);
     }
     
-    // Timeout de segurança (fallback se o Firestore demorar muito ou estiver offline)
-    const safetyTimer = setTimeout(() => setIsInitializing(false), 5000);
+    // Timeout de segurança aumentado para 8 segundos para conexões lentas
+    const safetyTimer = setTimeout(() => setIsInitializing(false), 8000);
     return () => clearTimeout(safetyTimer);
   }, [initialSyncsDone, currentUser, isInitializing]);
 
@@ -346,42 +348,47 @@ const App: React.FC = () => {
       });
     }, { limitCount: 300, orderByField: 'created_at', orderDirection: 'desc' });
     const unsubUsers = syncCollection<UserWithPassword>('users', (storedUsers) => {
-      const baseUsers = INITIAL_USERS.map(u => ({ ...u, status: u.status || 'ATIVO', tentativas_login: 0 }));
-      
-      // Mapeamento de usuários existentes no Firestore para evitar duplicidade com INITIAL_USERS
-      const storedIds = new Set(storedUsers.map(s => s.id));
-      
-      // Mesclar: INITIAL_USERS (podendo ser sobrescrito pelo Firestore) + novos usuários exclusivos do Firestore
-      const merged = [
-        ...baseUsers.map(bu => {
-          const found = storedUsers.find(s => s.id === bu.id);
-          const mergedUser = found ? { ...bu, ...found } : bu;
-          // Preserva aceite de termo do localStorage se já aceito previamente neste dispositivo
-          const localAccepted = localStorage.getItem(`simct_term_accepted_${mergedUser.id}`) || 
-                                (mergedUser.nome ? localStorage.getItem(`simct_term_accepted_${mergedUser.nome.toUpperCase()}`) : null);
-          if (!mergedUser.termo_aceito_em && localAccepted) {
-            mergedUser.termo_aceito_em = localAccepted;
-          }
-          // Se for suplente e não estiver ativamente substituindo, desvincula de qualquer unidade
-          if (mergedUser.perfil === 'SUPLENTE' && !mergedUser.substituicao_ativa) {
-            mergedUser.unidade_id = undefined;
-          }
-          return mergedUser;
-        }),
-        ...storedUsers.filter(s => !baseUsers.some(bu => bu.id === s.id)).map(s => {
-          const localAccepted = localStorage.getItem(`simct_term_accepted_${s.id}`) || 
-                                (s.nome ? localStorage.getItem(`simct_term_accepted_${s.nome.toUpperCase()}`) : null);
-          if (!s.termo_aceito_em && localAccepted) {
-            s.termo_aceito_em = localAccepted;
-          }
-          if (s.perfil === 'SUPLENTE' && !s.substituicao_ativa) {
-            s.unidade_id = undefined;
-          }
-          return s;
-        })
-      ];
-      
-      setUsers(merged);
+      setUsers(prev => {
+        const baseUsers = INITIAL_USERS.map(u => ({ ...u, status: u.status || 'ATIVO', tentativas_login: 0 }));
+        
+        // Mapeamento de usuários existentes no Firestore para evitar duplicidade com INITIAL_USERS
+        const storedIds = new Set(storedUsers.map(s => s.id));
+        
+        // Mesclar: INITIAL_USERS (podendo ser sobrescrito pelo Firestore) + novos usuários exclusivos do Firestore
+        const merged = [
+          ...baseUsers.map(bu => {
+            const found = storedUsers.find(s => s.id === bu.id);
+            const mergedUser = found ? { ...bu, ...found } : bu;
+            // Preserva aceite de termo do localStorage se já aceito previamente neste dispositivo
+            const localAccepted = localStorage.getItem(`simct_term_accepted_${mergedUser.id}`) || 
+                                  (mergedUser.nome ? localStorage.getItem(`simct_term_accepted_${mergedUser.nome.toUpperCase()}`) : null);
+            if (!mergedUser.termo_aceito_em && localAccepted) {
+              mergedUser.termo_aceito_em = localAccepted;
+            }
+            // Se for suplente e não estiver ativamente substituindo, desvincula de qualquer unidade
+            if (mergedUser.perfil === 'SUPLENTE' && !mergedUser.substituicao_ativa) {
+              mergedUser.unidade_id = undefined;
+            }
+            return mergedUser;
+          }),
+          ...storedUsers.filter(s => !baseUsers.some(bu => bu.id === s.id)).map(s => {
+            const localAccepted = localStorage.getItem(`simct_term_accepted_${s.id}`) || 
+                                  (s.nome ? localStorage.getItem(`simct_term_accepted_${s.nome.toUpperCase()}`) : null);
+            if (!s.termo_aceito_em && localAccepted) {
+              s.termo_aceito_em = localAccepted;
+            }
+            if (s.perfil === 'SUPLENTE' && !s.substituicao_ativa) {
+              s.unidade_id = undefined;
+            }
+            return s;
+          })
+        ];
+        
+        // Compara o conteúdo (exceto heartbeats e referências de objetos) para evitar re-renders desnecessários
+        // No entanto, como heartbeats são usados para o status online, precisamos atualizar o estado,
+        // mas o useEffect que consome 'users' deve ser cuidadoso.
+        return merged;
+      });
       setInitialSyncsDone(prev => ({ ...prev, users: true }));
     });
 
@@ -422,102 +429,90 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [currentUser, currentSessionId]);
 
+  // Recuperação de Sessão (Cold Start)
   useEffect(() => {
-    if (!currentUser) return;
+    if (currentUser || !currentSessionId || users.length === 0) return;
+    
+    const sessionUser = users.find(u => u.current_session_id === currentSessionId);
+    if (sessionUser) {
+      const now = Date.now();
+      const lastHB = sessionUser.last_heartbeat ? new Date(sessionUser.last_heartbeat).getTime() : 0;
+      
+      // Valida se a sessão ainda é "fresca" (limite de 12 horas para recovery automático)
+      if (now - lastHB < 12 * 60 * 60 * 1000) {
+        setCurrentUser(sessionUser);
+      } else {
+        localStorage.removeItem('simct_session_id');
+        setCurrentSessionId(null);
+      }
+    }
+  }, [users, currentSessionId, currentUser]);
+
+  // Sincronização e Validação do Usuário Logado
+  useEffect(() => {
+    if (users.length === 0 || !currentUser) return;
     
     const realId = currentUser.real_user_id || currentUser.id;
     const freshUser = users.find(u => u.id === realId);
     
     if (freshUser) {
-      // Check for session hijacking/duplicate session
+      // 1. Validação de Sessão Duplicada
       if (currentSessionId && freshUser.current_session_id && freshUser.current_session_id !== currentSessionId) {
-        // Double check heartbeat to see if the other session is truly alive
         const now = Date.now();
         const lastHB = freshUser.last_heartbeat ? new Date(freshUser.last_heartbeat).getTime() : 0;
-        if (now - lastHB < 60000) { // 1 minute threshold
+        if (now - lastHB < 60000) {
            setCurrentUser(null);
            setCurrentSessionId(null);
            localStorage.removeItem('simct_session_id');
-           alert("SESSÃO ENCERRADA: Este usuário foi conectado em outro dispositivo ou navegador.");
+           alert("SESSÃO ENCERRADA: Este usuário foi conectado em outro local.");
            return;
         }
       }
 
-      const now = new Date().toISOString().split('T')[0];
-      
-      const shouldDeactivateSubstitutedAccess = 
-        currentUser.perfil === 'CONSELHEIRO' && 
-        !currentUser.is_suplente_active && 
-        currentUser.substituicao_ativa && 
-        !freshUser.substituicao_ativa; // A substituição acabou! Ele ganha acesso novamente!
-        
-      const shouldDeactivateSuplenteActiveAccess =
-        currentUser.is_suplente_active && 
-        (!freshUser.substituicao_ativa || freshUser.status === 'INATIVO'); // A suplência acabou para o suplente ativo!
+      // 2. Sincronização de Dados Críticos (RH / Status)
+      // Usamos campos específicos para evitar loops infinitos por referências de objetos
+      const hasCriticalChanges = 
+        freshUser.status !== currentUser.status || 
+        freshUser.cargo !== currentUser.cargo ||
+        (!currentUser.is_suplente_active && freshUser.nome !== currentUser.nome) ||
+        (currentUser as any).senha !== (freshUser as any).senha ||
+        (!currentUser.termo_aceito_em && freshUser.termo_aceito_em);
 
-      const shouldKickOutForBeingSubstituted =
-        currentUser.perfil === 'CONSELHEIRO' &&
-        !currentUser.is_suplente_active &&
-        !currentUser.substituicao_ativa &&
-        freshUser.substituicao_ativa;
+      if (hasCriticalChanges) {
+        // Bloqueio Real-Time
+        const isBlocked = freshUser.status === 'BLOQUEADO' || freshUser.status === 'INATIVO' || freshUser.status === 'EXCLUIDO';
+        const isAdministrative = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
         
-      if (shouldDeactivateSubstitutedAccess) {
-        // O conselheiro titular volta a ter acesso completo automaticamente!
-        setCurrentUser({
-          ...freshUser,
-          substituicao_ativa: false,
-          data_inicio_substituicao: undefined,
-          data_fim_prevista: undefined
-        });
-        addLog('SISTEMA', `SESSÃO: Conselheiro [${freshUser.nome}] teve o acesso reestabelecido automaticamente após fim da suplência.`, 'SISTEMA', freshUser);
-      } else if (shouldKickOutForBeingSubstituted) {
-        // O conselheiro titular teve substituição iniciada enquanto estava logado: desconecta
-        setCurrentUser(null);
-        alert("ACESSO SUSPENSO: Sua conta entrou em período de suplência ativa e está sendo temporariamente substituída.");
-      } else if (shouldDeactivateSuplenteActiveAccess) {
-        // Encerra a sessão do suplente que estava logado assumindo o lugar do conselheiro
-        setCurrentUser(null);
-        alert("Sua suplência foi encerrada e seu acesso temporário foi concluído.");
-        addLog('SISTEMA', `SESSÃO: Sessão da suplente [${freshUser.nome}] foi concluída automaticamente.`, 'SISTEMA', freshUser);
-      } else {
-        // Se outras propriedades mudaram (por exemplo se mudou senha ou status)
-        const hasStatusOrCargoOrNameChanged =
-          freshUser.status !== currentUser.status ||
-          (!currentUser.is_suplente_active && freshUser.nome !== currentUser.nome) ||
-          (currentUser as any).senha !== freshUser.senha;
-
-        // NOVO: Verifica se o termo foi aceito no freshUser mas não no currentUser
-        const termStatusChanged = !currentUser.termo_aceito_em && freshUser.termo_aceito_em;
-          
-        if (hasStatusOrCargoOrNameChanged || termStatusChanged) {
-          if (freshUser.status === 'BLOQUEADO' || freshUser.status === 'INATIVO' || freshUser.status === 'EXCLUIDO') {
-            setCurrentUser(null);
-            alert("Sua conta foi inativada/bloqueada administrativamente.");
-          } else {
-            // Atualiza dados gerais de perfil mantendo as funções de suplente se ativo
-            if (currentUser.is_suplente_active) {
-              setCurrentUser(prev => prev ? {
-                ...prev,
-                status: freshUser.status,
-                senha: freshUser.senha,
-                termo_aceito_em: freshUser.termo_aceito_em || prev.termo_aceito_em,
-                termo_versao: freshUser.termo_versao || prev.termo_versao
-              } as any : null);
-            } else {
-              // Mescla para não perder propriedades locais se o freshUser (da sincronização inicial ou INITIAL_USERS) estiver incompleto
-              setCurrentUser(prev => prev ? {
-                ...prev,
-                ...freshUser,
-                // Prioriza o que já estiver aceito
-                termo_aceito_em: freshUser.termo_aceito_em || prev.termo_aceito_em,
-                termo_versao: freshUser.termo_versao || prev.termo_versao
-              } : freshUser);
-            }
-          }
+        if (isBlocked && !isAdministrative) {
+          setCurrentUser(null);
+          setCurrentSessionId(null);
+          localStorage.removeItem('simct_session_id');
+          alert("Sua conta foi desativada.");
+          return;
         }
+
+        // Atualização Atômica
+        setCurrentUser(prev => {
+          if (!prev) return freshUser;
+          // Deep field check again inside updater to be 100% safe against loops
+          if (prev.status === freshUser.status && 
+              prev.nome === freshUser.nome && 
+              prev.cargo === freshUser.cargo &&
+              (prev as any).senha === (freshUser as any).senha &&
+              prev.termo_aceito_em === freshUser.termo_aceito_em) {
+            return prev;
+          }
+          return {
+            ...prev,
+            ...freshUser,
+            is_suplente_active: prev.is_suplente_active,
+            real_user_id: prev.real_user_id,
+            substituted_name: prev.substituted_name
+          };
+        });
       }
     }
-  }, [users, currentUser]);
+  }, [users, currentUser?.id, currentUser?.status, currentUser?.nome, currentUser?.cargo, (currentUser as any)?.senha, currentUser?.termo_aceito_em]);
 
   const addLog = useCallback(async (docId: string, acao: string, tipo: LogType = 'SISTEMA', customUser?: User) => {
     const user = customUser || currentUser;
@@ -1407,7 +1402,7 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 self-start md:self-center shrink-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 self-stretch sm:self-center shrink-0">
                     {unreadReferenceAlerts.length > 0 && (
                       <button 
                         onClick={() => {
@@ -1416,7 +1411,7 @@ const App: React.FC = () => {
                             handleOpenDocument(unreadReferenceAlerts[0].id, true);
                           }
                         }}
-                        className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                        className="w-full sm:w-auto px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-semibold text-xs transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                       >
                         <span>Minha Referência ({unreadReferenceAlerts.length})</span>
                         <ArrowRight className="w-3.5 h-3.5" />
@@ -1430,7 +1425,7 @@ const App: React.FC = () => {
                             handleOpenDocument(pendingValidations[0].id, true);
                           }
                         }}
-                        className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                        className="w-full sm:w-auto px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold text-xs transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                       >
                         <span>Validar Agora ({pendingValidations.length})</span>
                         <ArrowRight className="w-3.5 h-3.5" />
@@ -1439,7 +1434,7 @@ const App: React.FC = () => {
                     {expiredMonitoringItems.length > 0 && (
                       <button 
                         onClick={() => navigateTo('monitoring')}
-                        className="px-4 py-2.5 bg-amber-50 border border-amber-200/80 text-amber-800 hover:bg-amber-100 rounded-xl font-semibold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                        className="w-full sm:w-auto px-4 py-2.5 bg-amber-50 border border-amber-200/80 text-amber-800 hover:bg-amber-100 rounded-xl font-semibold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                       >
                         <span>Ver Monitoramento ({expiredMonitoringItems.length})</span>
                         <ArrowRight className="w-3.5 h-3.5 text-amber-700" />
@@ -1577,7 +1572,22 @@ const App: React.FC = () => {
     }
   };
 
-  if (isInitializing) return <div className="min-h-screen bg-[#111827] flex flex-col items-center justify-center text-white"><h1 className="text-[20px] font-bold animate-pulse uppercase tracking-[0.3em]">SIMCT HORTOLÂNDIA</h1></div>;
+  if (isInitializing || (currentSessionId && !currentUser)) {
+    return (
+      <div className="min-h-screen bg-[#111827] flex flex-col items-center justify-center text-white">
+        <div className="flex flex-col items-center gap-6">
+          <img src={CT_LOGO_URL} alt="SIMCT" className="w-20 h-20 animate-pulse" />
+          <h1 className="text-[20px] font-bold animate-pulse uppercase tracking-[0.3em]">SIMCT HORTOLÂNDIA</h1>
+          <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-widest">
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+            <span className="ml-2">Sincronizando Dados...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!currentUser) return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-[#F9FAFB]">
