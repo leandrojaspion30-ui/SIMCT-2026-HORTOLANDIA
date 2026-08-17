@@ -74,6 +74,7 @@ const NavItem: React.FC<{ icon: React.ReactNode; label: string; active: boolean;
 
 const App: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(localStorage.getItem('simct_session_id'));
   const [initialSyncsDone, setInitialSyncsDone] = useState({
     users: false,
     documents: false,
@@ -91,25 +92,29 @@ const App: React.FC = () => {
     }
   });
 
-  // Determinar se já podemos liberar a tela de carregamento
+  // Gerenciamento refinado da inicialização do app para evitar saltos de layout e flashes de UI
   useEffect(() => {
     if (!isInitializing) return;
     
-    // Se logado, aguarda sincronização completa de todos os pilares de dados
-    const isDone = currentUser ? 
-      (initialSyncsDone.users && initialSyncsDone.documents && initialSyncsDone.logs && initialSyncsDone.agenda) : 
-      initialSyncsDone.users;
+    // Lista de requisitos para considerar o app "pronto"
+    const syncsReady = initialSyncsDone.users && initialSyncsDone.documents && initialSyncsDone.logs && initialSyncsDone.agenda;
+    const sessionReady = !currentSessionId || (currentSessionId && currentUser);
 
-    if (isDone) {
-      // Delay mais conservador para garantir que todos os componentes React tenham tempo de renderizar e estabilizar o layout
-      const timer = setTimeout(() => setIsInitializing(false), 1500);
+    if (syncsReady && sessionReady) {
+      // Pequeno delay para garantir que o React processou todos os estados e o layout está estável
+      const timer = setTimeout(() => {
+        setIsInitializing(false);
+      }, 800);
       return () => clearTimeout(timer);
     }
     
-    // Timeout de segurança aumentado para 8 segundos para conexões lentas
-    const safetyTimer = setTimeout(() => setIsInitializing(false), 8000);
+    // Timeout de segurança para evitar que o app fique travado no loading infinitamente
+    const safetyTimer = setTimeout(() => {
+      console.warn("[SIMCT] Initialization safety timeout reached.");
+      setIsInitializing(false);
+    }, 10000);
     return () => clearTimeout(safetyTimer);
-  }, [initialSyncsDone, currentUser, isInitializing]);
+  }, [initialSyncsDone, currentUser, currentSessionId, isInitializing]);
 
   useEffect(() => {
     try {
@@ -137,7 +142,6 @@ const App: React.FC = () => {
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 1024);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(localStorage.getItem('simct_session_id'));
 
   useEffect(() => {
     const handleResize = () => {

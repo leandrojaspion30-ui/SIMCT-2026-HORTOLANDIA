@@ -829,89 +829,131 @@ const DocumentList: React.FC<DocumentListProps> = ({
   return (
     <div className="space-y-6">
       {/* 2. PAINEL DE BUSCA E FILTRO UNIFICADO */}
-      <div className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+      <div className="bg-white p-4 md:p-6 rounded-[1.5rem] ring-1 ring-slate-200/60 shadow-sm space-y-5">
         <div className="flex items-center justify-between">
-           <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-200/60 flex items-center justify-center shrink-0">
-                <Database className="w-4 h-4 text-blue-600" />
+           <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
+                <Database className="w-5 h-5 text-blue-600" />
               </div>
-              <h3 className="text-sm font-bold text-slate-800 tracking-tight">Painel de Busca SIMCT</h3>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 tracking-tight leading-none">Painel de Busca SIMCT</h3>
+                <p className="text-[10px] text-slate-500 font-medium mt-1 uppercase tracking-wider">Filtrar procedimentos e prontuários</p>
+              </div>
            </div>
-           <button onClick={clearFilters} className="text-xs font-semibold text-red-600 hover:text-red-700 flex items-center gap-1.5 transition-colors cursor-pointer">
-              <RefreshCw className="w-3.5 h-3.5" /> Resetar Busca
+           <button 
+             onClick={clearFilters} 
+             className="px-3 py-1.5 text-[10px] font-bold text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer border border-transparent hover:border-red-100"
+           >
+              <RefreshCw className="w-3 h-3" /> Resetar Busca
            </button>
         </div>
 
-        {/* 6 Filter inputs row */}
+        {/* Filter inputs row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-          <div className="relative w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
+          {/* Search Term */}
+          <div className="relative group">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none group-focus-within:text-blue-500 transition-colors" />
             <input 
               type="text" 
               placeholder="Pesquisar..." 
-              className="w-full h-11 pl-9 pr-3 bg-slate-50 border border-slate-200/80 rounded-xl outline-none font-medium text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all shadow-sm" 
+              className="w-full h-11 pl-10 pr-4 bg-slate-50/50 ring-1 ring-slate-200/60 rounded-xl outline-none font-medium text-[13px] text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all" 
               value={filters.term} 
               onChange={(e) => setFilters({...filters, term: e.target.value})} 
             />
           </div>
-          <select 
-            className="w-full h-11 px-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer shadow-sm" 
-            value={filters.status} 
-            onChange={(e) => setFilters({...filters, status: e.target.value})}
-          >
-            <option value="">Qualquer Status</option>
-            <option value="AGUARDANDO_ANALISE">⏳ AGUARDANDO ANÁLISE</option>
-            <option value="AGUARDANDO_DOCUMENTO">📄 AGUARDANDO DOCUMENTO</option>
-            <option value="AGUARDANDO_VALIDACAO">⚖️ AGUARDANDO VALIDAÇÃO</option>
-            <option value="MEDIDA_APLICADA">✅ MEDIDA APLICADA</option>
-            <option value="AVALIAR_EM_COLEGIADO">👥 AVALIAR EM COLEGIADO</option>
-            <option value="CONCLUIDO">✅ CONCLUÍDO</option>
-            <option value="MONITORAMENTO">📊 EM MONITORAMENTO</option>
-            <option value="MEDIDA_PENDENTE">📋 MEDIDA PENDENTE</option>
-            <option value="NOTIFICADO">🔕 NOTIFICADO</option>
-            <option value="NOTIFICAR">🔔 NOTIFICAR</option>
-            <option value="RESPONDER_OFICIO_JUDICIARIO_MP">⚖️ RESPONDER OFÍCIO DO JUDICIÁRIO/MP</option>
-            <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
-          </select>
-          <select 
-            className="w-full h-11 px-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer shadow-sm" 
-            value={filters.bairro} 
-            onChange={(e) => setFilters({...filters, bairro: e.target.value})}
-          >
-            <option value="">Qualquer Bairro</option>
-            {getBairrosByUnidade(currentUser.unidade_id).map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
-          <select 
-            className="w-full h-11 px-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer shadow-sm" 
-            value={filters.conselheiro_ref_id} 
-            onChange={(e) => setFilters({...filters, conselheiro_ref_id: e.target.value})}
-          >
-            <option value="">Qualquer Conselheiro</option>
-            {users.filter(u => u.status !== 'EXCLUIDO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === currentUser.unidade_id).map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
-          </select>
-          <div className="relative w-full">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
+
+          {/* Status Select */}
+          <div className="relative group">
+            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none group-focus-within:text-blue-500 transition-colors">
+              <Tag className="w-4 h-4" />
+            </div>
+            <select 
+              className="w-full h-11 pl-10 pr-10 bg-slate-50/50 ring-1 ring-slate-200/60 rounded-xl text-[13px] font-medium text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer appearance-none" 
+              value={filters.status} 
+              onChange={(e) => setFilters({...filters, status: e.target.value})}
+            >
+              <option value="">Qualquer Status</option>
+              <option value="AGUARDANDO_ANALISE">⏳ AGUARDANDO ANÁLISE</option>
+              <option value="AGUARDANDO_DOCUMENTO">📄 AGUARDANDO DOCUMENTO</option>
+              <option value="AGUARDANDO_VALIDACAO">⚖️ AGUARDANDO VALIDAÇÃO</option>
+              <option value="MEDIDA_APLICADA">✅ MEDIDA APLICADA</option>
+              <option value="AVALIAR_EM_COLEGIADO">👥 AVALIAR EM COLEGIADO</option>
+              <option value="CONCLUIDO">✅ CONCLUÍDO</option>
+              <option value="MONITORAMENTO">📊 EM MONITORAMENTO</option>
+              <option value="MEDIDA_PENDENTE">📋 MEDIDA PENDENTE</option>
+              <option value="NOTIFICADO">🔕 NOTIFICADO</option>
+              <option value="NOTIFICAR">🔔 NOTIFICAR</option>
+              <option value="RESPONDER_OFICIO_JUDICIARIO_MP">⚖️ RESPONDER OFÍCIO DO JUDICIÁRIO/MP</option>
+              <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
+            </select>
+            <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none group-focus-within:text-blue-500 transition-colors" />
+          </div>
+
+          {/* Bairro Select */}
+          <div className="relative group">
+            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none group-focus-within:text-blue-500 transition-colors">
+              <MapPin className="w-4 h-4" />
+            </div>
+            <select 
+              className="w-full h-11 pl-10 pr-10 bg-slate-50/50 ring-1 ring-slate-200/60 rounded-xl text-[13px] font-medium text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer appearance-none" 
+              value={filters.bairro} 
+              onChange={(e) => setFilters({...filters, bairro: e.target.value})}
+            >
+              <option value="">Qualquer Bairro</option>
+              {getBairrosByUnidade(currentUser.unidade_id).map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+            <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none group-focus-within:text-blue-500 transition-colors" />
+          </div>
+
+          {/* Counselor Select */}
+          <div className="relative group">
+            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none group-focus-within:text-blue-500 transition-colors">
+              <UserRound className="w-4 h-4" />
+            </div>
+            <select 
+              className="w-full h-11 pl-10 pr-10 bg-slate-50/50 ring-1 ring-slate-200/60 rounded-xl text-[13px] font-medium text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer appearance-none" 
+              value={filters.conselheiro_ref_id} 
+              onChange={(e) => setFilters({...filters, conselheiro_ref_id: e.target.value})}
+            >
+              <option value="">Qualquer Conselheiro</option>
+              {users.filter(u => u.status !== 'EXCLUIDO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === currentUser.unidade_id).map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+            </select>
+            <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none group-focus-within:text-blue-500 transition-colors" />
+          </div>
+
+          {/* Date Picker */}
+          <div className="relative group">
+            <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none group-focus-within:text-blue-500 transition-colors" />
             <input 
               type="date" 
-              className="w-full h-11 pl-9 pr-3 bg-slate-50 border border-slate-200/80 rounded-xl outline-none font-medium text-xs text-slate-800 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all shadow-sm" 
+              className="w-full h-11 pl-10 pr-4 bg-slate-50/50 ring-1 ring-slate-200/60 rounded-xl outline-none font-medium text-[13px] text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all" 
               value={filters.data_registro} 
               onChange={(e) => setFilters({...filters, data_registro: e.target.value})} 
             />
           </div>
-          <select 
-            className={`h-10 px-3 border rounded-xl text-xs font-bold outline-none transition-all cursor-pointer ${
-              (filters.pasta_guardada === 'SIM' || filters.pasta_guardada === 'TODAS') 
-                ? 'bg-amber-50 border-amber-300 text-amber-900 focus:ring-2 focus:ring-amber-500/20' 
-                : 'bg-slate-50 border-slate-200/80 text-slate-800 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
-            }`} 
-            value={filters.pasta_guardada || 'NAO'} 
-            onChange={(e) => setFilters({...filters, pasta_guardada: e.target.value})}
-          >
-            <option value="NAO">📂 Pastas Visíveis (Ativas)</option>
-            <option value="SIM">📦 Pastas Guardadas</option>
-            <option value="TODAS">📁 Todas (Visíveis + Guardadas)</option>
-          </select>
+
+          {/* Pasta Guardada Select */}
+          <div className="relative group">
+            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none group-focus-within:text-blue-500 transition-colors">
+              <Archive className="w-4 h-4" />
+            </div>
+            <select 
+              className={`w-full h-11 pl-10 pr-10 rounded-xl text-[13px] font-bold outline-none transition-all cursor-pointer appearance-none ${
+                (filters.pasta_guardada === 'SIM' || filters.pasta_guardada === 'TODAS') 
+                  ? 'bg-amber-50 ring-2 ring-amber-400 text-amber-900 shadow-sm' 
+                  : 'bg-slate-50/50 ring-1 ring-slate-200/60 text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-500/20'
+              }`} 
+              value={filters.pasta_guardada || 'NAO'} 
+              onChange={(e) => setFilters({...filters, pasta_guardada: e.target.value})}
+            >
+              <option value="NAO">📂 Pastas Ativas</option>
+              <option value="SIM">📦 Pastas Guardadas</option>
+              <option value="TODAS">📁 Todas Pastas</option>
+            </select>
+            <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none group-focus-within:text-blue-500 transition-colors" />
+          </div>
         </div>
+
 
         {filters.pasta_guardada === 'SIM' && (
           <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
