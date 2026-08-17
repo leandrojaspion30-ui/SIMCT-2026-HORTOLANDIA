@@ -520,13 +520,27 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     return allUsers.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === nextName && (u.unidade_id || 1) === formData.unidade_id);
   }, [allUsers, documents, isReferenceLocked, formData.conselheiro_referencia_id, initialData, formData.unidade_id, isManualReference, nameMap]);
 
+  const currentRefUser = useMemo(() => {
+    if (formData.conselheiro_referencia_id) {
+      return allUsers.find(u => u.id === formData.conselheiro_referencia_id && (u.unidade_id || 1) === formData.unidade_id);
+    }
+    return assignedReference;
+  }, [formData.conselheiro_referencia_id, assignedReference, allUsers, formData.unidade_id]);
+
+  const isCurrentRefUserInTrio = useMemo(() => {
+    if (!currentRefUser) return false;
+    const refUserName = currentRefUser.nome?.toUpperCase();
+    const mappedRefName = (refUserName && nameMap && nameMap[refUserName]) ? nameMap[refUserName] : refUserName;
+    return Boolean(mappedRefName && trioNames.some(n => isSameCounselorName(n, mappedRefName)));
+  }, [currentRefUser, nameMap, trioNames]);
+
   const assignedImediata = useMemo(() => {
     // 0. SOBRESCRITA MANUAL: Se houver providência manual acionada
     if (formData.providencia_imediata_manual) {
       return allUsers.find(u => u.id === formData.providencia_imediata_manual && (u.unidade_id || 1) === formData.unidade_id);
     }
 
-    // 1. PRIORIDADE ABSOLUTA: Notificação desbloqueia e define a imediata
+    // 1. BLOQUEIO DE DISTRIBUIÇÃO - NOTIFICAÇÃO: Notificação bloqueia o rodízio e direciona diretamente ao conselheiro notificado
     if (formData.notificacao) {
       const notifTargetName = (nameMap && nameMap[formData.notificacao.toUpperCase()]) || formData.notificacao;
       return (
@@ -578,67 +592,30 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     // Para novos documentos, a imediata é sempre baseada no dia real de hoje (todayDate) e usa a escala/trio de hoje
     const dateToUse = todayDate;
 
-    // 2. SE O CONSELHEIRO DE REFERÊNCIA ESTÁ NO TRIO/PLANTÃO DE HOJE:
-    // O sistema DEVE SEMPRE reconhecer e atribuir a providência imediata para ele (ou para seu substituto de plantão).
-    // Esta atribuição NÃO consome o turno da distribuição sequencial.
-    const refUser = (formData.conselheiro_referencia_id ? allUsers.find(u => u.id === formData.conselheiro_referencia_id && (u.unidade_id || 1) === formData.unidade_id) : undefined) || assignedReference;
+    // 3. BLOQUEIO DE DISTRIBUIÇÃO - REFERÊNCIA NO TRIO DO DIA:
+    // Se o Conselheiro de Referência ESTÁ no trio do dia de providência imediata,
+    // o sistema BLOQUEIA a distribuição e atribui a imediata diretamente a ele (ou para seu substituto de plantão).
+    const refUser = currentRefUser;
     const refUserName = refUser?.nome?.toUpperCase();
     const mappedRefName = (refUserName && nameMap && nameMap[refUserName]) ? nameMap[refUserName] : refUserName;
-    const isRefUserInTrio = mappedRefName && trioNames.some(n => isSameCounselorName(n, mappedRefName));
+    const isRefUserInTrio = Boolean(mappedRefName && trioNames.some(n => isSameCounselorName(n, mappedRefName)));
 
     if (isRefUserInTrio && refUser) {
       const activeSubstituteUser = mappedRefName ? allUsers.find(u => u.status === 'ATIVO' && (u.unidade_id || 1) === formData.unidade_id && isSameCounselorName(u.nome, mappedRefName)) : undefined;
       return activeSubstituteUser || refUser;
     }
 
-    // 3. Persistência Familiar no mesmo dia de recebimento/aporte real (Hoje)
-    // Se um documento já foi recebido hoje para esta família/referência, todos os subsequentes de hoje devem ir para o mesmo conselheiro.
-    // Esta regra garante que um conselheiro que pegou o primeiro caso do dia (por rodízio ou referência) continue no caso durante o dia.
-    const sameFamilyTodayDocs = documents.filter(d => {
-      const isDocOfToday = d.data_aporte === dateToUse || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === dateToUse);
-      if (!isDocOfToday || d.unidade_id !== formData.unidade_id || !d.conselheiro_providencia_id || d.id === initialData?.id) {
-        return false;
-      }
-      
-      // Checa se a referência é a mesma
-      const currentRefId = refUser?.id;
-      if (currentRefId && d.conselheiro_referencia_id === currentRefId) return true;
-
-      const cpfGen = (formData.cpf_genitora || '').replace(/\D/g, '');
-      const dCpfGen = (d.cpf_genitora || '').replace(/\D/g, '') || '';
-      if (cpfGen && dCpfGen && cpfGen === dCpfGen) return true;
-
-      const nameGen = formData.genitora_nome?.trim().toUpperCase();
-      const dNameGen = d.genitora_nome?.trim().toUpperCase();
-      if (nameGen && dNameGen && nameGen !== 'NÃO INFORMADO' && nameGen.length >= 3 && nameGen === dNameGen) return true;
-
-      const cpfsCriancas = formData.criancas.map(c => (c.cpf || '').replace(/\D/g, '')).filter(c => c.length === 11);
-      const dCpfsCriancas = d.criancas?.map(c => (c.cpf || '').replace(/\D/g, '')).filter(c => c && c.length === 11) || [];
-      if (cpfsCriancas.length > 0 && dCpfsCriancas.length > 0 && cpfsCriancas.some(cpf => dCpfsCriancas.includes(cpf))) return true;
-
-      const namesCriancas = formData.criancas.map(c => (c.nome || '').trim().toUpperCase()).filter(n => n && n !== 'NÃO INFORMADO');
-      const dNamesCriancas = d.criancas?.map(c => (c.nome || '').trim().toUpperCase()).filter(n => n && n !== 'NÃO INFORMADO') || [];
-      if (namesCriancas.length > 0 && dNamesCriancas.length > 0 && namesCriancas.some(name => dNamesCriancas.includes(name))) return true;
-
-      return false;
-    });
-
-    const sameFamilyTodayDiffProvRef = sameFamilyTodayDocs.find(d => d.conselheiro_providencia_id !== d.conselheiro_referencia_id);
-    const sameFamilyTodayDirect = sameFamilyTodayDiffProvRef || sameFamilyTodayDocs[0];
-
-    if (sameFamilyTodayDirect) {
-      return allUsers.find(u => u.id === sameFamilyTodayDirect.conselheiro_providencia_id && (u.unidade_id || 1) === formData.unidade_id);
-    }
-    
-    // 4. Lógica de Distribuição Justa (Rodízio de Providência Imediata)
-    // Filtramos para ignorar documentos que foram atribuídos por persistência familiar, referência no trio, notificações ou manual para não quebrar a sequência de hoje
+    // 4. DISTRIBUIÇÃO DO TRIO DO DIA (REFERÊNCIA NÃO ESTÁ NO TRIO):
+    // Quando o documento possui conselheiro de referência e ele NÃO ESTÁ no trio do dia de providência imediata,
+    // o sistema DEVE SEGUIR A DISTRIBUIÇÃO SEQUENCIAL (rodízio) entre os conselheiros do trio de hoje.
+    // Filtramos para ignorar documentos que tiveram distribuição bloqueada (notificações, referência no trio, manual ou plantão)
     const todayDocs = documents
       .filter(d => {
         const isDocOfToday = d.data_aporte === dateToUse || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === dateToUse);
         if (!isDocOfToday || d.unidade_id !== formData.unidade_id) {
           return false;
         }
-        return !d.is_family_persistence && !d.is_manual_providencia && !d.is_reference_in_trio && !d.notificacao && !d.is_plantao;
+        return !d.is_manual_providencia && !d.is_reference_in_trio && !d.notificacao && !d.is_plantao;
       })
       .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
 
@@ -654,7 +631,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     const nextName = trioNames[nextIndex];
     
     return allUsers.find(u => u.status === 'ATIVO' && u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, nextName));
-  }, [trioNames, documents, todayDate, formData.notificacao, formData.providencia_imediata_manual, initialData, formData.unidade_id, allUsers, nameMap, familyHistory, formData.cpf_genitora, formData.genitora_nome, formData.criancas, assignedReference]);
+  }, [trioNames, documents, todayDate, formData.notificacao, formData.providencia_imediata_manual, initialData, formData.unidade_id, allUsers, nameMap, currentRefUser]);
 
   const handleChildChange = (index: number, field: keyof ChildData, value: any) => {
     const newChildren = [...formData.criancas];
@@ -803,11 +780,8 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     
     const finalRefName = finalRefUser?.nome?.toUpperCase();
     const mappedFinalRefName = (finalRefName && nameMap && nameMap[finalRefName]) ? nameMap[finalRefName] : finalRefName;
-    const isRefUserInTrio = mappedFinalRefName && trioNames.some(n => isSameCounselorName(n, mappedFinalRefName));
+    const isRefUserInTrio = Boolean(mappedFinalRefName && trioNames.some(n => isSameCounselorName(n, mappedFinalRefName)));
 
-    const isFamilyPersistence = !!sameFamilyTodayDirect && !(isRefUserInTrio && finalRefUser);
-    const isFamilyPersistenceDiffProvRef = !!sameFamilyTodayDiffProvRef && !(isRefUserInTrio && finalRefUser);
-    
     let finalValidators = initialData?.conselheiros_providencia_nomes || trioNames;
 
     if (notifiedName) {
@@ -871,9 +845,9 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
             return manualName ? [manualName, ...trioNames.filter(n => n.toUpperCase() !== manualName)] : finalValidators;
           })()
         : (initialData ? initialData.conselheiros_providencia_nomes : finalValidators),
-      is_family_persistence: isFamilyPersistence,
+      is_family_persistence: false,
       is_manual_providencia: !!formData.providencia_imediata_manual,
-      is_reference_in_trio: isRefUserInTrio && !!finalRefUser,
+      is_reference_in_trio: isRefUserInTrio && !!finalRefUser && !formData.notificacao && !formData.providencia_imediata_manual,
       is_plantao: (() => {
         const parts = (formData.hora_aporte || '00:00').split(':');
         const h = parseInt(parts[0]);
@@ -889,16 +863,12 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
         : (formData.providencia_imediata_manual
             ? `✍️ Imediata atribuída MANUALMENTE: [${assignedImediata?.nome}].`
             : (formData.notificacao 
-                ? `🔔 Imediata vinculada à Notificação: ${formData.notificacao}.` 
+                ? `🔔 Imediata vinculada à Notificação: ${formData.notificacao} (Distribuição Bloqueada).` 
                 : (isRefUserInTrio && finalRefUser
-                    ? `🎯 Imediata vinculada ao Conselheiro de Referência [${finalRefUser.nome}] de plantão no dia.`
-                    : (isFamilyPersistence
-                        ? (isFamilyPersistenceDiffProvRef
-                            ? `👨‍👩‍👧‍👦 Imediata mantida por vínculo familiar (Regra Conselheiro Providência !== Referência no dia).`
-                            : `👨‍👩‍👧‍👦 Imediata mantida por vínculo familiar no mesmo dia.`)
-                        : (isReferenceLocked 
-                            ? `📌 Referência mantida por vínculo histórico.` 
-                            : `✅ Atribuído por Rodízio Alfabético.`))))) + (formData.is_urgente ? ' (🚨 Alerta de Documento Urgente Ativado)' : '')
+                    ? `🎯 Imediata vinculada ao Conselheiro de Referência [${finalRefUser.nome}] de plantão no dia (Distribuição Bloqueada).`
+                    : (isReferenceLocked 
+                        ? `✅ Providência Imediata distribuída por Rodízio do Trio do Dia (Conselheiro de Referência [${finalRefUser?.nome || 'Histórico'}] fora do trio de hoje).` 
+                        : `✅ Providência Imediata distribuída por Rodízio do Trio do Dia (Referência: [${finalRefUser?.nome || 'N/A'}]).`)))) + (formData.is_urgente ? ' (🚨 Alerta de Documento Urgente Ativado)' : '')
     };
 
     if (!finalData.conselheiro_referencia_id) {
@@ -1591,7 +1561,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                   <span className={`text-[9px] px-2 py-1 flex items-center gap-1 rounded-md uppercase font-black ${
                     formData.is_urgente 
                       ? 'bg-rose-600 text-white shadow-xs' 
-                      : (initialData && !formData.providencia_imediata_manual ? 'bg-slate-200 text-slate-700 border border-slate-300' : 'bg-amber-50 text-amber-600')
+                      : (initialData && !formData.providencia_imediata_manual ? 'bg-slate-200 text-slate-700 border border-slate-300' : (formData.notificacao || isCurrentRefUserInTrio ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'))
                   }`}>
                     {(!canEditCouncillors || !formData.providencia_imediata_manual) && <Lock className={`w-3 h-3 ${formData.is_urgente ? 'text-white' : 'text-slate-500'}`} />}
                     {formData.is_urgente
@@ -1600,8 +1570,33 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                           ? 'Cadastrado' 
                           : (formData.providencia_imediata_manual 
                               ? 'Sobrescrita Manual (ADM)' 
-                              : (formData.notificacao ? 'Vínculo de Notificação' : 'Escala do Dia')))}
+                              : (formData.notificacao 
+                                  ? '🔔 Notificação (Bloqueada)' 
+                                  : (isCurrentRefUserInTrio 
+                                      ? '🎯 Referência no Trio (Bloqueada)' 
+                                      : '🔄 Rodízio do Trio (Ref. Fora)'))))}
                   </span>
+                </div>
+              )}
+              {/* Informativo de Regra de Distribuição */}
+              {!initialData && (
+                <div className="text-[10px] px-3 py-1.5 rounded-lg border font-medium">
+                  {formData.notificacao ? (
+                    <div className="flex items-center gap-1.5 text-indigo-700 bg-indigo-50/50">
+                      <Lock className="w-3 h-3 text-indigo-600 shrink-0" />
+                      <span><strong>Distribuição Bloqueada:</strong> Providência imediata vinculada à notificação de {formData.notificacao}.</span>
+                    </div>
+                  ) : isCurrentRefUserInTrio ? (
+                    <div className="flex items-center gap-1.5 text-indigo-700 bg-indigo-50/50">
+                      <Lock className="w-3 h-3 text-indigo-600 shrink-0" />
+                      <span><strong>Distribuição Bloqueada:</strong> Conselheiro de Referência presente no trio do dia ({currentRefUser?.nome || 'N/A'}).</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50/50">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                      <span><strong>Distribuição Ativa:</strong> Conselheiro de Referência fora do trio do dia. Seguindo o rodízio sequencial do trio de hoje.</span>
+                    </div>
+                  )}
                 </div>
               )}
               {!isReadOnly && (

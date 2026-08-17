@@ -358,14 +358,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         const virtualTodayDocs = virtualDocsList
           .filter(d => {
             const isDocOfToday = d.data_aporte === todayDateReal || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === todayDateReal);
-            const isRefOfDocInTrio = (() => {
-              const rUser = users.find(u => u.id === d.conselheiro_referencia_id);
-              const rName = rUser?.nome?.toUpperCase();
-              const mappedRName = (rName && nameMap && nameMap[rName]) ? nameMap[rName] : rName;
-              return mappedRName && virtualTrio.some(n => isSameCounselorName(n, mappedRName));
-            })();
-            const isFamPersistence = d.is_family_persistence && !isRefOfDocInTrio;
-            return isDocOfToday && d.unidade_id === selectedUnidade && !isFamPersistence && !d.notificacao && !d.is_manual_providencia;
+            return isDocOfToday && d.unidade_id === selectedUnidade && !d.is_reference_in_trio && !d.notificacao && !d.is_manual_providencia && !d.is_plantao;
           })
           .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
 
@@ -535,14 +528,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         const liveTodayDocs = liveDocsList
           .filter(d => {
             const isDocOfToday = d.data_aporte === todayDateReal || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === todayDateReal);
-            const isRefOfDocInTrio = (() => {
-              const rUser = users.find(u => u.id === d.conselheiro_referencia_id);
-              const rName = rUser?.nome?.toUpperCase();
-              const mappedRName = (rName && nameMap && nameMap[rName]) ? nameMap[rName] : rName;
-              return mappedRName && liveTrio.some(n => isSameCounselorName(n, mappedRName));
-            })();
-            const isFamPersistence = d.is_family_persistence && !isRefOfDocInTrio;
-            return isDocOfToday && d.unidade_id === selectedUnidade && !isFamPersistence && !d.notificacao && !d.is_manual_providencia;
+            return isDocOfToday && d.unidade_id === selectedUnidade && !d.is_reference_in_trio && !d.notificacao && !d.is_manual_providencia && !d.is_plantao;
           })
           .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
 
