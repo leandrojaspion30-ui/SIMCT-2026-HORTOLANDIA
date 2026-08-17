@@ -680,10 +680,11 @@ const DocumentView: React.FC<DocumentViewProps> = ({
               </button>
             )}
             {(hasCounselorActions => {
+               const isLeandroOrSuperAdmin = (currentUser.nome?.toUpperCase() === 'LEANDRO' || currentUser.perfil === 'ADMIN');
                const isCreatorAdmin = 
-                 (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome === 'LEANDRO');
+                 (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome?.toUpperCase() === 'LEANDRO');
                
-               return isCreatorAdmin && !hasCounselorActions;
+               return isLeandroOrSuperAdmin || (isCreatorAdmin && !hasCounselorActions);
              })(!!(
                (doc.ciência_registrada_por && doc.ciência_registrada_por.length > 0) ||
                doc.medidas_detalhadas?.some(m => m.confirmacoes && m.confirmacoes.length > 0) ||
@@ -1579,8 +1580,8 @@ const DocumentView: React.FC<DocumentViewProps> = ({
             <div className="flex flex-col gap-3">
               <button
                 onClick={() => {
-                  onDelete(doc.id);
                   setShowDeleteConfirm(false);
+                  onDelete(doc.id);
                 }}
                 className="w-full py-4 bg-red-600 text-white rounded-xl font-black uppercase text-[11px] tracking-widest shadow-lg shadow-red-100 hover:bg-red-700 transition-all text-center cursor-pointer"
               >

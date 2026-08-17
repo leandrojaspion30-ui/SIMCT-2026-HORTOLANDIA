@@ -908,6 +908,29 @@ const App: React.FC = () => {
     });
   };
 
+  const handleDeleteDocument = useCallback(async (id: string, source: string = 'Painel Geral') => {
+    // 1. Atualização Otimista Imediata: remove instantaneamente o documento do estado local (some na hora)
+    setAllDocuments(prev => prev.filter(d => d.id !== id));
+    
+    // Se o documento estiver aberto no visualizador ou em edição, reseta imediatamente
+    setSelectedDocId(prev => prev === id ? null : prev);
+    setEditingDocId(prev => prev === id ? null : prev);
+    setForceDirectEdit(false);
+    
+    // Limpa do histórico de navegação
+    setNavHistory(prev => prev.filter(h => h.selectedDocId !== id && h.editingDocId !== id));
+
+    // 2. Registro de Log de Auditoria
+    addLog(id, `EXCLUSÃO: Documento #${id} removido permanentemente via ${source}.`, 'DOCUMENTO');
+
+    // 3. Exclusão no Firestore
+    try {
+      await deleteDocument(id);
+    } catch (err) {
+      console.error('Erro ao deletar documento no Firestore:', err);
+    }
+  }, [addLog]);
+
   const renderContent = () => {
     if (!currentUser) return null;
     
@@ -1281,8 +1304,7 @@ const App: React.FC = () => {
       const doc = documents.find(d => d.id === selectedDocId);
       if (!doc) return null;
       return <DocumentView document={doc} allDocuments={documents} users={users} agenda={agenda} files={[]} logs={logs.filter(l => l.documento_id === selectedDocId)} currentUser={currentUser} isReadOnly={isAdministrative} forceEdit={forceDirectEdit} onBack={goBack} onEdit={() => navigateTo('edit', { editId: doc.id })} onDelete={async (id) => { 
-          addLog(id, `EXCLUSÃO: Documento removido permanentemente do banco de dados SIMCT.`, 'DOCUMENTO');
-          await deleteDocument(id);
+          await handleDeleteDocument(id, 'Visualizador de Documento');
           goBack();
       }} onUpdateStatus={handleUpdateStatus} onUpdateDocument={async (id, fields) => { const existingDoc = allDocuments.find(d => d.id === id); await saveDocument({ ...existingDoc, ...fields, id }); }} onAddLog={addLog} onScience={handleScience} nameMap={userNameMap} scaleExceptions={scaleExceptions} />;
     }
@@ -1392,8 +1414,7 @@ const App: React.FC = () => {
               onSelectDoc={handleOpenDocument} 
               onEditDoc={(id) => navigateTo('edit', { editId: id })} 
               onDeleteDoc={async (id) => {
-                addLog(id, `EXCLUSÃO: Documento removido permanentemente via Painel Geral.`, 'DOCUMENTO');
-                await deleteDocument(id);
+                await handleDeleteDocument(id, 'Painel Geral');
               }} 
               onScience={handleScience} 
               onUpdateStatus={handleUpdateStatus} 
@@ -1447,8 +1468,7 @@ const App: React.FC = () => {
             onSelectDoc={(id) => handleOpenDocument(id, true)} 
             onEditDoc={(id) => navigateTo('edit', { editId: id })} 
             onDeleteDoc={async (id) => {
-              addLog(id, `EXCLUSÃO: Documento removido permanentemente via Minha Referência.`, 'DOCUMENTO');
-              await deleteDocument(id);
+              await handleDeleteDocument(id, 'Minha Referência');
             }} 
             onScience={handleScience} 
             onUpdateStatus={handleUpdateStatus}  
@@ -1466,8 +1486,7 @@ const App: React.FC = () => {
       case 'monitoring': return <MonitoringDashboard documents={documents} currentUser={currentUser} effectiveUserId={currentUser.id} onSelectDoc={handleOpenDocument} onAddLog={addLog} onUpdateMonitoring={async (id, m) => { 
           await saveDocument({ id, monitoramento: m }); 
       }} onRemoveMonitoring={async (id) => {
-          addLog(id, `MONITORAMENTO: Acompanhamento de caso encerrado com sucesso.`, 'MONITORAMENTO');
-          await deleteDocument(id);
+          await handleDeleteDocument(id, 'Monitoramento');
       }} isReadOnly={isAdministrative && currentUser?.nome !== 'LEANDRO'} onSaveDocument={async (docData) => {
           await saveDocument(docData);
       }} />;

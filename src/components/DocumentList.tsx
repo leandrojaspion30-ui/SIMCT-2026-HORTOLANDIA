@@ -787,10 +787,11 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   </button>
                 )}
                 {(hasCounselorActions => {
+                   const isLeandroOrSuperAdmin = (currentUser.nome?.toUpperCase() === 'LEANDRO' || currentUser.perfil === 'ADMIN');
                    const isCreatorAdmin = 
                      (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome?.toUpperCase() === 'LEANDRO');
                    
-                   return isCreatorAdmin && !hasCounselorActions;
+                   return isLeandroOrSuperAdmin || (isCreatorAdmin && !hasCounselorActions);
                  })(!!(
                    (doc.ciência_registrada_por && doc.ciência_registrada_por.length > 0) ||
                    doc.medidas_detalhadas?.some(m => m.confirmacoes && m.confirmacoes.length > 0) ||
@@ -1340,8 +1341,11 @@ const DocumentList: React.FC<DocumentListProps> = ({
             <div className="flex flex-col gap-2.5">
               <button
                 onClick={() => {
-                  onDeleteDoc(docToDelete);
+                  const targetId = docToDelete;
                   setDocToDelete(null);
+                  if (targetId) {
+                    onDeleteDoc(targetId);
+                  }
                 }}
                 className="w-full py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold text-xs tracking-wide transition-all text-center cursor-pointer shadow-xs"
               >
