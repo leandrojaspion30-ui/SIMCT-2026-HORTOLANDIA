@@ -213,11 +213,16 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
   const [conselheiroFilter, setConselheiroFilter] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'overview' | 'titularidade' | 'imediata' | 'colegiado'>('overview');
 
+  const availableCounselors = useMemo(() => {
+    return users.filter(u => 
+      u.status !== 'EXCLUIDO' && 
+      (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') &&
+      (isGlobal ? (selectedUnidadeFilter === 'all' ? true : (u.unidade_id || 1) === selectedUnidadeFilter) : (u.unidade_id || 1) === (currentUser.unidade_id || 1))
+    );
+  }, [users, isGlobal, selectedUnidadeFilter, currentUser]);
+
   const filteredDocuments = useMemo(() => {
     let docs = documents;
-    
-    // Regra da UNIDADE II: Zerar todos os casos que aparecem no relatório estatístico da UNIDADE II
-    docs = docs.filter(d => (d.unidade_id || 1) !== 2);
 
     if (isGlobal && selectedUnidadeFilter !== 'all') {
       docs = docs.filter(d => (d.unidade_id || 1) === selectedUnidadeFilter);
@@ -257,9 +262,30 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       docs = docs.filter(d => d.conselheiro_referencia_id === conselheiroFilter);
     }
     if (activeTab === 'titularidade') {
-      docs = docs.filter(d => d.conselheiro_referencia_id === currentUser.id);
+      docs = docs.filter(d => 
+        d.conselheiro_referencia_id === currentUser.id ||
+        (currentUser.is_suplente_active && d.conselheiro_referencia_id === currentUser.real_user_id)
+      );
     } else if (activeTab === 'imediata') {
-      docs = docs.filter(d => d.conselheiro_referencia_id === currentUser.id);
+      docs = docs.filter(d => {
+        const matchesUserOrSubstitutedId = (id?: string | null) => {
+          if (!id) return false;
+          if (id === currentUser.id) return true;
+          if (currentUser.is_suplente_active && id === currentUser.real_user_id) return true;
+          return false;
+        };
+        const matchesUserOrSubstitutedName = (name?: string | null) => {
+          if (!name) return false;
+          const upper = name.toUpperCase();
+          if (upper === currentUser.nome.toUpperCase()) return true;
+          const cleanCurrentUserName = currentUser.nome.toUpperCase().split('(')[0].trim();
+          if (upper === cleanCurrentUserName) return true;
+          if (currentUser.is_suplente_active && currentUser.substituted_name && upper === currentUser.substituted_name.toUpperCase()) return true;
+          return false;
+        };
+        return matchesUserOrSubstitutedId(d.conselheiro_providencia_id) || 
+               d.conselheiros_providencia_nomes?.some(matchesUserOrSubstitutedName);
+      });
     } else if (activeTab === 'colegiado') {
       docs = docs.filter(d => d.status.some(s => s.includes('AGUARDANDO_VALIDACAO')));
     }
@@ -268,9 +294,6 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
 
   const filteredAgenda = useMemo(() => {
     let ags = agenda;
-
-    // Regra da UNIDADE II: Zerar todos os casos de agenda da UNIDADE II no relatório estatístico
-    ags = ags.filter(a => (a.unidade_id || 1) !== 2);
 
     if (isGlobal && selectedUnidadeFilter !== 'all') {
       ags = ags.filter(a => (a.unidade_id || 1) === selectedUnidadeFilter);
@@ -570,24 +593,24 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
 
   const counselorPerformance = useMemo(() => {
     return users
-      .filter(u => u.status !== 'EXCLUIDO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && (isGlobal ? true : (u.unidade_id || 1) === (currentUser.unidade_id || 1)))
+      .filter(u => u.status !== 'EXCLUIDO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && (isGlobal ? (selectedUnidadeFilter === 'all' ? true : (u.unidade_id || 1) === selectedUnidadeFilter) : (u.unidade_id || 1) === (currentUser.unidade_id || 1)))
       .map(u => {
-        const myDocs = filteredDocuments.filter(d => d.conselheiro_referencia_id === u.id);
-        const myAgenda = filteredAgenda.filter(a => a.conselheiro_id === u.id && (!a.excluido || a.status === 'COMPARECEU'));
+        const myDocs = filteredDocuments.filter(d => d.conselheiro_referencia_id === u.id || (u.is_suplente_active && d.conselheiro_referencia_id === u.real_user_id));
+        const myAgenda = filteredAgenda.filter(a => (a.conselheiro_id === u.id || (u.is_suplente_active && a.conselheiro_id === u.real_user_id)) && (!a.excluido || a.status === 'COMPARECEU'));
         
         return {
           id: u.id,
           nome: u.nome,
-          unidade: u.unidade_id,
+          unidade: u.unidade_id || 1,
           docs: myDocs.length,
-          disque100: myDocs.filter(d => d.origem.includes('DISQUE 100')).length,
-          monitoring: myDocs.filter(d => d.status.includes('MONITORAMENTO')).length,
+          disque100: myDocs.filter(d => (d.origem || '').includes('DISQUE 100')).length,
+          monitoring: myDocs.filter(d => (d.status || []).some(s => s.includes('MONITORAMENTO'))).length,
           agendaActions: myAgenda.length,
           attendances: myAgenda.filter(a => a.status === 'COMPARECEU').length
         };
       })
       .sort((a, b) => b.docs - a.docs);
-  }, [filteredDocuments, filteredAgenda]);
+  }, [filteredDocuments, filteredAgenda, users, isGlobal, selectedUnidadeFilter, currentUser]);
 
   const handleExportCSV = () => {
     const headers = ["Conselheiro", "Unidade", "Documentos", "Disque 100", "Ações Agenda", "Atendimentos", "Monitoramentos"];
@@ -835,8 +858,8 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
               className="w-full px-3 py-2 bg-slate-50/80 border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer outline-none"
             >
               <option value="all">Qualquer conselheiro</option>
-              {users.map(u => (
-                <option key={u.id} value={u.id}>{u.nome}</option>
+              {availableCounselors.map(u => (
+                <option key={u.id} value={u.id}>{u.nome} {isGlobal ? `(CT ${u.unidade_id || 1})` : ''}</option>
               ))}
             </select>
           </div>
@@ -1025,30 +1048,38 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         </div>
       </div>
 
-      {/* YELLOW BANNER: MODO ISOLADO ATIVO */}
-      <div className="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-3.5 sm:p-4 px-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xs print:hidden">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-amber-100 text-amber-800 rounded-xl shrink-0">
-            <Folder className="w-4 h-4" />
+      {/* BANNER DINÂMICO DE FILTROS ATIVOS */}
+      {(searchQuery || statusFilter !== 'all' || bairroFilter !== 'all' || conselheiroFilter !== 'all' || startDate || endDate || activeTab !== 'overview') && (
+        <div className="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-3.5 sm:p-4 px-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xs print:hidden">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-100 text-amber-800 rounded-xl shrink-0">
+              <Filter className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="font-black text-amber-950 text-xs tracking-wider uppercase">
+                FILTROS ATIVOS NO RELATÓRIO
+              </h4>
+              <p className="font-medium text-amber-800 text-[11px] mt-0.5">
+                Exibindo {filteredDocuments.length} caso(s) correspondente(s) aos critérios selecionados.
+              </p>
+            </div>
           </div>
-          <div>
-            <h4 className="font-black text-amber-950 text-xs tracking-wider uppercase">
-              MODO ISOLADO ATIVO
-            </h4>
-            <p className="font-medium text-amber-800 text-[11px] mt-0.5">
-              Exibindo apenas a pasta da família selecionada para evitar contaminação visual.
-            </p>
-          </div>
+          <button 
+            onClick={() => {
+              setSearchQuery('');
+              setStatusFilter('all');
+              setBairroFilter('all');
+              setConselheiroFilter('all');
+              setStartDate('');
+              setEndDate('');
+              setActiveTab('overview');
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-black rounded-xl text-xs font-bold uppercase text-white transition-all shadow-2xs shrink-0 cursor-pointer active:scale-95"
+          >
+            <RotateCcw className="w-3.5 h-3.5" /> LIMPAR FILTROS ({filteredDocuments.length})
+          </button>
         </div>
-        <button 
-          onClick={() => {
-            // Optional action to reset family isolate mode
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-black rounded-xl text-xs font-bold uppercase text-white transition-all shadow-2xs shrink-0 cursor-pointer active:scale-95"
-        >
-          <Folder className="w-3.5 h-3.5" /> VER TODAS AS PASTAS (2)
-        </button>
-      </div>
+      )}
 
       {/* CHARTS GRID 1 & 2 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 print:grid-cols-2 print:gap-4 print-avoid-break">
