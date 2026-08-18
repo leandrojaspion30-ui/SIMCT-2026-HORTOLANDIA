@@ -237,6 +237,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
 
   const isADM = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || (currentUser.nome || '').trim().toUpperCase().includes('LEANDRO') || currentUser.id === 'cons1';
   const isLeandro = (currentUser.nome || '').trim().toUpperCase().includes('LEANDRO') || currentUser.id === 'cons1';
+  const isConselheiro = currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE';
 
   // Permissão para editar conselheiros de referência ou providência imediata:
   // Se o documento já foi registrado anteriormente (initialData existe), APENAS Leandro pode editar.
@@ -1082,7 +1083,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nº Com. de Violação</label>
                 <input 
                   type="text" 
-                  disabled={!!initialData && !isADM}
+                  disabled={isReadOnly || (!!initialData && !isADM && !isConselheiro)}
                   className="w-full p-3 sm:p-4 bg-white border border-slate-100 rounded-xl font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm disabled:opacity-50"
                   value={formData.numero_comunicado_violacao}
                   onChange={e => setFormData({...formData, numero_comunicado_violacao: e.target.value.toUpperCase()})}
@@ -1094,7 +1095,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nº Procedimento / SIPIA</label>
                 <input 
                   type="text" 
-                  disabled={!!initialData && !isADM}
+                  disabled={isReadOnly || (!!initialData && !isADM && !isConselheiro)}
                   className="w-full p-3 sm:p-4 bg-white border border-slate-100 rounded-xl font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm disabled:opacity-50"
                   value={formData.numero_sipia}
                   onChange={e => setFormData({...formData, numero_sipia: e.target.value.toUpperCase()})}

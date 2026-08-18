@@ -134,6 +134,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const isConselheiro = currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE';
   const canEditTechnicalFields = isActualProvidenciaImediata && !isADM;
   const canEditIdentifiers = isResponsible || isADM;
+  const canEditViolationOrSipia = isConselheiro || isADM || isResponsible;
 
   const isReferenceCounselor = doc.conselheiro_referencia_id === currentUser.id ||
     (currentUser.is_suplente_active && currentUser.real_user_id && doc.conselheiro_referencia_id === currentUser.real_user_id);
@@ -844,13 +845,18 @@ const DocumentView: React.FC<DocumentViewProps> = ({
               </div>
               <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-1 hover:border-slate-300 transition-all">
                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Nº Com. de Violação</span>
-                {canEditIdentifiers ? (
+                {canEditViolationOrSipia ? (
                   <input
                     type="text"
                     className="w-full mt-1 bg-white px-3 py-1.5 border border-slate-200 rounded-xl text-[11px] font-black text-slate-800 uppercase outline-none focus:border-blue-500 shadow-sm"
                     value={numeroComunicadoViolacao}
                     onChange={(e) => setNumeroComunicadoViolacao(e.target.value.toUpperCase())}
-                    onBlur={() => onUpdateDocument(doc.id, { numero_comunicado_violacao: numeroComunicadoViolacao })}
+                    onBlur={() => {
+                      if (numeroComunicadoViolacao !== (doc.numero_comunicado_violacao || '')) {
+                        onUpdateDocument(doc.id, { numero_comunicado_violacao: numeroComunicadoViolacao });
+                        onAddLog(doc.id, `IDENTIFICAÇÃO: Nº Com. de Violação atualizado para "${numeroComunicadoViolacao}" por ${currentUser.nome}.`, 'DOCUMENTO');
+                      }
+                    }}
                     placeholder="DIGITE..."
                   />
                 ) : (
@@ -859,13 +865,18 @@ const DocumentView: React.FC<DocumentViewProps> = ({
               </div>
               <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-1 hover:border-slate-300 transition-all">
                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Nº Procedimento / SIPIA</span>
-                {canEditIdentifiers ? (
+                {canEditViolationOrSipia ? (
                   <input
                     type="text"
                     className="w-full mt-1 bg-white px-3 py-1.5 border border-slate-200 rounded-xl text-[11px] font-black text-slate-800 uppercase outline-none focus:border-blue-500 shadow-sm"
                     value={numeroSipia}
                     onChange={(e) => setNumeroSipia(e.target.value.toUpperCase())}
-                    onBlur={() => onUpdateDocument(doc.id, { numero_sipia: numeroSipia })}
+                    onBlur={() => {
+                      if (numeroSipia !== (doc.numero_sipia || '')) {
+                        onUpdateDocument(doc.id, { numero_sipia: numeroSipia });
+                        onAddLog(doc.id, `IDENTIFICAÇÃO: Nº Procedimento / SIPIA atualizado para "${numeroSipia}" por ${currentUser.nome}.`, 'DOCUMENTO');
+                      }
+                    }}
                     placeholder="DIGITE..."
                   />
                 ) : (

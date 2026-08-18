@@ -127,9 +127,41 @@ const App: React.FC = () => {
       console.error('Failed to persist user session:', err);
     }
   }, [currentUser]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'register' | 'my-docs' | 'monitoring' | 'logs' | 'search' | 'settings' | 'agenda' | 'statistics' | 'edit' | 'user-management' | 'plantao' | 'global-statistics' | 'distribution-test' | 'jarvis' | 'library'>('dashboard');
-  const [dashboardViewMode, setDashboardViewMode] = useState<'ALL' | 'REF' | 'IMED' | 'VALID'>('ALL');
-  const [dashboardFilters, setDashboardFilters] = useState<{ term: string; bairro: string; status: string; conselheiro_ref_id: string; data_registro: string; pasta_guardada?: string }>({ term: '', bairro: '', status: '', conselheiro_ref_id: '', data_registro: '', pasta_guardada: 'NAO' });
+
+  // Recupera estado de navegação persistido para manter a mesma tela ao recarregar a página
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'register' | 'my-docs' | 'monitoring' | 'logs' | 'search' | 'settings' | 'agenda' | 'statistics' | 'edit' | 'user-management' | 'plantao' | 'global-statistics' | 'distribution-test' | 'jarvis' | 'library'>(() => {
+    try {
+      const saved = localStorage.getItem('simct_nav_state');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.activeTab) return parsed.activeTab;
+      }
+    } catch {}
+    return 'dashboard';
+  });
+
+  const [dashboardViewMode, setDashboardViewMode] = useState<'ALL' | 'REF' | 'IMED' | 'VALID'>(() => {
+    try {
+      const saved = localStorage.getItem('simct_nav_state');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.dashboardViewMode) return parsed.dashboardViewMode;
+      }
+    } catch {}
+    return 'ALL';
+  });
+
+  const [dashboardFilters, setDashboardFilters] = useState<{ term: string; bairro: string; status: string; conselheiro_ref_id: string; data_registro: string; pasta_guardada?: string }>(() => {
+    try {
+      const saved = localStorage.getItem('simct_nav_state');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.dashboardFilters) return parsed.dashboardFilters;
+      }
+    } catch {}
+    return { term: '', bairro: '', status: '', conselheiro_ref_id: '', data_registro: '', pasta_guardada: 'NAO' };
+  });
+
   const [dashboardExpandedFolders, setDashboardExpandedFolders] = useState<Record<string, boolean>>({});
   const [dashboardFocusedFolderKey, setDashboardFocusedFolderKey] = useState<string | null>(null);
   const [dashboardIsGroupedByFamily, setDashboardIsGroupedByFamily] = useState<boolean>(true);
@@ -138,10 +170,78 @@ const App: React.FC = () => {
   const [myDocsFocusedFolderKey, setMyDocsFocusedFolderKey] = useState<string | null>(null);
   const [myDocsIsGroupedByFamily, setMyDocsIsGroupedByFamily] = useState<boolean>(true);
   const [users, setUsers] = useState<UserWithPassword[]>(INITIAL_USERS);
-  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
-  const [editingDocId, setEditingDocId] = useState<string | null>(null);
+
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(() => {
+    try {
+      const saved = localStorage.getItem('simct_nav_state');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.selectedDocId) return parsed.selectedDocId;
+      }
+    } catch {}
+    return null;
+  });
+
+  const [editingDocId, setEditingDocId] = useState<string | null>(() => {
+    try {
+      const saved = localStorage.getItem('simct_nav_state');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.editingDocId) return parsed.editingDocId;
+      }
+    } catch {}
+    return null;
+  });
+
+  const [forceDirectEdit, setForceDirectEdit] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('simct_nav_state');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.forceDirectEdit !== undefined) return Boolean(parsed.forceDirectEdit);
+      }
+    } catch {}
+    return false;
+  });
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 1024);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+  // Persistência contínua do estado da tela ativa
+  useEffect(() => {
+    if (!currentUser) return;
+    try {
+      localStorage.setItem('simct_nav_state', JSON.stringify({
+        activeTab,
+        selectedDocId,
+        editingDocId,
+        forceDirectEdit,
+        dashboardViewMode,
+        dashboardFilters
+      }));
+    } catch (err) {
+      console.error('Failed to persist nav state to localStorage:', err);
+    }
+  }, [currentUser, activeTab, selectedDocId, editingDocId, forceDirectEdit, dashboardViewMode, dashboardFilters]);
+
+  // Persistência imediata antes de recarregar a janela
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!currentUser) return;
+      try {
+        localStorage.setItem('simct_nav_state', JSON.stringify({
+          activeTab,
+          selectedDocId,
+          editingDocId,
+          forceDirectEdit,
+          dashboardViewMode,
+          dashboardFilters
+        }));
+      } catch (err) {}
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [currentUser, activeTab, selectedDocId, editingDocId, forceDirectEdit, dashboardViewMode, dashboardFilters]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -162,7 +262,6 @@ const App: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
-  const [forceDirectEdit, setForceDirectEdit] = useState(false);
   const [allDocuments, setAllDocuments] = useState<Documento[]>([]);
   const [allLogs, setAllLogs] = useState<Log[]>([]);
   const [allFiles, setAllFiles] = useState<DocumentFile[]>([]);
@@ -739,12 +838,31 @@ const App: React.FC = () => {
     setCurrentUser(null);
     setCurrentSessionId(null);
     localStorage.removeItem('simct_session_id');
+    localStorage.removeItem('simct_nav_state');
     setSelectedDocId(null);
     setEditingDocId(null);
     setForceDirectEdit(false);
     setNavHistory([]);
     setActiveTab('dashboard');
   };
+
+  const handleRefresh = useCallback(() => {
+    if (currentUser) {
+      try {
+        localStorage.setItem('simct_nav_state', JSON.stringify({
+          activeTab,
+          selectedDocId,
+          editingDocId,
+          forceDirectEdit,
+          dashboardViewMode,
+          dashboardFilters
+        }));
+      } catch (err) {
+        console.error("Error saving state before refresh:", err);
+      }
+    }
+    window.location.reload();
+  }, [currentUser, activeTab, selectedDocId, editingDocId, forceDirectEdit, dashboardViewMode, dashboardFilters]);
 
   const isTermAlreadyAccepted = useMemo(() => {
     if (!currentUser) return true;
@@ -1821,9 +1939,9 @@ const App: React.FC = () => {
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <button 
-                onClick={() => window.location.reload()} 
-                className="flex items-center gap-2 p-3 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm hover:bg-slate-50 text-[#2563EB] font-bold text-[12px] uppercase shrink-0 transition-all hover:border-[#2563EB]/40 active:scale-95"
-                title="Atualizar Página"
+                onClick={handleRefresh} 
+                className="flex items-center gap-2 p-3 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm hover:bg-slate-50 text-[#2563EB] font-bold text-[12px] uppercase shrink-0 transition-all hover:border-[#2563EB]/40 active:scale-95 cursor-pointer"
+                title="Atualizar Página e Manter Tela Atual"
               >
                 <RefreshCw className="w-5 h-5 text-[#2563EB] transition-transform duration-500 hover:rotate-180" />
                 <span className="hidden sm:inline text-slate-700">Atualizar</span>
