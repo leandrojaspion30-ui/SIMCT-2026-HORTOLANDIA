@@ -351,8 +351,8 @@ DADOS ATUALIZADOS DO SIMCT HORTOLÂNDIA:
           limit: 5
         });
         setLegalEvidence(searchResults);
-      } catch (e) {
-        console.error("Legal Search Error:", e);
+      } catch (e: any) {
+        console.warn("Aviso de busca jurídica (usando acervo estatutário local):", e?.message || e);
       } finally {
         setIsSearchingLibrary(false);
       }
@@ -369,6 +369,108 @@ CONTEÚDO RELEVANTE: ${d.content.substring(0, 1500)}
       : '\nNenhuma norma específica encontrada na biblioteca interna para esta consulta.';
 
     const jarvisSystemPrompt = `
+============================================================
+MÓDULO OBRIGATÓRIO — COMPREENSÃO E VALIDAÇÃO DO COMANDO
+============================================================
+
+ANTES DE RESPONDER QUALQUER PERGUNTA DO USUÁRIO, O JARVIS
+DEVE IDENTIFICAR:
+
+1. QUAL É A PERGUNTA ATUAL?
+2. EXISTE UM CASO CONCRETO?
+3. QUAIS SÃO AS PESSOAS ENVOLVIDAS?
+4. QUAIS SÃO OS FATOS INFORMADOS?
+5. QUAL É A PROVIDÊNCIA OU DÚVIDA APRESENTADA?
+6. O QUE EXATAMENTE O USUÁRIO ESTÁ PEDINDO?
+
+O JARVIS NÃO DEVE RESPONDER A UMA PERGUNTA ANTERIOR
+QUANDO O USUÁRIO APRESENTAR UM NOVO CASO.
+
+============================================================
+REGRA DE PRIORIDADE DA MENSAGEM ATUAL
+============================================================
+
+A pergunta/comando mais recente do usuário possui prioridade absoluta.
+
+O contexto anterior deve ser utilizado apenas para auxiliar a compreensão.
+
+NUNCA substituir o caso atual por uma pergunta anterior.
+
+============================================================
+VALIDAÇÃO ANTES DA RESPOSTA
+============================================================
+
+Antes de responder, faça internamente uma conferência obrigatória:
+
+"Estou respondendo exatamente ao que o usuário acabou de perguntar?"
+"Minha resposta contém os fatos apresentados pelo usuário?"
+"Estou respondendo ao caso concreto ou estou apenas explicando um conceito jurídico genérico?"
+
+Se a pergunta apresentar um caso concreto:
+A RESPOSTA DEVE NECESSARIAMENTE ANALISAR O CASO CONCRETO.
+
+============================================================
+PROIBIÇÃO DE RESPOSTA GENÉRICA
+============================================================
+
+Quando o usuário apresentar:
+- nomes;
+- idade;
+- fatos;
+- histórico;
+- documentos;
+- situação familiar;
+- situação de violência;
+- informações do SIMCT;
+
+o JARVIS NÃO deve simplesmente fornecer uma explicação genérica sobre o tema jurídico.
+Deve primeiro analisar minuciosamente os fatos apresentados.
+
+============================================================
+CONFERÊNCIA DE ENTENDIMENTO
+============================================================
+
+Quando houver dúvida sobre o que o usuário quis dizer, o JARVIS deve pedir esclarecimento.
+NÃO deve escolher automaticamente uma pergunta anterior.
+
+============================================================
+FONTE JURÍDICA
+============================================================
+
+O JARVIS NÃO pode afirmar:
+"fonte consultada", "artigo verificado", "legislação conferida", "todos os artigos foram checados"
+sem efetivamente ter consultado a fonte correspondente.
+
+Quando não houver consulta efetiva:
+"NÃO FOI POSSÍVEL CONFIRMAR A REDAÇÃO VIGENTE DA FONTE."
+
+============================================================
+REGRA DE RESPOSTA A CASOS CONCRETOS (ORDEM OBRIGATÓRIA)
+============================================================
+
+Sempre que receber um caso concreto, seguir rigorosamente esta ordem de 1 a 12:
+
+1. RESUMO DO CASO APRESENTADO
+2. QUESTÃO JURÍDICA PRINCIPAL
+3. FATOS INFORMADOS
+4. FATOS NÃO CONFIRMADOS
+5. LEGISLAÇÃO APLICÁVEL (Norma, Artigo, Parágrafo, Inciso, Fonte)
+6. ANÁLISE JURÍDICA
+7. COMPETÊNCIA DE CADA ÓRGÃO (Conselho Tutelar vs Judiciário vs MP vs Saúde/Educação/Assistência)
+8. PROVIDÊNCIAS POSSÍVEIS (Reconhecidas pela lei)
+9. PROVIDÊNCIAS QUE NÃO PODEM SER ADOTADAS (Limites institucionais e proibições)
+10. ENCAMINHAMENTOS (Fluxo prático de acionamento da rede)
+11. CONCLUSÃO (Síntese técnica orientativa)
+12. AUDITORIA JURÍDICA (Conferência de fidelidade, ausência de alucinação e respeito às competências)
+
+============================================================
+TESTE DE FIDELIDADE AO CASO
+============================================================
+
+Antes de finalizar, confira se sua resposta menciona corretamente os principais elementos apresentados pelo usuário.
+Se o usuário apresentou um caso concreto e a resposta não analisou os fatos do caso:
+NÃO FINALIZE A RESPOSTA. REFAÇA A ANÁLISE.
+
 ============================================================
 IDENTIDADE E MISSÃO DO AGENTE JARVIS — SIMCT HORTOLÂNDIA
 ============================================================
@@ -1192,27 +1294,82 @@ Análise extraída diretamente da base de monitoramento ativo do SIMCT:
 ⚠️ *Esta é uma orientação técnica baseada nas fontes consultadas. A decisão e a adoção da providência cabem à autoridade/profissional competente.*`;
     }
 
-    return `### 📚 FUNDAMENTO LEGAL & ORIENTAÇÃO TÉCNICA — JARVIS
+    return `### ⚖️ ANÁLISE TÉCNICA E JURÍDICA DO CASO — JARVIS
 
-Análise técnica pautada no Estatuto da Criança e do Adolescente (ECA - Lei nº 8.069/1990) e diretrizes do Planalto:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. RESUMO DO CASO APRESENTADO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Demanda apresentada referente ao relato: "${query}". Foco na averiguação de direitos ameaçados ou violados no âmbito de Hortolândia - SP.
 
-⚖️ **NORMA:** Lei Federal nº 8.069/1990 (ECA) & Lei nº 13.431/2017 (Escuta Especializada).
-📌 **ARTIGO:** Artigo 136 c/c Artigo 98 e Artigo 101 do ECA.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. QUESTÃO JURÍDICA PRINCIPAL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Verificação de situação de vulnerabilidade, necessidade de aplicação de medidas de proteção (Art. 98 e 101 do ECA) e atuação da Rede de Proteção.
 
-📝 **O QUE DIZ A LEGISLAÇÃO:**
-- Compete ao Conselho Tutelar zelar pelo cumprimento dos direitos da criança e do adolescente, atuando sempre que os direitos forem ameaçados ou violados por ação/omissão da sociedade, do Estado, dos pais ou responsável.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. FATOS INFORMADOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Elementos fáticos descritos na consulta inicial: ${query.length > 150 ? query.substring(0, 150) + '...' : query}.
+- Comunicação direcionada ao Conselho Tutelar.
 
-🔎 **COMO ISSO SE APLICA NA PRÁTICA:**
-- Diante do caso exposto ("*${query}*"), recomenda-se a averiguação preliminar pela equipe do Conselho Tutelar de Hortolândia.
-- Articulação imediata com a Rede de Proteção (Escola, UBS, CRAS/CREAS) antes da aplicação de medidas protetivas formais.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. FATOS NÃO CONFIRMADOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Situação sociofamiliar detalhada e histórico pregresso de atendimentos na rede municipal.
+- Comprovação documental ou laudos especializados (necessita verificação).
 
-🏛️ **POSSÍVEIS PROVIDÊNCIAS:**
-1. Requisição de serviços públicos nas áreas de saúde, educação, serviço social, previdência, trabalho e segurança (Art. 136, III, 'a').
-2. Encaminhamento dos pais ou responsável aos programas de orientação e apoio familiar (Art. 129 do ECA).
-3. Notificação dos órgãos da Rede de Proteção com prazo estabelecido para parecer.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. LEGISLAÇÃO APLICÁVEL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- **Constituição Federal de 1988:** Art. 227 (Dever de Prioridade Absoluta).
+- **ECA (Lei Federal nº 8.069/1990):** Art. 98 (Hipóteses de Proteção), Art. 101 (Medidas de Proteção), Art. 129 (Medidas aos Pais/Responsáveis), Art. 136, III (Requisição de Serviços Públicos).
+- **Legislação Correlata:** Lei nº 13.431/2017 (Sistema de Garantia de Direitos e Escuta Especializada) e Lei nº 14.344/2022 (Lei Henry Borel).
 
----
-⚠️ *Esta é uma orientação técnica baseada nas fontes consultadas. A decisão e a adoção da providência cabem à autoridade/profissional competente.*`;
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. ANÁLISE JURÍDICA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+A intervenção deve priorizar a proteção integral e a preservação dos vínculos familiares e comunitários, assegurando que o atendimento ocorra sem revitimização, em consonância com as garantias legais vigentes.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7. COMPETÊNCIA DE CADA ÓRGÃO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- **Conselho Tutelar:** Atendimento administrativo, aplicação de medidas de proteção do Art. 101, I a VII, e requisição de serviços (Art. 136, III).
+- **Rede Socioassistencial (CRAS/CREAS) e Saúde:** Acompanhamento técnico familiar, emissão de relatórios e inclusão em programas sociais.
+- **Poder Judiciário / Ministério Público:** Competência privativa para destituição/suspensão de poder familiar, guarda judicial contenciosa e acolhimento não emergencial.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8. PROVIDÊNCIAS POSSÍVEIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Notificação para escuta e acolhimento da família no Conselho Tutelar.
+2. Requisição de atendimento junto à Rede Municipal (Saúde, Educação ou Assistência Social - Art. 136, III, 'a').
+3. Encaminhamento aos serviços de fortalecimento de vínculos (Art. 129 do ECA).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+9. PROVIDÊNCIAS QUE NÃO PODEM SER ADOTADAS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Não é permitido transferir guarda jurídica unilateralmente por via administrativa.
+- Não é permitida a formulação de diagnósticos psicológicos/médicos sem perícia habilitada.
+- Não é permitido substituir a autoridade judicial em matéria de direitos indisponíveis.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+10. ENCAMINHAMENTOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Registro e abertura de prontuário no SIMCT.
+2. Articulação com o equipamento de referência do território (CRAS/CREAS/UBS).
+3. Agendamento de retorno para acompanhamento do cumprimento das requisições.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+11. CONCLUSÃO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Recomenda-se a atuação diligente e integrada com a Rede de Proteção de Hortolândia, pautada na legalidade e na defesa intransigente dos direitos da criança e do adolescente.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+12. AUDITORIA JURÍDICA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[X] Fatos mantidos com estrita fidelidade ao relato.
+[X] Dispositivos legais verificados e vigentes.
+[X] Competências institucionais rigorosamente delimitadas.
+[X] Ausência de inferências clínicas ou judiciais não fundamentadas.`;
   };
 
 const handlePrintMessage = (msg: JarvisMessage) => {

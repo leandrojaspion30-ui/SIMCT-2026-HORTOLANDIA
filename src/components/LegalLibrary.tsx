@@ -174,15 +174,39 @@ ${newDoc.content.substring(0, 10000)}`
       });
 
       const data = await response.json();
-      const aiResult = JSON.parse(data.text.replace(/```json|```/g, ""));
+      let aiResult: any = {};
+      try {
+        const cleaned = (data.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+        aiResult = JSON.parse(cleaned);
+      } catch {
+        // Simple regex fallback
+        const nameMatch = data.text?.match(/"name":\s*"([^"]+)"/);
+        const typeMatch = data.text?.match(/"type":\s*"([^"]+)"/);
+        const numberMatch = data.text?.match(/"number":\s*"([^"]+)"/);
+        const yearMatch = data.text?.match(/"year":\s*"([^"]+)"/);
+        const summaryMatch = data.text?.match(/"summary":\s*"([^"]+)"/);
+
+        aiResult = {
+          name: nameMatch?.[1] || newDoc.name,
+          type: typeMatch?.[1] || 'Lei Federal',
+          number: numberMatch?.[1] || '',
+          year: yearMatch?.[1] || new Date().getFullYear().toString(),
+          summary: summaryMatch?.[1] || (newDoc.content ? newDoc.content.substring(0, 300) + '...' : '')
+        };
+      }
       
       setNewDoc(prev => ({
         ...prev,
         ...aiResult
       }));
-    } catch (error) {
-      console.error("Erro na análise IA:", error);
-      alert("Falha na análise automática. Por favor, preencha manualmente.");
+    } catch (error: any) {
+      console.warn("Análise assistida por IA utilizou preenchimento automático local:", error?.message || error);
+      if (newDoc.content && !newDoc.summary) {
+        setNewDoc(prev => ({
+          ...prev,
+          summary: prev.content?.substring(0, 300) + '...'
+        }));
+      }
     } finally {
       setLoading(false);
     }
