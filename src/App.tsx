@@ -1673,7 +1673,7 @@ const App: React.FC = () => {
           addLog('SISTEMA', `PERFIL: Foto de perfil atualizada pelo usuário.`, 'SISTEMA');
           return true;
       }} />;
-      case 'statistics': return <StatisticsView documents={documents} agenda={agenda} users={users} currentUser={currentUser} />;
+      case 'statistics': return <StatisticsView documents={isSuperAdmin ? normalizedDocuments : documents} agenda={isSuperAdmin ? allAgenda : agenda} users={users} currentUser={currentUser} isGlobal={isSuperAdmin} />;
       case 'global-statistics': return <StatisticsView documents={normalizedDocuments} agenda={allAgenda} users={users} currentUser={currentUser} isGlobal />;
       case 'distribution-test': return <DistributionSimulator documents={normalizedDocuments} users={users} currentUser={currentUser} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} nameMap={userNameMap} scaleExceptions={scaleExceptions} />;
       case 'jarvis': 

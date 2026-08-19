@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Documento, AgendaEntry, User } from '../types';
-import { INITIAL_USERS, STATUS_LABELS, AGENDA_TIPOS } from '../constants';
+import { INITIAL_USERS, STATUS_LABELS, AGENDA_TIPOS, getUnidadeByBairro } from '../constants';
 import { 
   BarChart3, PieChart, TrendingUp, Users, FileText, ShieldAlert, Sparkles, UserCheck, 
   Bell, PhoneCall, Activity, Download, Printer, X, Calendar, Filter, BookOpen,
@@ -225,8 +225,11 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
   const filteredDocuments = useMemo(() => {
     let docs = documents;
 
-    if (isGlobal && selectedUnidadeFilter !== 'all') {
-      docs = docs.filter(d => (d.unidade_id || 1) === selectedUnidadeFilter);
+    if (selectedUnidadeFilter !== 'all') {
+      docs = docs.filter(d => {
+        const docUnit = d.unidade_id || (d.bairro ? getUnidadeByBairro(d.bairro) : 1);
+        return docUnit === selectedUnidadeFilter;
+      });
     }
     if (startDate) {
       docs = docs.filter(d => {
@@ -296,7 +299,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
   const filteredAgenda = useMemo(() => {
     let ags = agenda;
 
-    if (isGlobal && selectedUnidadeFilter !== 'all') {
+    if (selectedUnidadeFilter !== 'all') {
       ags = ags.filter(a => (a.unidade_id || 1) === selectedUnidadeFilter);
     }
     if (startDate) {

@@ -120,10 +120,39 @@ XI - representar ao Ministério Público para efeito das ações de perda ou sus
     category: 'VIOLÊNCIA DOMÉSTICA',
     subjects: ['Violência Doméstica', 'Medidas Protetivas de Urgência', 'Afastamento do Agressor', 'Representação do CT'],
     keywords: ['henry borel', 'lei 14344', 'violência doméstica', 'medidas protetivas', 'afastamento', 'agressor', 'urgência'],
-    content: `Art. 1º Esta Lei cria mecanismos para a prevenção e o enfrentamento da violência doméstica e familiar contra a criança e o adolescente, nos termos do § 8º do art. 226 e do § 4º do art. 227 da Constituição Federal e dos tratados, convenções e demais instrumentos internacionais de que o Brasil seja parte.
-Art. 15. As medidas protetivas de urgência serão concedidas pelo juiz, a requerimento do Ministério Público, do Conselho Tutelar, da autoridade policial ou a pedido da pessoa que atue em benefício da criança ou do adolescente.
-Art. 19. O Conselho Tutelar, ao tomar conhecimento de condutas de violência doméstica e familiar contra criança e adolescente, poderá representar perante a autoridade judicial ou policial competente para a concessão de medidas protetivas de urgência.`,
-    relevantArticles: ['Art. 15', 'Art. 19', 'Art. 21', 'Art. 23'],
+    content: `Art. 1º Esta Lei cria mecanismos para a prevenção e o enfrentamento da violência doméstica e familiar contra a criança e o adolescente...
+Art. 14. Verificada a existência de risco atual ou iminente à vida ou à integridade física ou psicológica da criança ou do adolescente em situação de violência doméstica e familiar, ou de seus familiares, o agressor será imediatamente afastado do lar, do domicílio ou do local de convivência com a vítima:
+I - pela autoridade judicial;
+II - pelo delegado de polícia, quando o Município não for sede de comarca; ou
+III - pelo policial, quando o Município não for sede de comarca e não houver delegado disponível no momento da denúncia.
+§ 1º O Conselho Tutelar poderá representar às autoridades referidas nos incisos I, II e III do caput deste artigo para requerer o afastamento do agressor do lar, do domicílio ou do local de convivência com a vítima.
+§ 2º Nas hipóteses dos incisos II e III do caput deste artigo, o juiz será comunicado no prazo máximo de 24 (vinte e quatro) horas e decidirá, em igual prazo, sobre a manutenção ou a revogação da medida aplicada, devendo dar ciência ao Ministério Público.
+§ 3º Nos casos de risco à integridade física da vítima ou à efetividade da medida protetiva de urgência, o não afastamento do agressor importará na prisão preventiva do agressor.
+Art. 15. Recebido o expediente com o requerimento de concessão de medidas protetivas de urgência, o juiz, no prazo de 24 (vinte e quatro) horas:
+I - conhecerá do expediente e do pedido e decidirá sobre a concessão das medidas protetivas de urgência;
+II - determinará a apreensão imediata de arma de fogo sob a posse do agressor;
+III - comunicará ao Ministério Público para que adote as providências cabíveis.
+Art. 16. As medidas protetivas de urgência serão concedidas pelo juiz, a requerimento do Ministério Público, da autoridade policial, do Conselho Tutelar ou a pedido da pessoa que atue em benefício da criança ou do adolescente.
+§ 1º As medidas protetivas de urgência poderão ser concedidas de forma liminar, de ofício ou a requerimento do Ministério Público, da autoridade policial, do Conselho Tutelar ou a pedido da pessoa que atue em favor da criança ou do adolescente, independentemente de audiência das partes e de manifestação prévia do Ministério Público.
+Art. 17. Em qualquer fase do inquérito policial ou da instrução criminal, caberá a prisão preventiva do agressor, decretada pelo juiz, de ofício, a requerimento do Ministério Público ou mediante representação da autoridade policial.
+Art. 19. As medidas protetivas de urgência serão registradas em banco de dados mantido e regulamentado pelo Conselho Nacional de Justiça (CNJ), garantido o acesso do Ministério Público, da Defensoria Pública e do Conselho Tutelar.
+Art. 20. Constatada a prática de violência doméstica e familiar contra a criança e o adolescente, nos termos desta Lei, o juiz poderá aplicar, de forma isolada ou cumulativa, ao agressor, entre outras, as seguintes medidas protetivas de urgência:
+I - suspensão da posse ou restrição do porte de armas, com comunicação ao órgão competente;
+II - afastamento do lar, do domicílio ou do local de convivência com a vítima;
+III - proibição de aproximação da vítima, de seus familiares e das testemunhas, fixando o limite mínimo de distância;
+IV - proibição de contato com a vítima, seus familiares e testemunhas por qualquer meio de comunicação;
+V - proibição de frequentação de determinados lugares;
+VI - restrição ou suspensão de visitas à vítima;
+VII - prestação de alimentos provisionais ou provisórios;
+VIII - comparecimento a programas de recuperação e reeducação;
+IX - acompanhamento psicossocial, por meio de atendimento individual e/ou em grupo de apoio.
+Art. 21. O juiz poderá determinar, liminarmente ou a requerimento do Ministério Público, da autoridade policial, do Conselho Tutelar ou de quem tenha legítimo interesse, as seguintes medidas protetivas de urgência para a proteção da criança ou do adolescente:
+I - encaminhamento da vítima e de seus familiares a programa de proteção ou de atendimento familiar;
+II - recondução da vítima e de seus familiares ao domicílio, após o afastamento do agressor;
+III - determinação de acolhimento institucional, de caráter provisório e excepcional;
+IV - inclusão em programa de acolhimento familiar.
+§ 1º A autoridade policial poderá requisitar e o Conselho Tutelar poderá requerer ao Ministério Público a propositura de ação cautelar de antecipação de produção de prova em favor da criança ou do adolescente.`,
+    relevantArticles: ['Art. 14', 'Art. 15', 'Art. 16', 'Art. 17', 'Art. 19', 'Art. 20', 'Art. 21'],
     isPublic: true,
     confidentiality: 'PÚBLICO'
   },

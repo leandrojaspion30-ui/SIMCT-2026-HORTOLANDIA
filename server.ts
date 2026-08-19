@@ -166,14 +166,20 @@ async function startServer() {
       });
 
       const normalizeModel = (m: string) => {
-        if (!m || typeof m !== "string") return "gemini-3.6-flash";
-        if (m.includes("1.5") || m.includes("2.0") || m.includes("2.5") || m.includes("gemini-pro")) {
-          return "gemini-3.6-flash";
+        if (!m || typeof m !== "string") return "gemini-flash-latest";
+        if (m.includes("1.5") || m.includes("2.0") || m.includes("3.6") || m.includes("gemini-pro")) {
+          return "gemini-flash-latest";
         }
         return m;
       };
 
-      const primaryModels = ["gemini-3.6-flash", "gemini-3.6-pro", "gemini-flash-latest"];
+      const primaryModels = [
+        "gemini-flash-latest",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-3.1-flash-lite",
+        "gemini-3.7-flash"
+      ];
       const candidateModels = [
         ...(requestedModel ? [normalizeModel(requestedModel)] : []),
         ...primaryModels
@@ -181,11 +187,10 @@ async function startServer() {
       const uniqueModels = Array.from(new Set(candidateModels));
 
       let responseText = "";
-      let lastError: any = null;
+      let lastErrorMessage = "";
 
       for (const modelName of uniqueModels) {
-        const maxAttempts = 4;
-        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        for (let attempt = 1; attempt <= 2; attempt++) {
           try {
             const response = await ai.models.generateContent({
               model: modelName,
@@ -196,14 +201,16 @@ async function startServer() {
               break;
             }
           } catch (err: any) {
-            lastError = err;
             const is503 = err?.status === "UNAVAILABLE" || err?.message?.includes("503") || err?.message?.includes("high demand");
-            console.warn(`Tentativa ${attempt}/${maxAttempts} com o modelo ${modelName} falhou (${is503 ? '503 Alta Demanda' : 'Erro'}): ${err?.message || err}`);
-            if (attempt < maxAttempts) {
-              // Longer delay for 503 high demand spikes (1.5s, 3s, 4.5s)
-              const baseDelay = is503 ? 1500 : 800;
-              const delay = Math.min(baseDelay * Math.pow(1.5, attempt - 1) + Math.floor(Math.random() * 500), 5000);
-              await new Promise(r => setTimeout(r, delay));
+            const is429 = err?.status === "RESOURCE_EXHAUSTED" || err?.message?.includes("429") || err?.message?.includes("quota");
+            lastErrorMessage = `${modelName}: ${is503 ? 'Alta Demanda (503)' : (is429 ? 'Limite de Cota (429)' : (err?.message ? err.message.slice(0, 80) : 'Falha'))}`;
+            
+            if (is503 || is429) {
+              // Immediately switch to next model on 503 or 429
+              break;
+            }
+            if (attempt < 2) {
+              await new Promise(r => setTimeout(r, 300));
             }
           }
         }
@@ -211,13 +218,13 @@ async function startServer() {
       }
 
       if (!responseText) {
-        console.warn(`Todas as chamadas aos modelos Gemini falharam. Último erro: ${lastError?.message}. Usando inteligência SIMCT.`);
+        console.info(`Acionando gerador analítico SIMCT após indisponibilidade externa (${lastErrorMessage}).`);
         responseText = generateSIMCTFallbackResponse(contents);
       }
 
       return res.json({ text: responseText });
     } catch (error: any) {
-      console.error("Gemini Endpoint Error:", error);
+      console.info("Acionando fallback SIMCT por captura global.");
       return res.json({ text: generateSIMCTFallbackResponse(req.body?.contents) });
     }
   });

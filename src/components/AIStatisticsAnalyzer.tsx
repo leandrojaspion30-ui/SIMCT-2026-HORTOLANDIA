@@ -672,7 +672,7 @@ Análise fundamentada no Estatuto da Criança e do Adolescente (ECA - Lei nº 8.
         const res = await fetch("/api/ai/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contents, model: "gemini-3.6-flash" })
+          body: JSON.stringify({ contents, model: "gemini-flash-latest" })
         });
 
         const responseText = await res.text();
