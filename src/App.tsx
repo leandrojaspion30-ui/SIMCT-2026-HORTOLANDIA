@@ -330,9 +330,9 @@ const App: React.FC = () => {
     cleanup();
   }, [currentUser, scaleExceptions, lastCleanup]);
 
-  const isLud = useMemo(() => currentUser?.nome === 'LUDIMILA', [currentUser]);
-  const isSuperAdmin = useMemo(() => currentUser?.nome === 'LUDIMILA' || currentUser?.nome === 'LEANDRO', [currentUser]);
-  const isAdministrative = useMemo(() => currentUser?.perfil === 'ADMIN' || currentUser?.perfil === 'ADMINISTRATIVO' || currentUser?.nome === 'LEANDRO', [currentUser]);
+  const isLud = useMemo(() => currentUser?.nome?.toUpperCase().includes('LUDIMILA'), [currentUser]);
+  const isSuperAdmin = useMemo(() => currentUser?.nome?.toUpperCase().includes('LUDIMILA') || currentUser?.nome?.toUpperCase().includes('LEANDRO'), [currentUser]);
+  const isAdministrative = useMemo(() => currentUser?.perfil === 'ADMIN' || currentUser?.perfil === 'ADMINISTRATIVO' || currentUser?.nome?.toUpperCase().includes('LEANDRO'), [currentUser]);
 
   const normalizedDocuments = useMemo(() => {
     return allDocuments.map(d => {

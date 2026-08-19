@@ -5,7 +5,8 @@ import { INITIAL_USERS, STATUS_LABELS, AGENDA_TIPOS } from '../constants';
 import { 
   BarChart3, PieChart, TrendingUp, Users, FileText, ShieldAlert, Sparkles, UserCheck, 
   Bell, PhoneCall, Activity, Download, Printer, X, Calendar, Filter, BookOpen,
-  Search, Folder, Clock, ArrowUp, ArrowDown, ArrowRight, RotateCcw, RotateCw, Info, ArrowLeft
+  Search, Folder, Clock, ArrowUp, ArrowDown, ArrowRight, RotateCcw, RotateCw, Info, ArrowLeft,
+  Building2
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell } from 'recharts';
 import { formatLocalDateString } from '../lib/dateUtils';
@@ -777,35 +778,95 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         </div>
 
         {/* Title Section */}
-        <div className="flex items-center gap-3.5 pt-2">
-          <div className="p-3 bg-purple-100/70 border border-purple-200/60 rounded-2xl text-purple-600 shrink-0">
-            <BarChart3 className="w-6 h-6" />
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-2">
+          <div className="flex items-center gap-3.5">
+            <div className="p-3 bg-purple-100/70 border border-purple-200/60 rounded-2xl text-purple-600 shrink-0">
+              <BarChart3 className="w-6 h-6" />
+            </div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 uppercase tracking-tight">
+                RELATÓRIOS ESTATÍSTICOS
+              </h1>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0.5">
+                {isGlobal ? 'Colegiado Unificado de Hortolândia (Unidades I e II)' : `Conselho Tutelar ${currentUser.unidade_id || 1} • Hortolândia`}
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 uppercase tracking-tight">
-              RELATÓRIOS ESTATÍSTICOS
-            </h1>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0.5">
-              Análise quantitativa da Rede de Proteção
-            </p>
-          </div>
+
+          {/* SELETOR DE UNIDADE (UNIFICADA OU SEPARADA) */}
+          {(isGlobal || currentUser?.nome?.toUpperCase().includes('LEANDRO') || currentUser?.nome === 'LUDIMILA') && (
+            <div className="flex items-center bg-slate-100 p-1.5 rounded-2xl border border-slate-200/90 shadow-2xs self-start md:self-auto">
+              <button
+                type="button"
+                onClick={() => setSelectedUnidadeFilter('all')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                  selectedUnidadeFilter === 'all'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                <span>Ambas (Unificada)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedUnidadeFilter(1)}
+                className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                  selectedUnidadeFilter === 1
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                }`}
+              >
+                <span>CT 1 (Sede)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedUnidadeFilter(2)}
+                className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                  selectedUnidadeFilter === 2
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                }`}
+              >
+                <span>CT 2 (Sub-Sede)</span>
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
       {/* FILTER CONTAINER */}
       <div className="bg-white border border-slate-100 p-5 sm:p-6 rounded-2xl sm:rounded-3xl shadow-2xs space-y-5 print:hidden">
         {/* Row 1: Inputs Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3.5">
-          {/* 1. Search */}
+        <div className={`grid grid-cols-1 sm:grid-cols-2 ${(isGlobal || currentUser?.nome?.toUpperCase().includes('LEANDRO') || currentUser?.nome === 'LUDIMILA') ? 'lg:grid-cols-7' : 'lg:grid-cols-6'} gap-3.5`}>
+          {/* 1. Unidade Filter (quando aplicável) */}
+          {(isGlobal || currentUser?.nome?.toUpperCase().includes('LEANDRO') || currentUser?.nome === 'LUDIMILA') && (
+            <div className="space-y-1">
+              <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
+                Unidade
+              </label>
+              <select 
+                value={selectedUnidadeFilter}
+                onChange={e => setSelectedUnidadeFilter(e.target.value === 'all' ? 'all' : Number(e.target.value) as 1 | 2)}
+                className="w-full px-3 py-2 bg-slate-50/80 border border-slate-200/80 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer outline-none"
+              >
+                <option value="all">Unificada (Ambas)</option>
+                <option value="1">Unidade I (Sede)</option>
+                <option value="2">Unidade II (Sub-Sede)</option>
+              </select>
+            </div>
+          )}
+
+          {/* 2. Search */}
           <div className="space-y-1 sm:col-span-2 lg:col-span-1">
             <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block truncate">
-              Pesquisar por família, criança ou responsável
+              Pesquisar
             </label>
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input 
                 type="text" 
-                placeholder="Digite o nome para pesquisar..." 
+                placeholder="Nome ou ID..." 
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className="w-full pl-8 pr-3 py-2 bg-slate-50/80 border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
@@ -813,7 +874,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
             </div>
           </div>
 
-          {/* 2. Status */}
+          {/* 3. Status */}
           <div className="space-y-1">
             <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
               Status
@@ -830,7 +891,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
             </select>
           </div>
 
-          {/* 3. Bairro */}
+          {/* 4. Bairro */}
           <div className="space-y-1">
             <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
               Bairro
@@ -847,7 +908,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
             </select>
           </div>
 
-          {/* 4. Conselheiro */}
+          {/* 5. Conselheiro */}
           <div className="space-y-1">
             <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
               Conselheiro
@@ -864,7 +925,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
             </select>
           </div>
 
-          {/* 5. Data Inicial */}
+          {/* 6. Data Inicial */}
           <div className="space-y-1">
             <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
               Data inicial
@@ -877,7 +938,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
             />
           </div>
 
-          {/* 6. Data Final */}
+          {/* 7. Data Final */}
           <div className="space-y-1">
             <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
               Data final
