@@ -98,23 +98,20 @@ const App: React.FC = () => {
     
     // Lista de requisitos para considerar o app "pronto"
     const syncsReady = initialSyncsDone.users && initialSyncsDone.documents && initialSyncsDone.logs && initialSyncsDone.agenda;
-    const sessionReady = !currentSessionId || (currentSessionId && currentUser);
 
-    if (syncsReady && sessionReady) {
-      // Pequeno delay para garantir que o React processou todos os estados e o layout está estável
+    if (syncsReady) {
       const timer = setTimeout(() => {
         setIsInitializing(false);
-      }, 800);
+      }, 300);
       return () => clearTimeout(timer);
     }
     
-    // Timeout de segurança para evitar que o app fique travado no loading infinitamente
+    // Timeout de segurança curto (2.5s) para liberar o app mesmo com lentidão de rede ou cota esgotada
     const safetyTimer = setTimeout(() => {
-      console.warn("[SIMCT] Initialization safety timeout reached.");
       setIsInitializing(false);
-    }, 10000);
+    }, 2500);
     return () => clearTimeout(safetyTimer);
-  }, [initialSyncsDone, currentUser, currentSessionId, isInitializing]);
+  }, [initialSyncsDone, isInitializing]);
 
   useEffect(() => {
     try {
@@ -1735,7 +1732,7 @@ const App: React.FC = () => {
     }
   };
 
-  if (isInitializing || (currentSessionId && !currentUser)) {
+  if (isInitializing) {
     return (
       <div className="min-h-screen bg-[#111827] flex flex-col items-center justify-center text-white">
         <div className="flex flex-col items-center gap-6">
