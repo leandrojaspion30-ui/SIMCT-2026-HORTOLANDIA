@@ -845,21 +845,21 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
       hora_rece_bimento: formData.hora_aporte,
       periodo_rece_bimento: classifyTurno(formData.data_aporte, formData.hora_aporte),
       conselheiro_referencia_id: (canEditCouncillors && (isManualReference || (initialData && formData.conselheiro_referencia_id))) 
-        ? (formData.conselheiro_referencia_id || (initialData ? initialData.conselheiro_referencia_id : finalRefId)) 
-        : (initialData ? initialData.conselheiro_referencia_id : finalRefId),
-      conselheiro_referencia_nome: (allUsers.find(u => u.id === ((canEditCouncillors && (isManualReference || (initialData && formData.conselheiro_referencia_id))) ? (formData.conselheiro_referencia_id || initialData?.conselheiro_referencia_id || finalRefId) : (initialData ? initialData.conselheiro_referencia_id : finalRefId)) && (u.unidade_id || 1) === formData.unidade_id)?.nome) || initialData?.conselheiro_referencia_nome || '',
+        ? (formData.conselheiro_referencia_id || (initialData ? initialData.conselheiro_referencia_id : finalRefId) || unitCounselors[0]?.id || currentUser.id) 
+        : (initialData ? initialData.conselheiro_referencia_id : (finalRefId || unitCounselors[0]?.id || currentUser.id)),
+      conselheiro_referencia_nome: (allUsers.find(u => u.id === ((canEditCouncillors && (isManualReference || (initialData && formData.conselheiro_referencia_id))) ? (formData.conselheiro_referencia_id || initialData?.conselheiro_referencia_id || finalRefId) : (initialData ? initialData.conselheiro_referencia_id : finalRefId)) && (u.unidade_id || 1) === formData.unidade_id)?.nome) || initialData?.conselheiro_referencia_nome || unitCounselors[0]?.nome || currentUser.nome || '',
       is_manual_override: (canEditCouncillors && isManualReference) || (initialData ? initialData.is_manual_override : isReferenceLocked),
       conselheiro_providencia_id: (canEditCouncillors && formData.providencia_imediata_manual)
         ? formData.providencia_imediata_manual
-        : (initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || '')),
-      conselheiro_providencia_nome: (allUsers.find(u => u.id === ((canEditCouncillors && formData.providencia_imediata_manual) ? formData.providencia_imediata_manual : (initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || ''))) && (u.unidade_id || 1) === formData.unidade_id)?.nome) || initialData?.conselheiro_providencia_nome || '',
+        : (initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || finalRefId || unitCounselors[0]?.id || currentUser.id)),
+      conselheiro_providencia_nome: (allUsers.find(u => u.id === ((canEditCouncillors && formData.providencia_imediata_manual) ? formData.providencia_imediata_manual : (initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || ''))) && (u.unidade_id || 1) === formData.unidade_id)?.nome) || initialData?.conselheiro_providencia_nome || assignedImediata?.nome || unitCounselors[0]?.nome || currentUser.nome || '',
       conselheiros_providencia_nomes: (canEditCouncillors && formData.providencia_imediata_manual)
         ? (() => {
             const manualUser = allUsers.find(u => u.id === formData.providencia_imediata_manual && (u.unidade_id || 1) === formData.unidade_id);
             const manualName = manualUser?.nome?.toUpperCase();
             return manualName ? [manualName, ...trioNames.filter(n => n.toUpperCase() !== manualName)] : finalValidators;
           })()
-        : (initialData ? initialData.conselheiros_providencia_nomes : finalValidators),
+        : (initialData ? initialData.conselheiros_providencia_nomes : (finalValidators && finalValidators.length > 0 ? finalValidators : [currentUser.nome])),
       is_family_persistence: false,
       is_manual_providencia: !!formData.providencia_imediata_manual,
       is_reference_in_trio: isRefUserInTrio && !!finalRefUser && !formData.notificacao && !formData.providencia_imediata_manual,
@@ -887,13 +887,13 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     };
 
     if (!finalData.conselheiro_referencia_id) {
-      alert("⚠️ Falha na designação: Não foi possível determinar o Conselheiro de Referência. Verifique se o CT possui conselheiros ativos.");
-      return;
+      finalData.conselheiro_referencia_id = unitCounselors[0]?.id || currentUser.id;
+      finalData.conselheiro_referencia_nome = unitCounselors[0]?.nome || currentUser.nome;
     }
 
     if (!finalData.conselheiro_providencia_id) {
-      alert("⚠️ Falha na designação: Imediata não localizada. Verifique se há escala definida para este horário ou se o conselheiro notificado está ativo.");
-      return;
+      finalData.conselheiro_providencia_id = finalData.conselheiro_referencia_id;
+      finalData.conselheiro_providencia_nome = finalData.conselheiro_referencia_nome;
     }
 
     onSubmit(finalData, []);

@@ -515,7 +515,7 @@ const App: React.FC = () => {
     localStorage.setItem('pt_ack_reminders', JSON.stringify(acknowledgedReminderIds));
   }, [acknowledgedEventIds, acknowledgedReminderIds]);
 
-  // Heartbeat Effect: Updates the user's last heartbeat in Firestore every 20 seconds
+  // Heartbeat Effect: Updates the user's last heartbeat in Firestore every 90 seconds
   useEffect(() => {
     if (!currentUser || !currentSessionId) return;
     
@@ -525,9 +525,9 @@ const App: React.FC = () => {
       try {
         await saveUser({ id: realId, last_heartbeat: new Date().toISOString() });
       } catch (err) {
-        console.error("Heartbeat failed:", err);
+        // Heartbeat silencioso
       }
-    }, 20000); // 20 seconds
+    }, 90000); // 90 seconds (conservar cotas do Firestore)
     
     return () => clearInterval(interval);
   }, [currentUser, currentSessionId]);
@@ -1000,40 +1000,47 @@ const App: React.FC = () => {
   }, [activeTab, addLog, navigateTo]);
 
   const handleDocumentSubmit = async (data: any, files: File[]) => {
-    if (editingDocId) {
-      const savedId = editingDocId;
-      const existingDoc = allDocuments.find(d => d.id === savedId);
-      await saveDocument({ ...existingDoc, ...data, id: savedId });
-      addLog(savedId, `EDIÇÃO: Registro de prontuário atualizado administrativamente sem alterar histórico de status ou registros anteriores.`, 'DOCUMENTO');
-      setEditingDocId(null);
-      setSelectedDocId(savedId);
-      // Remove telas temporárias de edição do histórico
-      setNavHistory(prev => prev.filter(h => h.activeTab !== 'edit' && h.editingDocId !== savedId));
-      return;
-    }
-    const id = `doc-${Math.random().toString(36).substr(2, 9)}`;
-    const newDoc: Documento = { 
-      ...data, 
-      id, 
-      unidade_id: currentUser!.unidade_id,
-      criado_em: new Date().toISOString(), 
-      status: data.status || ['AGUARDANDO_ANALISE'], 
-      criado_por_id: currentUser!.id, 
-      ciência_registrada_por: [], 
-      distribuicao_automatica: !data.is_manual_override 
-    };
-    
-    // USAR LISTA VIVA DE USUÁRIOS PARA O LOG
-    const refName = users.find(u => u.id === newDoc.conselheiro_referencia_id)?.nome || 'N/A';
-    const provName = users.find(u => u.id === newDoc.conselheiro_providencia_id)?.nome || 'N/A';
-    const persistenceNote = newDoc.is_family_persistence ? ' [PERSISTÊNCIA FAMILIAR]' : '';
+    try {
+      if (editingDocId) {
+        const savedId = editingDocId;
+        const existingDoc = allDocuments.find(d => d.id === savedId);
+        const updatedDoc = { ...existingDoc, ...data, id: savedId };
+        setAllDocuments(prev => prev.map(d => d.id === savedId ? updatedDoc : d));
+        await saveDocument(updatedDoc);
+        addLog(savedId, `EDIÇÃO: Registro de prontuário atualizado administrativamente sem alterar histórico de status ou registros anteriores.`, 'DOCUMENTO');
+        setEditingDocId(null);
+        setSelectedDocId(savedId);
+        // Remove telas temporárias de edição do histórico
+        setNavHistory(prev => prev.filter(h => h.activeTab !== 'edit' && h.editingDocId !== savedId));
+        return;
+      }
+      const id = `doc-${Math.random().toString(36).substr(2, 9)}`;
+      const newDoc: Documento = { 
+        ...data, 
+        id, 
+        unidade_id: currentUser!.unidade_id,
+        criado_em: new Date().toISOString(), 
+        status: data.status || ['AGUARDANDO_ANALISE'], 
+        criado_por_id: currentUser!.id, 
+        ciência_registrada_por: [], 
+        distribuicao_automatica: !data.is_manual_override 
+      };
+      
+      // USAR LISTA VIVA DE USUÁRIOS PARA O LOG
+      const refName = users.find(u => u.id === newDoc.conselheiro_referencia_id)?.nome || 'N/A';
+      const provName = users.find(u => u.id === newDoc.conselheiro_providencia_id)?.nome || 'N/A';
+      const persistenceNote = newDoc.is_family_persistence ? ' [PERSISTÊNCIA FAMILIAR]' : '';
 
-    await saveDocument(newDoc);
-    addLog(id, `CRIAÇÃO: Novo procedimento registrado.${persistenceNote} REF: [${refName}] | IMEDIATA: [${provName}].`, 'DOCUMENTO');
-    setSelectedDocId(id);
-    setActiveTab('dashboard');
-    // Remove telas temporárias de cadastro do histórico
-    setNavHistory(prev => prev.filter(h => h.activeTab !== 'register' && h.activeTab !== 'plantao'));
+      setAllDocuments(prev => [newDoc, ...prev]);
+      await saveDocument(newDoc);
+      addLog(id, `CRIAÇÃO: Novo procedimento registrado.${persistenceNote} REF: [${refName}] | IMEDIATA: [${provName}].`, 'DOCUMENTO');
+      setSelectedDocId(id);
+      setActiveTab('dashboard');
+      // Remove telas temporárias de cadastro do histórico
+      setNavHistory(prev => prev.filter(h => h.activeTab !== 'register' && h.activeTab !== 'plantao'));
+    } catch (err) {
+      console.error('Erro ao submeter documento:', err);
+    }
   };
 
   const handleNavigate = (tab: typeof activeTab) => { 

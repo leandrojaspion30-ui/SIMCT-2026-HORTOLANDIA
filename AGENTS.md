@@ -106,3 +106,10 @@ Especialista na **Lei nº 15.211/2025** (Estatuto Digital da Criança e do Adole
 - É PROIBIDO declarar "busca realizada em [data]" sem que a ferramenta googleSearch tenha efetivamente retornado resultados (grounding metadata) na resposta da API.
 - Se o campo groundingMetadata estiver vazio/ausente, declare: *"Não foi possível confirmar via busca em tempo real nesta consulta. Informação baseada em conhecimento pré-treinado, sujeita a desatualização."*
 - NUNCA invente números de nota de precisão, links de exemplo ou datas de consulta.
+
+### 11. BLINDAGEM DE PERSISTÊNCIA, SANITIZAÇÃO E GARANTIA DE SALVAMENTO DE REGISTROS (RESILIÊNCIA TOTAL)
+- **Sanitização Profunda Obrigatória**: É terminantemente proibido enviar campos com valor `undefined`, `NaN` ou tipos não-serializáveis para o Firestore ou qualquer camada de persistência. Todas as gravações DEVEM passar pela função `cleanData` que remove recursivamente valores inválidos sem corromper estruturas nem descartar dados válidos.
+- **Duplo Buffer de Segurança (Zero Data Loss)**: Todo salvamento de documento, prontuário, despacho, agenda, usuário, escala ou chat DEVE gravar imediatamente em storage/cache local seguro antes e paralelamente à requisição em nuvem. Se houver oscilação de rede ou erro transitório do servidor, os dados já digitados pelo conselheiro/administrador estarão preservados localmente e integrados ao estado da interface sem travamento.
+- **Não-Bloqueio de Formulários**: Se faltar alguma designação automática secundária no momento do cadastro, o sistema DEVE adotar um fallback seguro (ex: primeiro conselheiro ativo da unidade ou o usuário logado) em vez de travar o envio e descartar o trabalho do operador.
+- **Tratamento Estruturado de Erros e Diagnóstico**: Todas as operações de banco de dados devem implementar tratamento resiliente (`handleFirestoreError`) sem lançar exceções não tratadas que congelem a interface.
+
