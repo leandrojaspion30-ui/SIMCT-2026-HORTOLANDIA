@@ -14,6 +14,31 @@ function generateSIMCTFallbackResponse(contents: any[]): string {
   }
 
   const qLower = userQuestion.toLowerCase();
+  
+  // Detecção de casos urgentes / violência / abuso / proteção imediata
+  const isAbuseOrUrgent = qLower.includes('sexual') || qLower.includes('abuso') || qLower.includes('viol') || 
+    qLower.includes('desenho') || qLower.includes('urgên') || qLower.includes('morte') || 
+    qLower.includes('plantão') || qLower.includes('escola') || qLower.includes('escuta');
+
+  if (isAbuseOrUrgent) {
+    return `### 🚨 ORIENTAÇÃO OPERACIONAL E JURÍDICA IMEDIATA (ECA / LEI Nº 13.431/2017 / LEI HENRY BOREL)
+
+1. **Acolhimento e Não Revitimização (Princípio da Não Invasão):**
+   - A escola e os profissionais da rede **NÃO DEVEM** questionar a criança sobre detalhes do ocorrido (vedação de inquirição repetida, conforme Lei nº 13.431/2017, art. 4º, § 1º).
+   - O relato espontâneo colhido deve ser formalizado e encaminhado imediatamente ao Conselho Tutelar e à Autoridade Policial competente.
+
+2. **Medidas Protetivas de Urgência pelo Conselho Tutelar (Art. 136 c/c Art. 101 do ECA):**
+   - Aplicação imediata de medidas de proteção para afastar a criança de situações de risco ou contato com o suposto agressor.
+   - Encaminhamento da criança e de seus responsáveis protetivos para atendimento médico/psicológico de retaguarda imediata (Rede de Saúde e CREAS/PAEFI).
+
+3. **Comunicação à Autoridade Policial e Ministério Público:**
+   - Notificação formal de notícia de fato criminoso à Delegacia de Polícia (preferencialmente DDM/DP especializada) e à Promotoria da Infância e Juventude para instauração de inquérito e requisição de **Depoimento Especial** em juízo.
+   - Comunicação imediata para medidas cautelares protetivas (Lei Henry Borel - Lei nº 14.344/2022).
+
+4. **Orientações à Família / Responsáveis:**
+   - Orientar o responsável protetivo a zelar pela integridade da criança e não permitir contato ou permanência no mesmo ambiente que o suposto autor dos fatos até decisão judicial.`;
+  }
+
   const isDocRequest = qLower.includes('cmdca') || qLower.includes('relat') || qLower.includes('oficio') || qLower.includes('documento') || qLower.includes('oficial') || qLower.includes('encaminh');
 
   if (isDocRequest) {
@@ -122,14 +147,6 @@ Análise técnica do Núcleo de Inteligência e Observatório de Direitos da Cri
 
 ---
 
-### 📡 RADAR DA INFÂNCIA DE HORTOLÂNDIA
-- 🔴 **Riscos Críticos:** Necessidade de pronta resposta em casos de suspeita de violência doméstica e violação de integridade.
-- 🟠 **Em Crescimento:** Demandas por suporte em saúde mental infanto-juvenil e busca ativa de alunos em risco de evasão escolar.
-- 🟡 **Pontos de Atenção:** Fragmentação de informações entre serviços de atendimento da mesma família.
-- 🔵 **Oportunidades:** Destinação de recursos do Fundo dos Direitos da Criança e do Adolescente (FDCA) pelo CMDCA para projetos preventivos locais.
-
----
-
 ### 💡 OBSERVATÓRIO NÍVEL 4: INTELIGÊNCIA E RECOMENDAÇÕES PARA POLÍTICAS PÚBLICAS (CMDCA / GESTÃO)
 1. **Atuação do CMDCA:** Financiar programas e projetos focados na convivência comunitária nos bairros com maior vulnerabilidade apontada pelo IVIA.
 2. **Capacitação da Rede de Proteção:** Formação continuada intersetorial sobre a Lei da Escuta Especializada (Lei nº 13.431/2017) e aplicação do protocolo Henry Borel (Lei nº 14.344/2022).
@@ -166,19 +183,17 @@ async function startServer() {
       });
 
       const normalizeModel = (m: string) => {
-        if (!m || typeof m !== "string") return "gemini-flash-latest";
-        if (m.includes("1.5") || m.includes("2.0") || m.includes("3.6") || m.includes("gemini-pro")) {
-          return "gemini-flash-latest";
+        if (!m || typeof m !== "string") return "gemini-3.7-flash";
+        if (m.includes("1.5") || m.includes("2.0") || m.includes("2.5") || m.includes("3.6") || m.includes("gemini-pro")) {
+          return "gemini-3.7-flash";
         }
         return m;
       };
 
       const primaryModels = [
-        "gemini-flash-latest",
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-lite",
+        "gemini-3.7-flash",
         "gemini-3.1-flash-lite",
-        "gemini-3.7-flash"
+        "gemini-3.1-pro-preview"
       ];
       const candidateModels = [
         ...(requestedModel ? [normalizeModel(requestedModel)] : []),
@@ -203,14 +218,14 @@ async function startServer() {
           } catch (err: any) {
             const is503 = err?.status === "UNAVAILABLE" || err?.message?.includes("503") || err?.message?.includes("high demand");
             const is429 = err?.status === "RESOURCE_EXHAUSTED" || err?.message?.includes("429") || err?.message?.includes("quota");
-            lastErrorMessage = `${modelName}: ${is503 ? 'Alta Demanda (503)' : (is429 ? 'Limite de Cota (429)' : (err?.message ? err.message.slice(0, 80) : 'Falha'))}`;
+            lastErrorMessage = `${modelName}: ${is503 ? 'Alta Demanda (503)' : (is429 ? 'Limite de Cota (429)' : (err?.message ? err.message.slice(0, 150) : 'Falha'))}`;
             
+            // Transient switch to fallback models
             if (is503 || is429) {
-              // Immediately switch to next model on 503 or 429
               break;
             }
             if (attempt < 2) {
-              await new Promise(r => setTimeout(r, 300));
+              await new Promise(r => setTimeout(r, 400));
             }
           }
         }
