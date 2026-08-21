@@ -738,7 +738,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                     onChange={(e) => {
                       e.stopPropagation();
                       const newS = e.target.value as DocumentStatus;
-                      if (newS) {
+                      if (newS && newS !== mainStatus) {
                         onUpdateStatus(doc.id, [...doc.status.filter(s => s !== newS), newS]);
                       }
                     }}
@@ -756,6 +756,17 @@ const DocumentList: React.FC<DocumentListProps> = ({
                     <option value="NOTIFICAR">🔔 NOTIFICAR</option>
                     <option value="RESPONDER_OFICIO_JUDICIARIO_MP">⚖️ RESPONDER OFÍCIO DO JUDICIÁRIO/MP</option>
                     <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
+                    <option value="AGENDAR_REUNIAO_REDE">📅 AGENDAR REUNIÃO DE REDE</option>
+                    <option value="AGUARDAR_RESPOSTA_EMAIL">📧 AGUARDAR RESPOSTA E-MAIL</option>
+                    <option value="EMAIL_RESPONDIDO">✉️ E-MAIL RESPONDIDO</option>
+                    <option value="ENCAMINHAR_NOTICIA_FATO">📂 ENCAMINHAR NOTÍCIA DE FATO</option>
+                    <option value="OFICIO_RESPONDIDO">📑 OFÍCIO RESPONDIDO</option>
+                    <option value="RESPONDER_EMAIL">📨 RESPONDER E-MAIL</option>
+                    <option value="DIREITO_NAO_VIOLADO">🚫 DIREITO NÃO VIOLADO</option>
+                    <option value="TODAS_MEDIDAS_APLICADAS">🏆 TODAS MEDIDAS APLICADAS</option>
+                    {!['AGUARDANDO_ANALISE', 'AGUARDANDO_DOCUMENTO', 'AGUARDANDO_VALIDACAO', 'MEDIDA_APLICADA', 'AVALIAR_EM_COLEGIADO', 'CONCLUIDO', 'MONITORAMENTO', 'MEDIDA_PENDENTE', 'NOTIFICADO', 'NOTIFICAR', 'RESPONDER_OFICIO_JUDICIARIO_MP', 'SOLICITAR_REUNIAO_REDE', 'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'EMAIL_RESPONDIDO', 'ENCAMINHAR_NOTICIA_FATO', 'OFICIO_RESPONDIDO', 'RESPONDER_EMAIL', 'DIREITO_NAO_VIOLADO', 'TODAS_MEDIDAS_APLICADAS'].includes(mainStatus) && (
+                      <option value={mainStatus}>📌 {(STATUS_LABELS[mainStatus] || mainStatus).toUpperCase()}</option>
+                    )}
                   </select>
                 </div>
              )}

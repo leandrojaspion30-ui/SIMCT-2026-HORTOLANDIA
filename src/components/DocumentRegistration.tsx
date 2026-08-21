@@ -239,6 +239,20 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
   const isLeandro = (currentUser.nome || '').trim().toUpperCase().includes('LEANDRO') || currentUser.id === 'cons1';
   const isConselheiro = currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE';
 
+  // Verifica se o usuário atual é o conselheiro designado para Providência Imediata neste prontuário
+  const isProvImediata = useMemo(() => {
+    if (!initialData || !currentUser) return false;
+    if (initialData.conselheiro_providencia_id === currentUser.id) return true;
+    if (currentUser.is_suplente_active && currentUser.real_user_id && initialData.conselheiro_providencia_id === currentUser.real_user_id) return true;
+    if (initialData.conselheiro_providencia_nome && isSameCounselorName(initialData.conselheiro_providencia_nome, currentUser.nome)) return true;
+    if (currentUser.is_suplente_active && currentUser.substituted_name && initialData.conselheiro_providencia_nome && isSameCounselorName(initialData.conselheiro_providencia_nome, currentUser.substituted_name)) return true;
+    if (initialData.conselheiros_providencia_nomes?.some(name => isSameCounselorName(name, currentUser.nome) || (currentUser.is_suplente_active && currentUser.substituted_name && isSameCounselorName(name, currentUser.substituted_name)))) return true;
+    return false;
+  }, [initialData, currentUser]);
+
+  // Conselheiros de Providência Imediata e ADM podem editar os campos do caso
+  const canEditCase = isADM || isProvImediata;
+
   // Permissão para editar conselheiros de referência ou providência imediata:
   // Se o documento já foi registrado anteriormente (initialData existe), APENAS Leandro pode editar.
   // Em novos cadastros (!initialData), administradores (isADM) têm a permissão.
@@ -927,7 +941,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                   type="date" 
                   required 
                   max={todayDate}
-                  disabled={!!initialData && !isADM}
+                  disabled={!!initialData && !canEditCase}
                   className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-blue-500 disabled:opacity-50 text-[13px] sm:text-[15px]"
                   value={formData.data_aporte}
                   onChange={e => setFormData({...formData, data_aporte: e.target.value})}
@@ -938,7 +952,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                 <input 
                   type="time" 
                   required 
-                  disabled={!!initialData && !isADM}
+                  disabled={!!initialData && !canEditCase}
                   className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-blue-500 disabled:opacity-50 text-[13px] sm:text-[15px]"
                   value={formData.hora_aporte}
                   onChange={e => setFormData({...formData, hora_aporte: e.target.value})}
@@ -1039,7 +1053,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                   <option value="">SELECIONE CANAL...</option>
                   {CANAIS_COMUNICADO_LIST.filter(c => {
                     const restricted = ['RELATÓRIO', 'OFÍCIO', 'OFÍCIO MP', 'OFÍCIO JUDICIÁRIO', 'DISQUE 100', 'E-MAIL INSTITUCIONAL'].includes(c);
-                    return !restricted || isADM;
+                    return !restricted || canEditCase;
                   }).map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
@@ -1071,7 +1085,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nº Ofício / Documento</label>
                 <input 
                   type="text" 
-                  disabled={!!initialData && !isADM}
+                  disabled={!!initialData && !canEditCase}
                   className="w-full p-3 sm:p-4 bg-white border border-slate-100 rounded-xl font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm disabled:opacity-50"
                   value={formData.tipo_documento}
                   onChange={e => setFormData({...formData, tipo_documento: e.target.value.toUpperCase()})}
@@ -1083,7 +1097,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nº Com. de Violação</label>
                 <input 
                   type="text" 
-                  disabled={isReadOnly || (!!initialData && !isADM && !isConselheiro)}
+                  disabled={isReadOnly || (!!initialData && !canEditCase && !isConselheiro)}
                   className="w-full p-3 sm:p-4 bg-white border border-slate-100 rounded-xl font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm disabled:opacity-50"
                   value={formData.numero_comunicado_violacao}
                   onChange={e => setFormData({...formData, numero_comunicado_violacao: e.target.value.toUpperCase()})}
@@ -1095,7 +1109,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nº Procedimento / SIPIA</label>
                 <input 
                   type="text" 
-                  disabled={isReadOnly || (!!initialData && !isADM && !isConselheiro)}
+                  disabled={isReadOnly || (!!initialData && !canEditCase && !isConselheiro)}
                   className="w-full p-3 sm:p-4 bg-white border border-slate-100 rounded-xl font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-blue-500 shadow-sm disabled:opacity-50"
                   value={formData.numero_sipia}
                   onChange={e => setFormData({...formData, numero_sipia: e.target.value.toUpperCase()})}
@@ -1398,7 +1412,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
             </div>
             <textarea 
               required
-              disabled={!!initialData && !isADM}
+              disabled={!!initialData && !canEditCase}
               className={`w-full p-6 bg-slate-50 border-2 rounded-2xl font-medium outline-none transition-all min-h-[150px] disabled:opacity-50 ${showRelatoError && !formData.relato_inicial ? 'border-red-500 shadow-red-50' : 'border-slate-100 focus:border-blue-500'}`}
               value={formData.relato_inicial}
               onChange={e => {

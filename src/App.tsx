@@ -1037,6 +1037,7 @@ const App: React.FC = () => {
     const latestStatus = newStatus[newStatus.length - 1];
     
     if (prevStatus === latestStatus) {
+      setAllDocuments(prev => prev.map(d => d.id === id ? { ...d, status: newStatus } : d));
       await saveDocument({ ...docObj, id, status: newStatus });
       return;
     }
@@ -1061,6 +1062,14 @@ const App: React.FC = () => {
         lido: false
       });
     }
+
+    // REGRA DE ATUALIZAÇÃO AUTOMÁTICA IMEDIATA:
+    // Atualiza imediatamente o estado da UI do React sem esperar o ciclo do banco
+    setAllDocuments(prev => prev.map(d => d.id === id ? { 
+      ...d, 
+      status: newStatus,
+      alertas_status_referencia: updatedAlerts 
+    } : d));
 
     await saveDocument({ 
       ...docObj,
@@ -1443,7 +1452,20 @@ const App: React.FC = () => {
     }
 
     if (activeTab === 'register' || activeTab === 'plantao') return <DocumentRegistration documents={documents} users={filteredUsers} agenda={agenda} currentUser={currentUser} onSubmit={handleDocumentSubmit} onCancel={goBack} isReadOnly={activeTab === 'register' ? !isAdministrative : false} title={activeTab === 'plantao' ? 'SIMCT - Novo Proced/Plantão' : undefined} nameMap={userNameMap} allUsers={filteredUsers} scaleExceptions={scaleExceptions} />;
-    if (activeTab === 'edit' && editingDocId) return <DocumentRegistration documents={documents} users={filteredUsers} agenda={agenda} currentUser={currentUser} initialData={documents.find(d => d.id === editingDocId)} onSubmit={handleDocumentSubmit} onCancel={goBack} isReadOnly={!isAdministrative} nameMap={userNameMap} allUsers={filteredUsers} scaleExceptions={scaleExceptions} />;
+    if (activeTab === 'edit' && editingDocId) {
+      const editDoc = documents.find(d => d.id === editingDocId) || allDocuments.find(d => d.id === editingDocId);
+      const isEditingProvImediata = editDoc && currentUser ? (
+        editDoc.conselheiro_providencia_id === currentUser.id ||
+        (currentUser.is_suplente_active && currentUser.real_user_id && editDoc.conselheiro_providencia_id === currentUser.real_user_id) ||
+        (editDoc.conselheiro_providencia_nome && isSameCounselorName(editDoc.conselheiro_providencia_nome, currentUser.nome)) ||
+        (currentUser.is_suplente_active && currentUser.substituted_name && editDoc.conselheiro_providencia_nome && isSameCounselorName(editDoc.conselheiro_providencia_nome, currentUser.substituted_name)) ||
+        editDoc.conselheiros_providencia_nomes?.some(name => isSameCounselorName(name, currentUser.nome) || (currentUser.is_suplente_active && currentUser.substituted_name && isSameCounselorName(name, currentUser.substituted_name)))
+      ) : false;
+
+      const canEdit = isAdministrative || isEditingProvImediata;
+
+      return <DocumentRegistration documents={documents} users={filteredUsers} agenda={agenda} currentUser={currentUser} initialData={editDoc} onSubmit={handleDocumentSubmit} onCancel={goBack} isReadOnly={!canEdit} nameMap={userNameMap} allUsers={filteredUsers} scaleExceptions={scaleExceptions} />;
+    }
     
     const handleToggleGuardarPasta = async (docIds: string[], guardar: boolean) => {
       try {
@@ -1468,7 +1490,7 @@ const App: React.FC = () => {
       return <DocumentView document={doc} allDocuments={documents} users={users} agenda={agenda} files={[]} logs={logs.filter(l => l.documento_id === selectedDocId)} currentUser={currentUser} isReadOnly={isAdministrative} forceEdit={forceDirectEdit} onBack={goBack} onEdit={() => navigateTo('edit', { editId: doc.id })} onDelete={async (id) => { 
           await handleDeleteDocument(id, 'Visualizador de Documento');
           goBack();
-      }} onUpdateStatus={handleUpdateStatus} onUpdateDocument={async (id, fields) => { const existingDoc = allDocuments.find(d => d.id === id); await saveDocument({ ...existingDoc, ...fields, id }); }} onAddLog={addLog} onScience={handleScience} nameMap={userNameMap} scaleExceptions={scaleExceptions} />;
+      }} onUpdateStatus={handleUpdateStatus} onUpdateDocument={async (id, fields) => { const existingDoc = allDocuments.find(d => d.id === id); setAllDocuments(prev => prev.map(d => d.id === id ? { ...d, ...fields } : d)); await saveDocument({ ...existingDoc, ...fields, id }); }} onAddLog={addLog} onScience={handleScience} nameMap={userNameMap} scaleExceptions={scaleExceptions} />;
     }
 
     if (activeTab === 'logs' && !(isSuperAdmin || isAdministrative)) {

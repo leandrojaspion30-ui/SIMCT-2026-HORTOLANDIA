@@ -121,8 +121,9 @@ const DocumentView: React.FC<DocumentViewProps> = ({
 
   const isActualProvidenciaImediata = 
     doc.conselheiro_providencia_id === currentUser.id || 
-    (currentUser.is_suplente_active && doc.conselheiro_providencia_id === currentUser.real_user_id) ||
+    (currentUser.is_suplente_active && currentUser.real_user_id && doc.conselheiro_providencia_id === currentUser.real_user_id) ||
     (doc.conselheiro_providencia_nome && isUserInTrio(doc.conselheiro_providencia_nome)) ||
+    (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.some(nome => isUserInTrio(nome))) ||
     false;
 
   const isImediata = 
@@ -132,9 +133,9 @@ const DocumentView: React.FC<DocumentViewProps> = ({
 
   const isADM = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
   const isConselheiro = currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE';
-  const canEditTechnicalFields = isActualProvidenciaImediata && !isADM;
-  const canEditIdentifiers = isResponsible || isADM;
-  const canEditViolationOrSipia = isConselheiro || isADM || isResponsible;
+  const canEditTechnicalFields = isActualProvidenciaImediata || isImediata || isADM;
+  const canEditIdentifiers = isResponsible || isActualProvidenciaImediata || isADM;
+  const canEditViolationOrSipia = isConselheiro || isADM || isResponsible || isActualProvidenciaImediata;
 
   const isReferenceCounselor = doc.conselheiro_referencia_id === currentUser.id ||
     (currentUser.is_suplente_active && currentUser.real_user_id && doc.conselheiro_referencia_id === currentUser.real_user_id);
@@ -525,7 +526,11 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       is_improcedente: isImprocedente,
       monitoramento: monitoramentoAtualizado,
       notificacoes_trio: notificacoesTrio,
-      conselheiros_providencia_nomes: preservedTrio
+      conselheiros_providencia_nomes: preservedTrio,
+      local_ocorrencia: localOcorrencia,
+      numero_comunicado_violacao: numeroComunicadoViolacao,
+      numero_sipia: numeroSipia,
+      informacoes_documento: informacoesDocumento
     });
     
     onAddLog(doc.id, finalize ? `EDIÇÃO TÉCNICA: Medidas/Atribuições alteradas. REVALIDAÇÃO COLEGIADA OBRIGATÓRIA.` : `RASCUNHO TÉCNICO: Prontuário atualizado.`, 'DOCUMENTO');
