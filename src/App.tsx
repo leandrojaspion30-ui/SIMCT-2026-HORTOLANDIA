@@ -826,24 +826,36 @@ const App: React.FC = () => {
   };
 
   const confirmLogout = async (savePending: boolean) => {
-    addLog('SISTEMA', `Efetuou Logoff Seguro (Salvamento de rascunhos pendentes: ${savePending ? 'SIM' : 'NÃO'})`, 'SEGURANÇA');
+    const userToLogoff = currentUser;
     
-    // Clear session in DB if we are the current session
-    if (currentUser) {
-      const realId = currentUser.real_user_id || currentUser.id;
-      await saveUser({ id: realId, current_session_id: undefined });
-    }
-
+    // 1. Limpa imediatamente os estados locais e o localStorage para garantir que a saída ocorra sem bloqueio
     setIsLogoutModalOpen(false);
     setCurrentUser(null);
     setCurrentSessionId(null);
-    localStorage.removeItem('simct_session_id');
-    localStorage.removeItem('simct_nav_state');
     setSelectedDocId(null);
     setEditingDocId(null);
     setForceDirectEdit(false);
     setNavHistory([]);
     setActiveTab('dashboard');
+
+    try {
+      localStorage.removeItem('simct_session_id');
+      localStorage.removeItem('simct_current_user');
+      localStorage.removeItem('simct_nav_state');
+    } catch (err) {
+      console.warn("Falha ao limpar localStorage no logout:", err);
+    }
+
+    // 2. Registra log e atualiza Firestore de forma não-bloqueante
+    try {
+      if (userToLogoff) {
+        addLog('SISTEMA', `Efetuou Logoff Seguro (Salvamento de rascunhos pendentes: ${savePending ? 'SIM' : 'NÃO'})`, 'SEGURANÇA', userToLogoff);
+        const realId = userToLogoff.real_user_id || userToLogoff.id;
+        await saveUser({ id: realId, current_session_id: '' });
+      }
+    } catch (err) {
+      console.warn("Aviso ao sincronizar encerramento de sessão com Firestore:", err);
+    }
   };
 
   const handleRefresh = useCallback(() => {
@@ -1995,20 +2007,23 @@ const App: React.FC = () => {
               </div>
               <div className="p-8 pt-4 space-y-3">
                  <button 
+                   type="button"
                    onClick={() => confirmLogout(true)}
-                   className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-md hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                   className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-md hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
                  >
                     <Save className="w-4 h-4" /> Sim, Salvar e Sair
                  </button>
                  <button 
+                   type="button"
                    onClick={() => confirmLogout(false)}
-                   className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-200 transition-all"
+                   className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-200 active:scale-95 transition-all cursor-pointer"
                  >
                     Apenas Sair (Descartar Pendências)
                  </button>
                  <button 
+                   type="button"
                    onClick={() => setIsLogoutModalOpen(false)}
-                   className="w-full py-4 bg-white text-slate-400 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:text-slate-600 transition-all"
+                   className="w-full py-4 bg-white text-slate-400 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:text-slate-600 active:scale-95 transition-all cursor-pointer"
                  >
                     Cancelar e Permanecer Conectado
                  </button>

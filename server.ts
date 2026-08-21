@@ -14,14 +14,16 @@ function generateSIMCTFallbackResponse(contents: any[]): string {
   }
 
   const qLower = userQuestion.toLowerCase();
-  
+
   // Detecção de casos urgentes / violência / abuso / proteção imediata
-  const isAbuseOrUrgent = qLower.includes('sexual') || qLower.includes('abuso') || qLower.includes('viol') || 
-    qLower.includes('desenho') || qLower.includes('urgên') || qLower.includes('morte') || 
+  const isAbuseOrUrgent = qLower.includes('sexual') || qLower.includes('abuso') || qLower.includes('viol') ||
+    qLower.includes('desenho') || qLower.includes('urgên') || qLower.includes('morte') ||
     qLower.includes('plantão') || qLower.includes('escola') || qLower.includes('escuta');
 
   if (isAbuseOrUrgent) {
     return `### 🚨 ORIENTAÇÃO OPERACIONAL E JURÍDICA IMEDIATA (ECA / LEI Nº 13.431/2017 / LEI HENRY BOREL)
+
+⚠️ **AVISO:** Não foi possível confirmar via busca em tempo real nesta consulta (modo de contingência/fallback ativo). Informação baseada em conhecimento pré-treinado, sujeita a desatualização. Recomenda-se confirmação em fonte oficial antes de uso jurídico formal.
 
 1. **Acolhimento e Não Revitimização (Princípio da Não Invasão):**
    - A escola e os profissionais da rede **NÃO DEVEM** questionar a criança sobre detalhes do ocorrido (vedação de inquirição repetida, conforme Lei nº 13.431/2017, art. 4º, § 1º).
@@ -43,6 +45,8 @@ function generateSIMCTFallbackResponse(contents: any[]): string {
 
   if (isDocRequest) {
     return `### 📄 DOCUMENTO 1 — OFÍCIO INSTITUCIONAL DE ENCAMINHAMENTO
+
+⚠️ **AVISO:** Modo de contingência ativo (sem busca em tempo real). Este é um modelo/template padrão, não uma consulta jurídica atualizada.
 
 **CONSELHO TUTELAR DE HORTOLÂNDIA - SP**
 *Núcleo de Inteligência e Observatório SIMCT*
@@ -122,6 +126,9 @@ Concentração de demandas em territórios descentralizados demandando maior sup
   }
 
   return `### 📊 OBSERVATÓRIO INTELIGENTE SIMCT - NÍVEL 1: MONITORAMENTO DE DADOS
+
+⚠️ **AVISO:** Modo de contingência ativo (sem busca em tempo real ou IA externa disponível nesta consulta). Este conteúdo é um modelo institucional padrão, não uma análise jurídica atualizada.
+
 Análise técnica do Núcleo de Inteligência e Observatório de Direitos da Criança e do Adolescente de Hortolândia - SP (ECA - Lei nº 8.069/1990):
 
 - **Plataforma Ativa:** Sistema de Informação e Monitoramento do Conselho Tutelar (SIMCT) - Unidades I e II.
@@ -203,23 +210,39 @@ async function startServer() {
 
       let responseText = "";
       let lastErrorMessage = "";
+      let usedGrounding = false;
 
       for (const modelName of uniqueModels) {
         for (let attempt = 1; attempt <= 2; attempt++) {
           try {
+            // ✅ CORREÇÃO: ativa Google Search Grounding (busca real na web)
             const response = await ai.models.generateContent({
               model: modelName,
               contents,
+              config: {
+                tools: [{ googleSearch: {} }],
+              },
             });
+
             if (response && response.text) {
               responseText = response.text;
+
+              // Verifica se a busca de fato retornou metadados de grounding
+              const groundingMeta = (response as any)?.candidates?.[0]?.groundingMetadata;
+              usedGrounding = !!(groundingMeta && (groundingMeta.groundingChunks?.length || groundingMeta.webSearchQueries?.length));
+
+              // Se o modelo não usou grounding de fato, alerta no texto (evita alucinação de "busca realizada")
+              if (!usedGrounding) {
+                responseText = `⚠️ **Aviso de Integridade:** Não foi possível confirmar execução de busca em tempo real (grounding) nesta consulta. A resposta abaixo pode estar baseada em conhecimento pré-treinado e sujeita a desatualização.\n\n---\n\n${responseText}`;
+              }
+
               break;
             }
           } catch (err: any) {
             const is503 = err?.status === "UNAVAILABLE" || err?.message?.includes("503") || err?.message?.includes("high demand");
             const is429 = err?.status === "RESOURCE_EXHAUSTED" || err?.message?.includes("429") || err?.message?.includes("quota");
             lastErrorMessage = `${modelName}: ${is503 ? 'Alta Demanda (503)' : (is429 ? 'Limite de Cota (429)' : (err?.message ? err.message.slice(0, 150) : 'Falha'))}`;
-            
+
             // Transient switch to fallback models
             if (is503 || is429) {
               break;
@@ -277,4 +300,3 @@ async function startServer() {
 }
 
 startServer();
-
