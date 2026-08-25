@@ -6,7 +6,7 @@ import {
   CheckCircle, CheckCircle2, ChevronDown, Play, Users, Tag, FileCheck2,
   Database, Fingerprint, MapPin, Building2, UserCog, Search, LayoutList,
   ChevronRight, Timer, ArrowUpRight, ShieldCheck, Box, FileText, Baby,
-  AlertTriangle, Trash2, Zap, Bell, BellRing
+  AlertTriangle, Trash2, Zap, Bell, BellRing, RotateCcw
 } from 'lucide-react';
 import { 
   Documento, Log, User as UserType, DocumentStatus, 
@@ -1128,6 +1128,31 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                   saved={!!origemCategoria || !!origemInstituicao || !!canalComunicado}
                 >
                   <div className="space-y-4">
+                    <div className="flex items-center justify-between pb-1 border-b border-sky-100/60">
+                      <span className="text-[10px] font-black text-sky-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-sky-600" />
+                        Identificação da Origem do Comunicado
+                      </span>
+                      {(origemCategoria || origemInstituicao || canalComunicado || customOrigem) && (
+                        <button
+                          type="button"
+                          disabled={!canEditTechnicalFields}
+                          onClick={() => {
+                            setOrigemCategoria('');
+                            setOrigemInstituicao('');
+                            setCanalComunicado('');
+                            setCustomOrigem('');
+                            handleUpdateOrigem('', '', '');
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-xs active:scale-95"
+                          title="Resetar e limpar todos os campos"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          Resetar
+                        </button>
+                      )}
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
                       {/* COLUNA 1: CATEGORIA */}
                       <div className="space-y-2">

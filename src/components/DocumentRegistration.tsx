@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check, Repeat, Lock, ArrowLeft, Sparkles, Loader2 } from 'lucide-react';
+import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check, Repeat, Lock, ArrowLeft, Sparkles, Loader2, RotateCcw } from 'lucide-react';
 import { Documento, User, ChildData, DocumentStatus, AgendaEntry, ScaleException } from '../types';
 import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, getOrigensHierarquicasByUnidade, CANAIS_COMUNICADO_LIST, getEffectiveEscala, isSameCounselorName, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade, getUnidadeByBairro, LOCAL_OCORRENCIA_OPTIONS } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
@@ -923,9 +923,32 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
 
           {/* BLOCO 2: ORIGEM E CANAL DO COMUNICADO (NOVO MODELO) */}
           <section className="p-4 sm:p-8 bg-slate-50/50 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 space-y-4 sm:space-y-6">
-            <div className="flex items-center gap-3">
-              <ClipboardCheck className="w-6 h-6 text-blue-600" />
-              <h3 className="text-[11px] sm:text-[13px] font-black uppercase text-slate-800 tracking-widest">2. Origem e Canal do Comunicado</h3>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <ClipboardCheck className="w-6 h-6 text-blue-600" />
+                <h3 className="text-[11px] sm:text-[13px] font-black uppercase text-slate-800 tracking-widest">2. Origem e Canal do Comunicado</h3>
+              </div>
+              {(formData.origem_categoria || selectedOrigemDropdown || formData.canal_comunicado || customOrigem) && (
+                <button
+                  type="button"
+                  disabled={isReadOnly}
+                  onClick={() => {
+                    setFormData({
+                      ...formData,
+                      origem_categoria: '',
+                      origem: '',
+                      canal_comunicado: ''
+                    });
+                    setSelectedOrigemDropdown('');
+                    setCustomOrigem('');
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-xs active:scale-95"
+                  title="Resetar e limpar campos de origem e canal"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Resetar
+                </button>
+              )}
             </div>
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">

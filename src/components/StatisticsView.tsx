@@ -6,7 +6,7 @@ import {
   BarChart3, PieChart, TrendingUp, Users, FileText, ShieldAlert, Sparkles, UserCheck, 
   Bell, PhoneCall, Activity, Download, Printer, X, Calendar, Filter, BookOpen,
   Search, Folder, Clock, ArrowUp, ArrowDown, ArrowRight, RotateCcw, RotateCw, Info, ArrowLeft,
-  Building2
+  Building2, MapPin, Baby, Home, CheckCircle2, AlertCircle
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell } from 'recharts';
 import { formatLocalDateString } from '../lib/dateUtils';
@@ -316,6 +316,13 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       totalCriancas: filteredDocuments.reduce((acc, d) => acc + (d.criancas?.length || 0), 0),
       direitos: {} as Record<string, number>,
       direitosFundamentais: {} as Record<string, number>,
+      violacoesConselheiros: {} as Record<string, number>,
+      fundamentaisConselheiros: {} as Record<string, number>,
+      gruposConselheiros: {} as Record<string, number>,
+      agentesConselheiros: {} as Record<string, number>,
+      totalCasosComViolacao: 0,
+      totalCasosImprocedentes: 0,
+      totalViolacoesRegistradas: 0,
       direitosPorOrigem: {} as Record<string, {
         totalCasos: number;
         totalViolacoes: number;
@@ -325,7 +332,10 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       bairros: {} as Record<string, number>,
       agentes: {} as Record<string, number>,
       origens: {} as Record<string, number>,
+      origensCategorias: {} as Record<string, number>,
+      origensInstituicoes: {} as Record<string, number>,
       canaisComunicado: {} as Record<string, number>,
+      origemCategoriaXCanal: {} as Record<string, Record<string, number>>,
       atribuicoesECA: {} as Record<string, number>,
       requisicoes136III: 0,
       servicos136III: {} as Record<string, number>,
@@ -360,7 +370,63 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       stats.bairros[doc.bairro] = (stats.bairros[doc.bairro] || 0) + 1;
       const orig = (doc.origem || 'NÃO INFORMADO').trim();
       stats.origens[orig] = (stats.origens[orig] || 0) + 1;
-      stats.canaisComunicado[doc.canal_comunicado] = (stats.canaisComunicado[doc.canal_comunicado] || 0) + 1;
+
+      // Classificação precisa da Categoria e Instituição de quem comunicou (APENAS QUANDO MARCADO PELO CONSELHEIRO TUTELAR)
+      const rawOrig = (doc.origem || '').trim();
+      const rawOrigCat = (doc.origem_categoria || '').trim();
+      const hasOrigemMarcada = Boolean(rawOrigCat || (rawOrig && rawOrig !== 'NÃO INFORMADO'));
+
+      if (hasOrigemMarcada) {
+        let origCat = rawOrigCat;
+        let origInst = rawOrig || rawOrigCat;
+
+        if (!origCat) {
+          if (rawOrig === 'SOCIEDADE' || rawOrig.startsWith('SOCIEDADE')) {
+            origCat = 'SOCIEDADE';
+            origInst = 'SOCIEDADE';
+          } else if (rawOrig.includes(' - ')) {
+            const parts = rawOrig.split(' - ');
+            origCat = parts[0].trim();
+            origInst = parts.slice(1).join(' - ').trim() || origCat;
+          } else if (rawOrig.includes('DISQUE 100') || rawOrig.includes('DISQUE DIREITOS')) {
+            origCat = 'DISQUE 100';
+            origInst = 'DISQUE 100';
+          } else {
+            origCat = rawOrig;
+            origInst = rawOrig;
+          }
+        } else {
+          if (origCat === 'SOCIEDADE') {
+            origInst = 'SOCIEDADE';
+          } else if (rawOrig.startsWith(`${origCat} - `)) {
+            origInst = rawOrig.replace(`${origCat} - `, '').trim() || origCat;
+          }
+        }
+
+        if (origCat) {
+          stats.origensCategorias[origCat] = (stats.origensCategorias[origCat] || 0) + 1;
+        }
+        if (origInst) {
+          stats.origensInstituicoes[origInst] = (stats.origensInstituicoes[origInst] || 0) + 1;
+        }
+        if (rawOrig) {
+          stats.origens[rawOrig] = (stats.origens[rawOrig] || 0) + 1;
+        }
+      }
+
+      // Canal de Comunicação: contabilizado apenas quando preenchido/marcado pelo Conselheiro Tutelar
+      const rawCanal = (doc.canal_comunicado || '').trim();
+      if (rawCanal && rawCanal !== 'NÃO INFORMADO') {
+        stats.canaisComunicado[rawCanal] = (stats.canaisComunicado[rawCanal] || 0) + 1;
+
+        if (hasOrigemMarcada) {
+          const origCatKey = rawOrigCat || (rawOrig ? rawOrig.split(' - ')[0].trim() : 'OUTROS');
+          if (!stats.origemCategoriaXCanal[origCatKey]) {
+            stats.origemCategoriaXCanal[origCatKey] = {};
+          }
+          stats.origemCategoriaXCanal[origCatKey][rawCanal] = (stats.origemCategoriaXCanal[origCatKey][rawCanal] || 0) + 1;
+        }
+      }
       
       if (doc.local_ocorrencia) {
         stats.locaisOcorrencia[doc.local_ocorrencia] = (stats.locaisOcorrencia[doc.local_ocorrencia] || 0) + 1;
@@ -379,32 +445,51 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       }
       stats.direitosPorOrigem[orig].totalCasos += 1;
 
+      // Classificação Técnica dos Conselheiros Tutelares (SIPIA / ECA)
+      if (doc.is_improcedente) {
+        stats.totalCasosImprocedentes += 1;
+      }
+
       let docHasViolations = false;
-      doc.violacoesSipia?.forEach(v => {
+      if (doc.violacoesSipia && doc.violacoesSipia.length > 0) {
         docHasViolations = true;
-        const especifico = v.especifico ? v.especifico.trim() : 'VIOLAÇÃO NÃO ESPECIFICADA';
-        const fundamental = v.fundamental ? v.fundamental.trim() : 'DIREITO NÃO ESPECIFICADO';
+        stats.totalCasosComViolacao += 1;
 
-        stats.direitos[especifico] = (stats.direitos[especifico] || 0) + 1;
-        stats.direitosFundamentais[fundamental] = (stats.direitosFundamentais[fundamental] || 0) + 1;
+        doc.violacoesSipia.forEach(v => {
+          const especifico = (v.especifico || '').trim();
+          const fundamental = (v.fundamental || '').trim();
+          const grupo = (v.grupo || '').trim();
 
-        stats.direitosPorOrigem[orig].totalViolacoes += 1;
-        stats.direitosPorOrigem[orig].violacoes[especifico] = (stats.direitosPorOrigem[orig].violacoes[especifico] || 0) + 1;
-        stats.direitosPorOrigem[orig].fundamentais[fundamental] = (stats.direitosPorOrigem[orig].fundamentais[fundamental] || 0) + 1;
-      });
+          if (especifico) {
+            stats.violacoesConselheiros[especifico] = (stats.violacoesConselheiros[especifico] || 0) + 1;
+            stats.direitos[especifico] = (stats.direitos[especifico] || 0) + 1;
+            stats.totalViolacoesRegistradas += 1;
 
-      if (!docHasViolations && doc.violencias && doc.violencias.length > 0) {
-        doc.violencias.forEach(viol => {
-          const nomeViol = `VIOLÊNCIA ${viol}`;
-          stats.direitos[nomeViol] = (stats.direitos[nomeViol] || 0) + 1;
-          stats.direitosPorOrigem[orig].totalViolacoes += 1;
-          stats.direitosPorOrigem[orig].violacoes[nomeViol] = (stats.direitosPorOrigem[orig].violacoes[nomeViol] || 0) + 1;
+            stats.direitosPorOrigem[orig].totalViolacoes += 1;
+            stats.direitosPorOrigem[orig].violacoes[especifico] = (stats.direitosPorOrigem[orig].violacoes[especifico] || 0) + 1;
+          }
+
+          if (fundamental) {
+            stats.fundamentaisConselheiros[fundamental] = (stats.fundamentaisConselheiros[fundamental] || 0) + 1;
+            stats.direitosFundamentais[fundamental] = (stats.direitosFundamentais[fundamental] || 0) + 1;
+            stats.direitosPorOrigem[orig].fundamentais[fundamental] = (stats.direitosPorOrigem[orig].fundamentais[fundamental] || 0) + 1;
+          }
+
+          if (grupo) {
+            stats.gruposConselheiros[grupo] = (stats.gruposConselheiros[grupo] || 0) + 1;
+          }
         });
       }
 
-      doc.agentesVioladores?.forEach(a => {
-        stats.agentes[a.principal] = (stats.agentes[a.principal] || 0) + 1;
-      });
+      if (doc.agentesVioladores && doc.agentesVioladores.length > 0) {
+        doc.agentesVioladores.forEach(a => {
+          const agNome = (a.principal || a.categoria || '').trim();
+          if (agNome) {
+            stats.agentesConselheiros[agNome] = (stats.agentesConselheiros[agNome] || 0) + 1;
+            stats.agentes[agNome] = (stats.agentes[agNome] || 0) + 1;
+          }
+        });
+      }
 
       doc.atribuicoes_136?.forEach(a => {
         stats.atribuicoesECA[a] = (stats.atribuicoesECA[a] || 0) + 1;
@@ -548,14 +633,305 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       .slice(0, 8)
   , [aiStats]);
 
+  const originsCategoriesData = useMemo(() => 
+    Object.entries(aiStats.origensCategorias)
+      .filter(([name]) => name && name !== 'NÃO INFORMADO')
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+  , [aiStats]);
+
+  const originsInstitutionsData = useMemo(() => 
+    Object.entries(aiStats.origensInstituicoes)
+      .filter(([name]) => name && name !== 'NÃO INFORMADO')
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 15)
+  , [aiStats]);
+
   const channelsData = useMemo(() => 
     Object.entries(aiStats.canaisComunicado)
+      .filter(([name]) => name && name !== 'NÃO INFORMADO')
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
   , [aiStats]);
 
   const originsData = useMemo(() => 
     Object.entries(aiStats.origens)
+      .filter(([name]) => name && name !== 'NÃO INFORMADO')
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+  , [aiStats]);
+
+  // PAINEL INTEGRADO: CASOS COM DIAGNÓSTICO TÉCNICO COMPLETO (4 EIXOS PREENCHIDOS PELOS CONSELHEIROS)
+  // Requisito: Só gera dados para os casos em que os conselheiros preencheram:
+  // 1. Direito Violado (SIPIA / Violências)
+  // 2. Agente Violador
+  // 3. Quem Comunicou a Violação
+  // 4. Local da Ocorrência
+  // Cruzando automaticamente com os Dados da Criança Registrada e o Bairro de Residência
+  const diagnosticoCompletoStats = useMemo(() => {
+    const qualifiedDocs = filteredDocuments.filter(doc => {
+      if (doc.is_improcedente) return false;
+
+      // 1. Direito Violado
+      const hasDireitoViolado = (doc.violacoesSipia && doc.violacoesSipia.length > 0) || (doc.violencias && doc.violencias.length > 0);
+      
+      // 2. Agente Violador
+      const hasAgenteViolador = Boolean(doc.agentesVioladores && doc.agentesVioladores.length > 0);
+
+      // 3. Quem Comunicou a Violação
+      const rawOrig = (doc.origem || '').trim();
+      const rawOrigCat = (doc.origem_categoria || '').trim();
+      const hasQuemComunicou = Boolean(rawOrigCat || (rawOrig && rawOrig !== 'NÃO INFORMADO' && rawOrig !== 'OUTROS'));
+
+      // 4. Local da Ocorrência
+      const rawLocal = (doc.local_ocorrencia || '').trim();
+      const hasLocalOcorrencia = Boolean(rawLocal && rawLocal !== 'NÃO INFORMADO');
+
+      return hasDireitoViolado && hasAgenteViolador && hasQuemComunicou && hasLocalOcorrencia;
+    });
+
+    const totalCasos = qualifiedDocs.length;
+    let totalCriancasVitimas = 0;
+    let totalViolacoes = 0;
+
+    const bairrosResidencia: Record<string, number> = {};
+    const faixasEtarias: Record<string, number> = {
+      'PRIMEIRA INFÂNCIA (0-6)': 0,
+      'CRIANÇA (7-12)': 0,
+      'ADOLESCENTE (13-18)': 0,
+      'NÃO INFORMADA': 0
+    };
+    const generos: Record<string, number> = {};
+    const violacoesEspecificas: Record<string, number> = {};
+    const direitosFundamentais: Record<string, number> = {};
+    const agentesVioladores: Record<string, number> = {};
+    const quemComunicouCategorias: Record<string, number> = {};
+    const quemComunicouInstituicoes: Record<string, number> = {};
+    const canaisComunicado: Record<string, number> = {};
+    const locaisOcorrencia: Record<string, number> = {};
+
+    const casosDetalhados = qualifiedDocs.map(doc => {
+      // Bairro de Residência da Criança
+      const bairroResidencia = (doc.bairro || 'NÃO INFORMADO').trim();
+      bairrosResidencia[bairroResidencia] = (bairrosResidencia[bairroResidencia] || 0) + 1;
+
+      // Crianças registradas
+      const criancasDoc = (doc.criancas && doc.criancas.length > 0)
+        ? doc.criancas
+        : [{ nome: doc.crianca_nome || 'Criança Registrada', data_nascimento: '', genero_identidade: '' }];
+
+      totalCriancasVitimas += criancasDoc.length;
+
+      criancasDoc.forEach(c => {
+        const gen = (c.genero_identidade || 'NÃO INFORMADO').trim().toUpperCase();
+        if (gen && gen !== 'NÃO INFORMADO') {
+          generos[gen] = (generos[gen] || 0) + 1;
+        }
+
+        if (c.data_nascimento) {
+          const birth = new Date(c.data_nascimento);
+          const today = new Date();
+          let age = today.getFullYear() - birth.getFullYear();
+          const m = today.getMonth() - birth.getMonth();
+          if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+
+          if (age >= 0 && age <= 6) faixasEtarias['PRIMEIRA INFÂNCIA (0-6)']++;
+          else if (age >= 7 && age <= 12) faixasEtarias['CRIANÇA (7-12)']++;
+          else if (age >= 13 && age <= 18) faixasEtarias['ADOLESCENTE (13-18)']++;
+          else faixasEtarias['NÃO INFORMADA']++;
+        } else if (c.idade_calculada !== undefined && c.idade_calculada !== null) {
+          const age = c.idade_calculada;
+          if (age <= 6) faixasEtarias['PRIMEIRA INFÂNCIA (0-6)']++;
+          else if (age <= 12) faixasEtarias['CRIANÇA (7-12)']++;
+          else if (age <= 18) faixasEtarias['ADOLESCENTE (13-18)']++;
+          else faixasEtarias['NÃO INFORMADA']++;
+        } else {
+          faixasEtarias['NÃO INFORMADA']++;
+        }
+      });
+
+      // Violações SIPIA / ECA
+      const docViolacoes: string[] = [];
+      const docFundamentais: string[] = [];
+      doc.violacoesSipia?.forEach(v => {
+        const esp = (v.especifico || '').trim();
+        const fund = (v.fundamental || '').trim();
+        if (esp) {
+          violacoesEspecificas[esp] = (violacoesEspecificas[esp] || 0) + 1;
+          totalViolacoes += 1;
+          if (!docViolacoes.includes(esp)) docViolacoes.push(esp);
+        }
+        if (fund) {
+          direitosFundamentais[fund] = (direitosFundamentais[fund] || 0) + 1;
+          if (!docFundamentais.includes(fund)) docFundamentais.push(fund);
+        }
+      });
+
+      if ((!doc.violacoesSipia || doc.violacoesSipia.length === 0) && doc.violencias) {
+        doc.violencias.forEach(viol => {
+          const nomeViol = `VIOLÊNCIA ${viol}`;
+          violacoesEspecificas[nomeViol] = (violacoesEspecificas[nomeViol] || 0) + 1;
+          totalViolacoes += 1;
+          if (!docViolacoes.includes(nomeViol)) docViolacoes.push(nomeViol);
+        });
+      }
+
+      // Agentes Violadores
+      const docAgentes: string[] = [];
+      doc.agentesVioladores?.forEach(a => {
+        const ag = (a.principal || a.categoria || '').trim();
+        if (ag) {
+          agentesVioladores[ag] = (agentesVioladores[ag] || 0) + 1;
+          if (!docAgentes.includes(ag)) docAgentes.push(ag);
+        }
+      });
+
+      // Quem Comunicou a Violação
+      const rawOrig = (doc.origem || '').trim();
+      const rawOrigCat = (doc.origem_categoria || '').trim();
+      let origCat = rawOrigCat;
+      let origInst = rawOrig || rawOrigCat;
+      if (!origCat) {
+        if (rawOrig.includes(' - ')) {
+          const parts = rawOrig.split(' - ');
+          origCat = parts[0].trim();
+          origInst = parts.slice(1).join(' - ').trim() || origCat;
+        } else {
+          origCat = rawOrig;
+          origInst = rawOrig;
+        }
+      }
+      if (origCat) {
+        quemComunicouCategorias[origCat] = (quemComunicouCategorias[origCat] || 0) + 1;
+      }
+      if (origInst) {
+        quemComunicouInstituicoes[origInst] = (quemComunicouInstituicoes[origInst] || 0) + 1;
+      }
+
+      // Local da Ocorrência
+      const local = (doc.local_ocorrencia || '').trim();
+      if (local) {
+        locaisOcorrencia[local] = (locaisOcorrencia[local] || 0) + 1;
+      }
+
+      // Canal de Comunicação
+      const canal = (doc.canal_comunicado || '').trim();
+      if (canal) {
+        canaisComunicado[canal] = (canaisComunicado[canal] || 0) + 1;
+      }
+
+      return {
+        id: doc.id,
+        numero: doc.notificacao || doc.numero_comunicado_violacao || doc.numero_sipia || doc.id.substring(0, 8),
+        bairroResidencia,
+        criancasNomes: criancasDoc.map(c => c.nome || 'Não informada'),
+        criancasQtd: criancasDoc.length,
+        violacoes: docViolacoes,
+        fundamentais: docFundamentais,
+        agentes: docAgentes,
+        quemComunicou: origInst || origCat || rawOrig,
+        quemComunicouCategoria: origCat,
+        localOcorrencia: local,
+        canal
+      };
+    });
+
+    return {
+      qualifiedDocs,
+      totalCasos,
+      totalCriancasVitimas,
+      totalViolacoes,
+      bairrosResidencia,
+      faixasEtarias,
+      generos,
+      violacoesEspecificas,
+      direitosFundamentais,
+      agentesVioladores,
+      quemComunicouCategorias,
+      quemComunicouInstituicoes,
+      canaisComunicado,
+      locaisOcorrencia,
+      casosDetalhados
+    };
+  }, [filteredDocuments]);
+
+  const diagnosticoBairrosData = useMemo(() =>
+    Object.entries(diagnosticoCompletoStats.bairrosResidencia)
+      .filter(([name]) => name && name !== 'NÃO INFORMADO')
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 15)
+  , [diagnosticoCompletoStats]);
+
+  const diagnosticoFaixasEtariasData = useMemo(() =>
+    Object.entries(diagnosticoCompletoStats.faixasEtarias)
+      .filter(([name, value]) => value > 0 && name !== 'NÃO INFORMADA')
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+  , [diagnosticoCompletoStats]);
+
+  const diagnosticoGenerosData = useMemo(() =>
+    Object.entries(diagnosticoCompletoStats.generos)
+      .filter(([name, value]) => value > 0 && name !== 'NÃO INFORMADO')
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+  , [diagnosticoCompletoStats]);
+
+  const diagnosticoViolacoesData = useMemo(() =>
+    Object.entries(diagnosticoCompletoStats.violacoesEspecificas)
+      .filter(([name]) => name && name !== 'NÃO INFORMADO')
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 15)
+  , [diagnosticoCompletoStats]);
+
+  const diagnosticoFundamentaisData = useMemo(() =>
+    Object.entries(diagnosticoCompletoStats.direitosFundamentais)
+      .filter(([name]) => name && name !== 'NÃO INFORMADO')
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+  , [diagnosticoCompletoStats]);
+
+  const diagnosticoAgentesData = useMemo(() =>
+    Object.entries(diagnosticoCompletoStats.agentesVioladores)
+      .filter(([name]) => name && name !== 'NÃO INFORMADO')
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+  , [diagnosticoCompletoStats]);
+
+  const diagnosticoQuemComunicouData = useMemo(() =>
+    Object.entries(diagnosticoCompletoStats.quemComunicouCategorias)
+      .filter(([name]) => name && name !== 'NÃO INFORMADO')
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+  , [diagnosticoCompletoStats]);
+
+  const diagnosticoLocaisData = useMemo(() =>
+    Object.entries(diagnosticoCompletoStats.locaisOcorrencia)
+      .filter(([name]) => name && name !== 'NÃO INFORMADO')
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+  , [diagnosticoCompletoStats]);
+
+  const fundamentaisConselheirosData = useMemo(() => 
+    Object.entries(aiStats.fundamentaisConselheiros)
+      .filter(([name]) => name && name !== 'NÃO INFORMADO')
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+  , [aiStats]);
+
+  const violacoesConselheirosData = useMemo(() => 
+    Object.entries(aiStats.violacoesConselheiros)
+      .filter(([name]) => name && name !== 'NÃO INFORMADO')
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 15)
+  , [aiStats]);
+
+  const agentesConselheirosData = useMemo(() => 
+    Object.entries(aiStats.agentesConselheiros)
+      .filter(([name]) => name && name !== 'NÃO INFORMADO')
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
   , [aiStats]);
@@ -1261,20 +1637,104 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       </div>
 
       {/* NOVA SEÇÃO: ORIGEM E CANAIS DE COMUNICAÇÃO */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-2 print:gap-4 print-avoid-break">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 print:grid-cols-3 print:gap-4 print-avoid-break">
         <ProfessionalHorizontalChart 
-          title="Gráfico 9: Identificação da Origem das Denúncias e Casos" 
-          data={originsData} 
+          title="Gráfico 9: Quem Comunicou a Violação — Por Categoria" 
+          data={originsCategoriesData} 
           barColor="#2563eb"
-          footerNote="Hortolândia • Entidades ou canais de origem geradores da demanda"
+          footerNote="Hortolândia • Segmentos e categorias institucionais/sociais notificantes"
         />
 
         <ProfessionalHorizontalChart 
-          title="Gráfico 10: Canais de Comunicação Utilizados" 
-          data={channelsData} 
-          barColor="#2563eb"
-          footerNote="Hortolândia • Canais e meios de comunicação formalizados no sistema"
+          title="Gráfico 10: Quem Comunicou — Top Entidades / Instituições" 
+          data={originsInstitutionsData} 
+          barColor="#1d4ed8"
+          footerNote="Hortolândia • Escolas, UBS, CRAS, Sociedade e demais notificantes"
         />
+
+        <ProfessionalHorizontalChart 
+          title="Gráfico 11: Meios e Canais de Comunicação Utilizados" 
+          data={channelsData} 
+          barColor="#3b82f6"
+          footerNote="Hortolândia • Vias formais de entrada (Ofício, E-mail, Presencial, etc.)"
+        />
+      </div>
+
+      {/* MATRIZ ANALÍTICA: CRUZAMENTO ORIGEM VS CANAL */}
+      <div className="bg-white p-6 sm:p-8 rounded-2xl sm:rounded-3xl border border-slate-100 shadow-sm space-y-4 print:break-inside-avoid">
+        <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+          <div className="p-2.5 bg-blue-50 border border-blue-100 rounded-xl text-blue-600 shrink-0">
+            <Building2 className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-base sm:text-lg font-bold text-slate-900 uppercase tracking-tight">
+              Matriz Estatística: Quem Comunicou vs. Canal de Entrada
+            </h3>
+            <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">
+              Distribuição das vias de comunicação utilizadas por cada segmento e categoria
+            </p>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto border border-slate-200/80 rounded-2xl bg-white shadow-2xs">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200/80">
+              <tr>
+                <th className="p-3.5">Categoria do Notificante (Origem)</th>
+                <th className="p-3.5 text-center">Total de Casos</th>
+                <th className="p-3.5">Canais de Comunicação Utilizados pelo Notificante</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {originsCategoriesData.map(({ name: catName, value: catTotal }) => {
+                const canaisDoSegmento = Object.entries(aiStats.origemCategoriaXCanal[catName] || {})
+                  .sort((a, b) => b[1] - a[1]);
+
+                return (
+                  <tr key={catName} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="p-3.5 font-bold text-slate-800 uppercase">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0" />
+                        <span>{catName}</span>
+                      </div>
+                    </td>
+                    <td className="p-3.5 text-center font-mono font-black text-blue-700 bg-blue-50/20">
+                      {catTotal} <span className="text-[9px] font-normal text-slate-400">({Math.round((catTotal / (filteredDocuments.length || 1)) * 100)}%)</span>
+                    </td>
+                    <td className="p-3.5">
+                      <div className="flex flex-wrap gap-1.5">
+                        {canaisDoSegmento.map(([canalName, canalQtd]) => {
+                          const pct = Math.round((canalQtd / catTotal) * 100);
+                          return (
+                            <span 
+                              key={canalName} 
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 text-[10px] font-bold border border-slate-200/80"
+                            >
+                              <span>{canalName}</span>
+                              <span className="bg-blue-600 text-white rounded px-1.5 py-0.2 font-mono text-[9px]">
+                                {canalQtd} ({pct}%)
+                              </span>
+                            </span>
+                          );
+                        })}
+                        {canaisDoSegmento.length === 0 && (
+                          <span className="text-[10px] text-slate-400 italic">Não informado</span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {originsCategoriesData.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="p-6 text-center text-[10px] text-slate-400 uppercase font-bold">
+                    Nenhum registro encontrado no período selecionado.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
       <div className="bg-white p-6 sm:p-8 rounded-2xl sm:rounded-3xl border border-slate-100 shadow-sm space-y-6 print:break-inside-avoid">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-5">
@@ -1465,14 +1925,218 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         <span>Página 6</span>
       </div>
 
-      {/* NOVA SEÇÃO: LOCAL DA OCORRÊNCIA */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-2 print:gap-4 print-avoid-break">
-        <ProfessionalHorizontalChart 
-          title="Gráfico 11: Local da Ocorrência da Violação" 
-          data={locaisOcorrenciaData} 
-          barColor="#2563eb"
-          footerNote="Hortolândia • Locais onde as violações de direitos foram identificadas"
-        />
+      {/* SEÇÃO ESPECÍFICA: PAINEL INTEGRADO DE VIOLAÇÕES DE DIREITOS (4 EIXOS PREENCHIDOS PELOS CONSELHEIROS) */}
+      <div className="bg-white p-6 sm:p-8 rounded-2xl sm:rounded-3xl border border-slate-100 shadow-sm space-y-6 print:break-inside-avoid">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+          <div className="flex items-center gap-3.5">
+            <div className="p-3 bg-red-50 border border-red-100 rounded-2xl text-red-600 shrink-0">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 text-[10px] font-bold uppercase tracking-wider border border-red-100">
+                  Diagnóstico Técnico Completo (4 Eixos)
+                </span>
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">• Dados da Criança & Bairro de Residência</span>
+              </div>
+              <h3 className="text-lg sm:text-xl font-bold text-slate-900 uppercase tracking-tight mt-1">
+                Violações de Direitos Tipificadas pelos Conselheiros (SIPIA / ECA)
+              </h3>
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mt-0.5">
+                Estatística gerada exclusivamente a partir dos casos com preenchimento completo dos 4 eixos (Direito Violado, Agente Violador, Quem Comunicou e Local da Ocorrência), cruzados com os dados da criança e bairro de residência
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* CARDS DE RESUMO DE PROCEDÊNCIA E VIOLAÇÕES */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="p-4 rounded-2xl bg-red-50/40 border border-red-100 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase text-red-600 tracking-wider block">Casos com 4 Eixos</span>
+              <CheckCircle2 className="w-3.5 h-3.5 text-red-500" />
+            </div>
+            <p className="text-2xl sm:text-3xl font-black text-red-950 font-mono leading-none">
+              {diagnosticoCompletoStats.totalCasos}
+            </p>
+            <span className="text-[10px] font-semibold text-slate-500 block">
+              {filteredDocuments.length ? Math.round((diagnosticoCompletoStats.totalCasos / filteredDocuments.length) * 100) : 0}% dos procedimentos
+            </span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-blue-50/40 border border-blue-100 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase text-blue-600 tracking-wider block">Crianças Vítimas</span>
+              <Baby className="w-3.5 h-3.5 text-blue-500" />
+            </div>
+            <p className="text-2xl sm:text-3xl font-black text-blue-950 font-mono leading-none">
+              {diagnosticoCompletoStats.totalCriancasVitimas}
+            </p>
+            <span className="text-[10px] font-semibold text-slate-500 block">Crianças/Adolescentes registradas</span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-purple-50/40 border border-purple-100 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase text-purple-600 tracking-wider block">Violações Tipificadas</span>
+              <ShieldAlert className="w-3.5 h-3.5 text-purple-500" />
+            </div>
+            <p className="text-2xl sm:text-3xl font-black text-purple-950 font-mono leading-none">
+              {diagnosticoCompletoStats.totalViolacoes}
+            </p>
+            <span className="text-[10px] font-semibold text-slate-500 block">
+              Média de {diagnosticoCompletoStats.totalCasos ? (diagnosticoCompletoStats.totalViolacoes / diagnosticoCompletoStats.totalCasos).toFixed(1) : '0'} por caso
+            </span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-amber-50/40 border border-amber-100 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase text-amber-600 tracking-wider block">Bairros Atingidos</span>
+              <MapPin className="w-3.5 h-3.5 text-amber-500" />
+            </div>
+            <p className="text-2xl sm:text-3xl font-black text-amber-950 font-mono leading-none">
+              {diagnosticoBairrosData.length}
+            </p>
+            <span className="text-[10px] font-semibold text-slate-500 block">
+              Bairros de residência das vítimas
+            </span>
+          </div>
+        </div>
+
+        {diagnosticoCompletoStats.totalCasos === 0 ? (
+          <div className="p-8 rounded-2xl bg-slate-50 border border-dashed border-slate-200 text-center space-y-2">
+            <AlertCircle className="w-8 h-8 text-slate-400 mx-auto" />
+            <h4 className="text-sm font-bold text-slate-700 uppercase tracking-tight">
+              Nenhum Caso com os 4 Eixos de Violação Preenchidos Simultaneamente
+            </h4>
+            <p className="text-xs text-slate-500 max-w-xl mx-auto">
+              Para alimentar este painel analítico integrado, os Conselheiros Tutelares devem preencher no procedimento: 
+              <strong> 1. Direito Violado</strong>, <strong>2. Agente Violador</strong>, <strong>3. Quem Comunicou a Violação</strong> e <strong>4. Local da Ocorrência</strong>.
+              O sistema puxará automaticamente o Bairro de Residência e os Dados da Criança Registrada.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* GRÁFICOS DO PERFIL DA CRIANÇA E BAIRRO DE RESIDÊNCIA */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 print:grid-cols-3 print:gap-4">
+              <ProfessionalHorizontalChart 
+                title="Gráfico 12: Bairros de Residência das Crianças Vítimas" 
+                data={diagnosticoBairrosData} 
+                barColor="#1e3a8a"
+                footerNote="Hortolândia • Bairros onde residem as crianças com violação tipificada"
+              />
+
+              <ProfessionalHorizontalChart 
+                title="Gráfico 13: Faixa Etária das Crianças Vítimas" 
+                data={diagnosticoFaixasEtariasData} 
+                barColor="#4338ca"
+                footerNote="Hortolândia • Faixa etária calculada das crianças atendidas"
+              />
+
+              <ProfessionalHorizontalChart 
+                title="Gráfico 14: Gênero / Identidade das Crianças Vítimas" 
+                data={diagnosticoGenerosData} 
+                barColor="#0f766e"
+                footerNote="Hortolândia • Gênero registrado das crianças vitimizadas"
+              />
+            </div>
+
+            {/* GRÁFICOS DE TIPIFICAÇÃO DE VIOLAÇÕES E AGENTES */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 print:grid-cols-3 print:gap-4">
+              <ProfessionalHorizontalChart 
+                title="Gráfico 15: Tipos de Violações Registradas (SIPIA)" 
+                data={diagnosticoViolacoesData} 
+                barColor="#b91c1c"
+                footerNote="Hortolândia • Violações específicas caracterizadas pelos Conselheiros"
+              />
+
+              <ProfessionalHorizontalChart 
+                title="Gráfico 16: Direitos Fundamentais Violados (Art. 4º ECA)" 
+                data={diagnosticoFundamentaisData} 
+                barColor="#dc2626"
+                footerNote="Hortolândia • Direitos fundamentais violados no caso"
+              />
+
+              <ProfessionalHorizontalChart 
+                title="Gráfico 17: Agentes Violadores Identificados" 
+                data={diagnosticoAgentesData} 
+                barColor="#991b1b"
+                footerNote="Hortolândia • Agentes violadores registrados pelos Conselheiros"
+              />
+            </div>
+
+            {/* GRÁFICOS DE QUEM COMUNICOU E LOCAL DA OCORRÊNCIA */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:grid-cols-2 print:gap-4">
+              <ProfessionalHorizontalChart 
+                title="Gráfico 18: Quem Comunicou a Violação (Origem Notificante)" 
+                data={diagnosticoQuemComunicouData} 
+                barColor="#1d4ed8"
+                footerNote="Hortolândia • Categorias de órgãos/pessoas que notificaram os casos"
+              />
+
+              <ProfessionalHorizontalChart 
+                title="Gráfico 19: Local da Ocorrência da Violação" 
+                data={diagnosticoLocaisData} 
+                barColor="#2563eb"
+                footerNote="Hortolândia • Locais físicos onde a violação ocorreu"
+              />
+            </div>
+
+            {/* MATRIZ ANALÍTICA DE CRUZAMENTO TÉCNICO */}
+            <div className="bg-slate-50/70 p-4 sm:p-5 rounded-2xl border border-slate-200/80 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-tight">
+                  Matriz de Casos Tipificados com Diagnóstico Completo ({diagnosticoCompletoStats.casosDetalhados.length})
+                </span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">
+                  Cruzamento dos 4 Eixos com Criança e Bairro
+                </span>
+              </div>
+
+              <div className="overflow-x-auto max-h-80 overflow-y-auto">
+                <table className="w-full text-left text-xs border-collapse min-w-[700px]">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-[10px] font-black uppercase text-slate-400">
+                      <th className="py-2 px-3">Procedimento</th>
+                      <th className="py-2 px-3">Bairro da Criança</th>
+                      <th className="py-2 px-3">Criança(s) Registrada(s)</th>
+                      <th className="py-2 px-3">Violação (SIPIA)</th>
+                      <th className="py-2 px-3">Agente Violador</th>
+                      <th className="py-2 px-3">Quem Comunicou</th>
+                      <th className="py-2 px-3">Local Ocorrência</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {diagnosticoCompletoStats.casosDetalhados.map((caso, idx) => (
+                      <tr key={caso.id || idx} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-2 px-3 font-mono font-bold text-slate-800 whitespace-nowrap">
+                          {caso.numero}
+                        </td>
+                        <td className="py-2 px-3 font-bold text-blue-700 uppercase whitespace-nowrap">
+                          {caso.bairroResidencia}
+                        </td>
+                        <td className="py-2 px-3 text-slate-700">
+                          {caso.criancasNomes.join(', ')}
+                        </td>
+                        <td className="py-2 px-3 text-red-700 font-medium">
+                          {caso.violacoes.length ? caso.violacoes.slice(0, 2).join('; ') : 'Não tipificada'}
+                        </td>
+                        <td className="py-2 px-3 text-slate-700 font-medium whitespace-nowrap">
+                          {caso.agentes.length ? caso.agentes.join(', ') : 'Não informado'}
+                        </td>
+                        <td className="py-2 px-3 text-slate-600 whitespace-nowrap">
+                          {caso.quemComunicou}
+                        </td>
+                        <td className="py-2 px-3 text-slate-600 whitespace-nowrap">
+                          {caso.localOcorrencia}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* QUEBRA DE PÁGINA PARA PÁGINA 7 */}
@@ -1482,28 +2146,28 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         <span>Página 7</span>
       </div>
 
-      {/* NOVA SEÇÃO: AÇÕES DO CONSELHO TUTELAR (AGENDA) */}
+      {/* SEÇÃO: AÇÕES DO CONSELHO TUTELAR (AGENDA) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:grid-cols-2 print:gap-4 print-avoid-break">
         <ProfessionalHorizontalChart 
-          title="Gráfico 12: Ações do Conselho Tutelar por Categoria" 
+          title="Gráfico 20: Ações do Conselho Tutelar por Categoria" 
           data={agendaCategoriaData} 
           barColor="#2563eb"
           footerNote="Hortolândia • Atividades registradas na agenda institucional"
         />
 
         <ProfessionalHorizontalChart 
-          title="Gráfico 13: Top 10 Ações Detalhadas" 
+          title="Gráfico 21: Top 10 Ações Detalhadas" 
           data={agendaTipoData.slice(0, 10)} 
           barColor="#2563eb"
           footerNote="Hortolândia • Detalhamento das atividades mais frequentes"
         />
       </div>
 
-      {/* QUEBRA DE PÁGINA PARA PÁGINA 8 */}
+      {/* QUEBRA DE PÁGINA PARA PÁGINA 9 */}
       <div className="print-page-break h-0" />
       <div className="hidden print:flex justify-between items-center text-[9px] text-slate-400 border-b border-slate-200 pb-2 mb-6 uppercase font-black">
         <span>SIMCT • Relatório de Gestão • Hortolândia</span>
-        <span>Página 8</span>
+        <span>Página 9</span>
       </div>
 
       {isGlobal && <AIStatisticsAnalyzer stats={aiStats} totalDocs={filteredDocuments.length} />}
