@@ -1480,7 +1480,13 @@ const App: React.FC = () => {
         editDoc.conselheiros_providencia_nomes?.some(name => isSameCounselorName(name, currentUser.nome) || (currentUser.is_suplente_active && currentUser.substituted_name && isSameCounselorName(name, currentUser.substituted_name)))
       ) : false;
 
-      const canEdit = isAdministrative || isEditingProvImediata;
+      const isLeandroUser = (currentUser.nome || '').trim().toUpperCase().includes('LEANDRO') || currentUser.id === 'cons1';
+      const isFabioUser = (currentUser.nome || '').trim().toUpperCase().includes('FABIO') || 
+                          (currentUser.nome || '').trim().toUpperCase().includes('FÁBIO') || 
+                          (currentUser.nome || '').trim().toUpperCase().includes('FABIA') || 
+                          currentUser.id === 'ct2_cons3';
+
+      const canEdit = isAdministrative || isEditingProvImediata || isLeandroUser || (currentUser.unidade_id === 2 && isFabioUser);
 
       return <DocumentRegistration documents={documents} users={filteredUsers} agenda={agenda} currentUser={currentUser} initialData={editDoc} onSubmit={handleDocumentSubmit} onCancel={goBack} isReadOnly={!canEdit} nameMap={userNameMap} allUsers={filteredUsers} scaleExceptions={scaleExceptions} />;
     }
