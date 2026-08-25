@@ -160,6 +160,7 @@ export interface Documento {
   id: string;
   unidade_id: number;
   origem: string;
+  origem_categoria?: string;
   canal_comunicado: string; 
   notificacao?: string;
   is_urgente?: boolean;

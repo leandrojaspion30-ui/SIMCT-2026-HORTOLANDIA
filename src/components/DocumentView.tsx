@@ -18,11 +18,12 @@ import {
   SIPIA_HIERARCHY, AGENTES_VIOLADORES_ESTRUTURA, 
   MEDIDAS_101_ECA, MEDIDAS_129_ECA,
   ATRIBUICOES_136_ECA, REDE_HORTOLANDIA, getEffectiveEscala, isSameCounselorName,
-  LOCAL_OCORRENCIA_OPTIONS
+  LOCAL_OCORRENCIA_OPTIONS, ORIGENS_HIERARQUICAS, getOrigensHierarquicasByUnidade, CANAIS_COMUNICADO_LIST
 } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
 import { formatLocalDateString } from '../lib/dateUtils';
 import { SearchableServiceSelect } from './SearchableServiceSelect';
+import { SearchableSelect } from './SearchableSelect';
 
 interface DocumentViewProps {
   document: Documento;
@@ -76,6 +77,54 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const [numeroComunicadoViolacao, setNumeroComunicadoViolacao] = useState(doc.numero_comunicado_violacao || '');
   const [numeroSipia, setNumeroSipia] = useState(doc.numero_sipia || '');
   const [localOcorrencia, setLocalOcorrencia] = useState(doc.local_ocorrencia || '');
+
+  const parseOrigem = (origemStr?: string, categoriaStr?: string) => {
+    let cat = categoriaStr || '';
+    let inst = origemStr || '';
+    if (origemStr && origemStr.includes(' - ')) {
+      const parts = origemStr.split(' - ');
+      cat = cat || parts[0].trim();
+      inst = parts.slice(1).join(' - ').trim();
+    }
+    return { cat, inst };
+  };
+
+  const initialOrigemParsed = parseOrigem(doc.origem, doc.origem_categoria);
+  const [origemCategoria, setOrigemCategoria] = useState<string>(initialOrigemParsed.cat);
+  const [origemInstituicao, setOrigemInstituicao] = useState<string>(initialOrigemParsed.inst);
+  const [canalComunicado, setCanalComunicado] = useState<string>(doc.canal_comunicado || '');
+  const [customOrigem, setCustomOrigem] = useState<string>('');
+
+  const unitOrigensHierarquicas = useMemo(() => {
+    return getOrigensHierarquicasByUnidade(doc.unidade_id || 1);
+  }, [doc.unidade_id]);
+
+  const currentInstitutions = useMemo(() => {
+    if (!origemCategoria || origemCategoria === 'SOCIEDADE') return [];
+    const base = unitOrigensHierarquicas.find(h => h.label === origemCategoria)?.options || [];
+    if (origemCategoria && !base.includes('OUTRO') && !base.includes('OUTROS')) {
+      return [...base, 'OUTRO'];
+    }
+    return base;
+  }, [unitOrigensHierarquicas, origemCategoria]);
+
+  const handleUpdateOrigem = (newCat: string, newInst: string, newCanal: string) => {
+    let fullOrigem = '';
+    if (newCat === 'SOCIEDADE') {
+      fullOrigem = 'SOCIEDADE';
+    } else if (newCat && newInst) {
+      fullOrigem = `${newCat} - ${newInst}`;
+    } else {
+      fullOrigem = newInst || newCat || '';
+    }
+    onUpdateDocument(doc.id, {
+      origem_categoria: newCat,
+      origem: fullOrigem,
+      canal_comunicado: newCanal
+    });
+    onAddLog(doc.id, `IDENTIFICAÇÃO: "Quem Comunicou a Violação" atualizado para [${fullOrigem || 'N/A'}] via [${newCanal || 'N/A'}] por ${currentUser.nome}.`, 'DOCUMENTO');
+  };
+
   const [showIntelligence, setShowIntelligence] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -98,7 +147,11 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     setNumeroComunicadoViolacao(doc.numero_comunicado_violacao || '');
     setNumeroSipia(doc.numero_sipia || '');
     setLocalOcorrencia(doc.local_ocorrencia || '');
-  }, [doc.id, doc.informacoes_documento, doc.numero_comunicado_violacao, doc.numero_sipia, doc.local_ocorrencia]);
+    const parsed = parseOrigem(doc.origem, doc.origem_categoria);
+    setOrigemCategoria(parsed.cat);
+    setOrigemInstituicao(parsed.inst);
+    setCanalComunicado(doc.canal_comunicado || '');
+  }, [doc.id, doc.informacoes_documento, doc.numero_comunicado_violacao, doc.numero_sipia, doc.local_ocorrencia, doc.origem, doc.origem_categoria, doc.canal_comunicado]);
 
   const isUserInTrio = (nome: string) => {
     if (!nome) return false;
@@ -1063,6 +1116,98 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                         ))}
                       </div>
                     ))}
+                  </div>
+                </AccordionSection>
+
+                <AccordionSection 
+                  id="quem_comunicou" 
+                  title="Quem Comunicou a Violação" 
+                  color="bg-sky-600" 
+                  active={activeSection} 
+                  onToggle={setActiveSection} 
+                  saved={!!origemCategoria || !!origemInstituicao || !!canalComunicado}
+                >
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+                      {/* COLUNA 1: CATEGORIA */}
+                      <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoria</label>
+                        <select 
+                          disabled={!canEditTechnicalFields}
+                          className="w-full p-3 sm:p-4 bg-white border border-slate-200 rounded-xl sm:rounded-[1.25rem] font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-sky-500 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                          value={origemCategoria}
+                          onChange={e => {
+                            const nextCat = e.target.value;
+                            setOrigemCategoria(nextCat);
+                            setOrigemInstituicao('');
+                            setCustomOrigem('');
+                            handleUpdateOrigem(nextCat, '', canalComunicado);
+                          }}
+                        >
+                          <option value="">SELECIONE CATEGORIA...</option>
+                          {unitOrigensHierarquicas.map(h => <option key={h.label} value={h.label}>{h.label}</option>)}
+                        </select>
+                      </div>
+
+                      {/* COLUNA 2: INSTITUIÇÃO */}
+                      <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Instituição</label>
+                        <SearchableSelect
+                          disabled={!canEditTechnicalFields || !origemCategoria || origemCategoria === 'SOCIEDADE'}
+                          className="w-full p-3 sm:p-4 bg-white border border-slate-200 rounded-xl sm:rounded-[1.25rem] font-bold uppercase text-[10px] sm:text-[11px] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+                          placeholder={origemCategoria === 'SOCIEDADE' ? "NÃO SE APLICA (SOCIEDADE)" : "SELECIONE INSTITUIÇÃO..."}
+                          options={[...currentInstitutions].sort((a, b) => a.localeCompare(b))}
+                          value={origemCategoria === 'SOCIEDADE' ? '' : origemInstituicao}
+                          onChange={val => {
+                            setOrigemInstituicao(val);
+                            if (val === 'OUTRO' || val === 'OUTROS') {
+                              handleUpdateOrigem(origemCategoria, customOrigem || val, canalComunicado);
+                            } else {
+                              setCustomOrigem('');
+                              handleUpdateOrigem(origemCategoria, val, canalComunicado);
+                            }
+                          }}
+                        />
+                      </div>
+
+                      {/* COLUNA 3: CANAL */}
+                      <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Canal</label>
+                        <select 
+                          disabled={!canEditTechnicalFields}
+                          className="w-full p-3 sm:p-4 bg-white border border-slate-200 rounded-xl sm:rounded-[1.25rem] font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-sky-500 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                          value={canalComunicado}
+                          onChange={e => {
+                            const nextCanal = e.target.value;
+                            setCanalComunicado(nextCanal);
+                            handleUpdateOrigem(origemCategoria, origemCategoria === 'SOCIEDADE' ? '' : (origemInstituicao === 'OUTRO' || origemInstituicao === 'OUTROS' ? customOrigem : origemInstituicao), nextCanal);
+                          }}
+                        >
+                          <option value="">SELECIONE CANAL...</option>
+                          {CANAIS_COMUNICADO_LIST.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    {origemCategoria !== 'SOCIEDADE' && (origemInstituicao === 'OUTRO' || origemInstituicao === 'OUTROS' || (origemInstituicao && !currentInstitutions.includes(origemInstituicao))) && (
+                      <div className="pt-2 animate-in slide-in-from-top-2 duration-300">
+                        <div className="p-4 bg-white rounded-2xl border border-sky-100 space-y-2">
+                          <label className="text-[10px] font-black text-sky-600 uppercase tracking-widest leading-none">Descreva a Instituição / Escola não cadastrada</label>
+                          <input 
+                            disabled={!canEditTechnicalFields}
+                            type="text"
+                            placeholder="DIGITE O NOME OU DESCRIÇÃO DA INSTITUIÇÃO..."
+                            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-sky-500 shadow-inner disabled:opacity-50"
+                            value={customOrigem || (origemInstituicao !== 'OUTRO' && origemInstituicao !== 'OUTROS' && !currentInstitutions.includes(origemInstituicao) ? origemInstituicao : '')}
+                            onChange={e => {
+                              const val = e.target.value.toUpperCase();
+                              setCustomOrigem(val);
+                              handleUpdateOrigem(origemCategoria, val, canalComunicado);
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </AccordionSection>
 

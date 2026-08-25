@@ -2,109 +2,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check, Repeat, Lock, ArrowLeft, Sparkles, Loader2 } from 'lucide-react';
 import { Documento, User, ChildData, DocumentStatus, AgendaEntry, ScaleException } from '../types';
-import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, CANAIS_COMUNICADO_LIST, getEffectiveEscala, isSameCounselorName, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade, getUnidadeByBairro, LOCAL_OCORRENCIA_OPTIONS } from '../constants';
+import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, getOrigensHierarquicasByUnidade, CANAIS_COMUNICADO_LIST, getEffectiveEscala, isSameCounselorName, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade, getUnidadeByBairro, LOCAL_OCORRENCIA_OPTIONS } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
 import { saveScaleException, deleteScaleException, saveLog } from '../lib/db';
-
-interface SearchableSelectProps {
-  options: string[];
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-  disabled?: boolean;
-  className?: string;
-}
-
-const SearchableSelect: React.FC<SearchableSelectProps> = ({ options, value, onChange, placeholder, disabled, className }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const filteredOptions = useMemo(() => {
-    return options.filter(opt => opt.toLowerCase().includes(search.toLowerCase()));
-  }, [options, search]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setSearch('');
-    }
-  }, [isOpen]);
-
-  return (
-    <div className="relative w-full" ref={containerRef}>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setIsOpen(!isOpen)}
-        className={`${className || ''} w-full text-left flex items-center justify-between cursor-pointer`}
-      >
-        <span className={value ? "text-slate-800" : "text-slate-400"}>
-          {value || placeholder}
-        </span>
-        <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-
-      {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-100 max-h-60 flex flex-col">
-          <div className="p-2 border-b border-slate-100 flex items-center gap-2 bg-slate-50">
-            <Search className="w-4 h-4 text-slate-400 shrink-0" />
-            <input
-              type="text"
-              placeholder="PESQUISAR..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full bg-transparent text-[11px] font-bold uppercase text-slate-800 outline-none placeholder:text-slate-400"
-              autoFocus
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="text-[10px] text-slate-400 hover:text-slate-600 font-bold px-1"
-              >
-                LIMPAR
-              </button>
-            )}
-          </div>
-          <div className="overflow-y-auto flex-1">
-            {filteredOptions.length === 0 ? (
-              <div className="p-4 text-[10px] font-bold uppercase text-slate-400 text-center">
-                Nenhum resultado encontrado
-              </div>
-            ) : (
-              filteredOptions.map(opt => (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => {
-                    onChange(opt);
-                    setIsOpen(false);
-                  }}
-                  className={`w-full text-left p-3 text-[11px] font-bold uppercase hover:bg-slate-50 transition-colors flex items-center justify-between ${
-                    value === opt ? 'bg-blue-50/50 text-blue-600' : 'text-slate-700'
-                  }`}
-                >
-                  <span>{opt}</span>
-                  {value === opt && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
+import { SearchableSelect } from './SearchableSelect';
 
 interface DocumentRegistrationProps {
   documents: Documento[];
@@ -844,6 +745,10 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
       finalValidators = trioNames;
     }
 
+    const finalOrigem = formData.origem_categoria === 'SOCIEDADE'
+      ? 'SOCIEDADE'
+      : (formData.origem ? `${formData.origem_categoria} - ${formData.origem}` : formData.origem_categoria || '');
+
     const finalData = {
       ...initialData,
       ...formData,
@@ -856,7 +761,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
       numero_sipia: formData.numero_sipia,
       notificacao: formData.notificacao,
       providencia_imediata_manual: formData.providencia_imediata_manual,
-      origem: `${formData.origem_categoria} - ${formData.origem}`,
+      origem: finalOrigem,
       crianca_nome: formData.criancas[0].nome,
       observacoes_iniciais: formData.relato_inicial,
       data_recebimento: formData.data_aporte,
@@ -918,12 +823,16 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
   };
 
   const currentInstitutions = useMemo(() => {
-    const base = ORIGENS_HIERARQUICAS.find(h => h.label === formData.origem_categoria)?.options || [];
+    if (!formData.origem_categoria || formData.origem_categoria === 'SOCIEDADE') {
+      return [];
+    }
+    const list = getOrigensHierarquicasByUnidade(formData.unidade_id);
+    const base = list.find(h => h.label === formData.origem_categoria)?.options || [];
     if (formData.origem_categoria && !base.includes('OUTRO') && !base.includes('OUTROS')) {
       return [...base, 'OUTRO'];
     }
     return base;
-  }, [formData.origem_categoria]);
+  }, [formData.origem_categoria, formData.unidade_id]);
 
   return (
     <div className="max-w-5xl mx-auto pb-20 animate-in fade-in duration-500">
@@ -1034,7 +943,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                   }}
                 >
                   <option value="">SELECIONE CATEGORIA...</option>
-                  {ORIGENS_HIERARQUICAS.map(h => <option key={h.label} value={h.label}>{h.label}</option>)}
+                  {getOrigensHierarquicasByUnidade(formData.unidade_id).map(h => <option key={h.label} value={h.label}>{h.label}</option>)}
                 </select>
               </div>
 
@@ -1042,11 +951,11 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
               <div className="space-y-2">
                 <label className="lg:hidden text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Instituição</label>
                 <SearchableSelect
-                  disabled={isReadOnly || !formData.origem_categoria}
-                  className="w-full p-4 sm:p-5 bg-white border border-slate-200 rounded-xl sm:rounded-[1.5rem] font-bold uppercase text-[10px] sm:text-[11px] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  placeholder="SELECIONE INSTITUIÇÃO..."
+                  disabled={isReadOnly || !formData.origem_categoria || formData.origem_categoria === 'SOCIEDADE'}
+                  className="w-full p-4 sm:p-5 bg-white border border-slate-200 rounded-xl sm:rounded-[1.5rem] font-bold uppercase text-[10px] sm:text-[11px] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+                  placeholder={formData.origem_categoria === 'SOCIEDADE' ? "NÃO SE APLICA (SOCIEDADE)" : "SELECIONE INSTITUIÇÃO..."}
                   options={[...currentInstitutions].sort((a, b) => a.localeCompare(b))}
-                  value={selectedOrigemDropdown}
+                  value={formData.origem_categoria === 'SOCIEDADE' ? '' : selectedOrigemDropdown}
                   onChange={val => {
                     setSelectedOrigemDropdown(val);
                     if (val === 'OUTRO' || val === 'OUTROS') {
@@ -1077,7 +986,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
               </div>
             </div>
 
-            {(selectedOrigemDropdown === 'OUTRO' || selectedOrigemDropdown === 'OUTROS') && (
+            {formData.origem_categoria !== 'SOCIEDADE' && (selectedOrigemDropdown === 'OUTRO' || selectedOrigemDropdown === 'OUTROS') && (
               <div className="pt-2 animate-in slide-in-from-top-2 duration-300">
                 <div className="p-5 bg-white rounded-2xl border border-blue-100 space-y-2">
                   <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest leading-none">Descreva a Instituição / Escola não cadastrada</label>
