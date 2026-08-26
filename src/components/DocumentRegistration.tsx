@@ -160,22 +160,22 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
 
   // Permissão para editar conselheiros de referência ou providência imediata:
   // - Leandro (Super Admin) possui permissão total.
-  // - Na UNIDADE II (CT 2): FÁBIO é o ÚNICO usuário da Unidade II autorizado a alterar referência e imediata (nenhum outro conselheiro ou ADM da Unidade 2 tem essa opção).
-  // - Na UNIDADE I (CT 1): Leandro em prontuários já cadastrados, e Administradores da Unidade 1 em novos cadastros.
+  // - Na UNIDADE II (CT 2): FÁBIO e Administradores (ADM) da Unidade 2 possuem permissão para alterar referência e imediata (inclusive quando já existe prontuário).
+  // - Na UNIDADE I (CT 1): Leandro e Administradores (ADM).
   const canEditCouncillors = useMemo(() => {
     if (isLeandro) return true;
 
     // Regra da UNIDADE 2:
     if (currentUser.unidade_id === 2 || formData.unidade_id === 2) {
-      return isFabio;
+      return isFabio || isADM;
     }
 
     // Regra da UNIDADE 1:
     if (initialData) {
-      return isLeandro;
+      return isLeandro || isADM;
     }
     return currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
-  }, [isLeandro, isFabio, currentUser.unidade_id, formData.unidade_id, currentUser.perfil, initialData]);
+  }, [isLeandro, isFabio, isADM, currentUser.unidade_id, formData.unidade_id, currentUser.perfil, initialData]);
 
   // Estados para gerenciamento de Troca Excepcional de Escala (Casos Excepcionais)
   const [isScaleSwapModalOpen, setIsScaleSwapModalOpen] = useState(false);
@@ -1428,7 +1428,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                   <span className={`text-[9px] px-2 py-1 flex items-center gap-1 rounded-md uppercase font-black ${initialData && !isManualReference ? 'bg-slate-200 text-slate-700 border border-slate-300' : (isReferenceLocked ? 'bg-amber-50 text-amber-600' : (formData.notificacao ? 'bg-blue-50 text-blue-600' : 'bg-indigo-50 text-indigo-600'))}`}>
                     {(!canEditCouncillors || !isManualReference) && <Lock className="w-3 h-3 text-slate-500" />}
                     {initialData 
-                      ? (isManualReference ? (isFabio ? 'Ajuste Manual (Fábio)' : 'Ajuste Manual (Leandro)') : 'Cadastrado') 
+                      ? (isManualReference ? (isFabio ? 'Ajuste Manual (Fábio)' : (isADM ? 'Ajuste Manual (ADM)' : 'Ajuste Manual (Leandro)')) : 'Cadastrado') 
                       : (isReferenceLocked 
                           ? (isManualReference ? (isFabio ? 'Ajuste Manual (Fábio)' : 'Ajuste Manual (ADM)') : 'Vínculo Histórico') 
                           : (formData.notificacao 
