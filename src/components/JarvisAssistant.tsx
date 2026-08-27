@@ -4,7 +4,7 @@ import {
   RotateCcw, Scale, ShieldCheck, BookOpen, FileCheck2, BarChart2, 
   GraduationCap, Building2, AlertTriangle, Mic, MicOff, X, HelpCircle, 
   ChevronRight, ArrowRight, FileSpreadsheet, Eye, Download, FilePlus, 
-  Search, Brain, TrendingUp, History, UserCheck
+  Search, Brain, TrendingUp, History, UserCheck, Calendar
 } from 'lucide-react';
 import { Documento, User, AgendaEntry } from '../types';
 import { LegalLibraryService, LegalDocument } from '../services/legalLibrary';
@@ -16,6 +16,18 @@ import mammoth from 'mammoth';
 // Set worker for pdfjs
 // @ts-ignore
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
+export interface ResumoDocumento {
+  titulo_identificado: string;
+  tipo_documento: string;
+  resumo: string;
+  pontos_principais: string[];
+  datas_e_prazos: string[];
+  providencias_mencionadas: string[];
+  alertas: string[];
+  paginas_processadas: number;
+  exige_revisao_humana: boolean;
+}
 
 interface JarvisMessage {
   id: string;
@@ -31,6 +43,9 @@ interface JarvisMessage {
     correcoes?: Array<{ original: string; corrigido: string; explicacao: string }>;
     observacoes?: string[];
   };
+  isSummaryResult?: boolean;
+  isSummaryError?: boolean;
+  summaryData?: ResumoDocumento;
 }
 
 interface JarvisAssistantProps {
@@ -71,7 +86,9 @@ Como posso auxiliar seu trabalho hoje? Escolha um das **Ações Rápidas** abaix
   
   // Modal / Quick action states
   const [activeModal, setActiveModal] = useState<'NONE' | 'CORRIGIR' | 'OFICIO' | 'RELATORIO' | 'CASO' | 'DOC_UPLOAD' | 'ANALYTICS' | 'PREVIEW'>('NONE');
-  const [acaoAtiva, setAcaoAtiva] = useState<'CORRIGIR_TEXTO' | null>(null);
+  const [acaoAtiva, setAcaoAtiva] = useState<'CORRIGIR_TEXTO' | 'RESUMIR_DOCUMENTO' | null>(null);
+  const [arquivoSelecionado, setArquivoSelecionado] = useState<File | null>(null);
+  const [erroMensagem, setErroMensagem] = useState<string | null>(null);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [activeSubMode, setActiveSubMode] = useState<'GENERAL' | 'CMDCA' | 'EXECUTIVO' | 'LEGAL'>('GENERAL');
 
@@ -80,6 +97,8 @@ Como posso auxiliar seu trabalho hoje? Escolha um das **Ações Rápidas** abaix
 
   const handleNewConversation = () => {
     setAcaoAtiva(null);
+    setArquivoSelecionado(null);
+    setErroMensagem(null);
     setMessages([
       {
         id: Date.now().toString(),
@@ -91,6 +110,115 @@ Como posso auxiliar seu trabalho hoje? Escolha um das **Ações Rápidas** abaix
     setInputPrompt('');
     setUploadedFileName(null);
     setUploadedFileText(null);
+  };
+
+  /** Conversão segura e canônica do arquivo PDF em Base64 */
+  function fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        const resultado = String(reader.result ?? "");
+        const separador = resultado.indexOf(",");
+        const base64 =
+          separador >= 0 ? resultado.substring(separador + 1) : "";
+
+        if (!base64 || base64.length < 100) {
+          reject(new Error("O conteúdo do PDF não pôde ser lido."));
+          return;
+        }
+
+        resolve(base64);
+      };
+
+      reader.onerror = () => {
+        reject(new Error("Falha local durante a leitura do PDF."));
+      };
+
+      reader.onabort = () => {
+        reject(new Error("A leitura do PDF foi cancelada."));
+      };
+
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /** Exibição de erro estruturado de documento/IA sem fallback para o chat geral */
+  const exibirErro = (mensagem: string) => {
+    setErroMensagem(mensagem);
+    const botMessage: JarvisMessage = {
+      id: (Date.now() + 1).toString(),
+      role: 'model',
+      text: `⚠️ **Aviso no Processamento do PDF:**\n\n${mensagem}`,
+      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      isSummaryError: true,
+    };
+    setMessages(prev => [...prev, botMessage]);
+  };
+
+  const limparErro = () => {
+    setErroMensagem(null);
+  };
+
+  /** Exibição estrita e institucional do resumo do PDF */
+  const exibirResumoDocumento = (dados: ResumoDocumento, nomeDoArquivo?: string) => {
+    let md = `### 📄 Resumo do documento\n\n`;
+    if (dados.titulo_identificado) {
+      md += `**Documento:** ${dados.titulo_identificado} *(${dados.tipo_documento || 'Documento Oficial'})*\n\n`;
+    }
+    md += `**Síntese:**\n${dados.resumo}\n\n`;
+
+    if (dados.pontos_principais && dados.pontos_principais.length > 0) {
+      md += `**Pontos Principais:**\n`;
+      dados.pontos_principais.forEach(p => {
+        md += `• ${p}\n`;
+      });
+      md += `\n`;
+    }
+
+    if (dados.datas_e_prazos && dados.datas_e_prazos.length > 0) {
+      md += `**Prazos e Datas Identificadas:**\n`;
+      dados.datas_e_prazos.forEach(d => {
+        md += `• ${d}\n`;
+      });
+      md += `\n`;
+    }
+
+    if (dados.providencias_mencionadas && dados.providencias_mencionadas.length > 0) {
+      md += `**Providências Mencionadas:**\n`;
+      dados.providencias_mencionadas.forEach(prov => {
+        md += `• ${prov}\n`;
+      });
+      md += `\n`;
+    }
+
+    if (dados.alertas && dados.alertas.length > 0) {
+      md += `**Alertas e Observações Críticas:**\n`;
+      dados.alertas.forEach(a => {
+        md += `⚠️ ${a}\n`;
+      });
+      md += `\n`;
+    }
+
+    if (dados.paginas_processadas) {
+      md += `*Páginas analisadas: ${dados.paginas_processadas}*\n\n`;
+    }
+
+    if (dados.exige_revisao_humana) {
+      md += `> ⚠️ **Aviso de Revisão Humana Obrigatória:** Este resumo foi gerado por inteligência artificial para subsídio técnico e deve ser conferido com a peça documental original para validade jurídica e administrativa.`;
+    }
+
+    const botMessage: JarvisMessage = {
+      id: (Date.now() + 1).toString(),
+      role: 'model',
+      text: md.trim(),
+      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      isSummaryResult: true,
+      summaryData: dados,
+      attachmentName: nomeDoArquivo
+    };
+
+    setMessages(prev => [...prev, botMessage]);
   };
 
   /** Função exclusiva de correção textual: sem dados jurídicos, sem histórico, sem regras do ECA */
@@ -420,10 +548,88 @@ DADOS ATUALIZADOS DO SIMCT HORTOLÂNDIA:
   // Main prompt send handler
   const handleSendMessage = async (customPrompt?: string, attachName?: string) => {
     const textToSend = customPrompt || inputPrompt;
-    if (!textToSend.trim() && !uploadedFileText) return;
+    if (!textToSend.trim() && !arquivoSelecionado && !uploadedFileText) return;
 
     // =========================================================================
-    // 1. ISOLAMENTO TOTAL DO MODO CORRIGIR_TEXTO (REGRA OBRIGATÓRIA)
+    // 1. ISOLAMENTO TOTAL DO MODO RESUMIR_DOCUMENTO (ROTA EXCLUSIVA DE PDF)
+    // =========================================================================
+    if (acaoAtiva === "RESUMIR_DOCUMENTO" || arquivoSelecionado) {
+      if (!arquivoSelecionado) {
+        exibirErro("Selecione um arquivo PDF.");
+        return;
+      }
+
+      const textoDigitado = textToSend.trim();
+      const arquivoParaProcessar = arquivoSelecionado;
+
+      const userMessage: JarvisMessage = {
+        id: Date.now().toString(),
+        role: 'user',
+        text: textoDigitado || `Solicitação de resumo documental do arquivo: ${arquivoParaProcessar.name}`,
+        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        attachmentName: arquivoParaProcessar.name
+      };
+
+      setMessages(prev => [...prev, userMessage]);
+      setInputPrompt('');
+      setArquivoSelecionado(null);
+      setUploadedFileName(null);
+      setUploadedFileText(null);
+      setAcaoAtiva(null);
+      setLoading(true);
+      limparErro();
+
+      try {
+        const arquivoBase64 = await fileToBase64(arquivoParaProcessar);
+
+        console.info("[PDF] chamando /api/resumir-documento");
+
+        const resposta = await fetch("/api/resumir-documento", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            nomeArquivo: arquivoParaProcessar.name,
+            mimeType: "application/pdf",
+            tamanho: arquivoParaProcessar.size,
+            arquivoBase64,
+            instrucao:
+              textoDigitado ||
+              "Faça um resumo fiel do documento.",
+            modo: "DETALHADO"
+          })
+        });
+
+        console.info("[PDF] resposta", {
+          status: resposta.status
+        });
+
+        const dados = await resposta.json().catch(() => ({}));
+
+        if (!resposta.ok) {
+          throw new Error(
+            dados.error ||
+            `Erro HTTP ${resposta.status} ao analisar o PDF.`
+          );
+        }
+
+        exibirResumoDocumento(dados, arquivoParaProcessar.name);
+        return; // RETURN OBRIGATÓRIO APÓS SUCESSO
+      } catch (erro) {
+        exibirErro(
+          erro instanceof Error
+            ? erro.message
+            : "Não foi possível processar o PDF."
+        );
+        return; // RETURN OBRIGATÓRIO APÓS ERRO (SEM FALLBACK PARA O CHAT GERAL)
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    // =========================================================================
+    // 2. ISOLAMENTO TOTAL DO MODO CORRIGIR_TEXTO (REGRA OBRIGATÓRIA)
     // =========================================================================
     if (acaoAtiva === "CORRIGIR_TEXTO") {
       const textoDigitado = textToSend.trim();
@@ -455,7 +661,7 @@ DADOS ATUALIZADOS DO SIMCT HORTOLÂNDIA:
     }
 
     // =========================================================================
-    // 2. ISOLAMENTO SE A MENSAGEM FOR UMA REQUISIÇÃO DIRETA DE CORREÇÃO
+    // 3. ISOLAMENTO SE A MENSAGEM FOR UMA REQUISIÇÃO DIRETA DE CORREÇÃO
     // =========================================================================
     const isCorrectionRequest = (
       textToSend.toUpperCase().includes('CORRIJA O TEXTO') ||
@@ -2059,41 +2265,44 @@ const handlePrintMessage = (msg: JarvisMessage) => {
     setDocumentPreview(null);
   };
 
-  // File upload reader with PDF and Word support
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // File upload handler - Validação estrita de PDF e direcionamento para o endpoint de resumo
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
 
-    setIsReadingFile(true);
+    if (!file) {
+      setArquivoSelecionado(null);
+      return;
+    }
+
+    const nomePdf = file.name.toLowerCase().endsWith(".pdf");
+    const tipoPdf = file.type === "application/pdf" || file.type === "";
+
+    if (!nomePdf || !tipoPdf) {
+      setArquivoSelecionado(null);
+      exibirErro("Selecione um arquivo PDF válido.");
+      return;
+    }
+
+    if (file.size > 2.5 * 1024 * 1024) {
+      setArquivoSelecionado(null);
+      exibirErro("O PDF excede o limite de 2,5 MB.");
+      return;
+    }
+
+    console.info("[PDF] arquivo selecionado", {
+      tipo: file.type,
+      tamanho: file.size
+    });
+
+    setArquivoSelecionado(file);
+    setAcaoAtiva("RESUMIR_DOCUMENTO");
     setUploadedFileName(file.name);
+    setUploadedFileText(null);
+    limparErro();
 
-    try {
-      if (file.type === 'application/pdf') {
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        let fullText = "";
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const content = await page.getTextContent();
-          const strings = content.items.map((item: any) => item.str);
-          fullText += strings.join(" ") + "\n";
-        }
-        setUploadedFileText(fullText);
-      } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-        const arrayBuffer = await file.arrayBuffer();
-        const result = await mammoth.extractRawText({ arrayBuffer });
-        setUploadedFileText(result.value);
-      } else if (file.type.includes('text') || file.name.endsWith('.txt')) {
-        const text = await file.text();
-        setUploadedFileText(text);
-      } else {
-        setUploadedFileText(`[DOCUMENTO ANEXADO: ${file.name} - Formato não extraível automaticamente]`);
-      }
-    } catch (err) {
-      console.error("Error reading file:", err);
-      setUploadedFileText(`[Falha na leitura do arquivo ${file.name}]`);
-    } finally {
-      setIsReadingFile(false);
+    // Reset input value to allow selecting same file again if needed
+    if (e.target) {
+      e.target.value = '';
     }
   };
 
@@ -2301,6 +2510,122 @@ const handlePrintMessage = (msg: JarvisMessage) => {
                       </button>
                     </div>
                   </div>
+                ) : msg.isSummaryResult && msg.summaryData ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                      <div className="flex items-center gap-2 text-sm font-black text-indigo-300 uppercase tracking-wide">
+                        <FileText className="w-4 h-4 text-indigo-400" />
+                        Resumo do documento
+                      </div>
+                      <button
+                        onClick={() => handleCopyText(msg.id, msg.text)}
+                        className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all shadow"
+                        title="Copiar resumo"
+                      >
+                        {copiedId === msg.id ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" /> Copiado
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" /> Copiar resumo
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Síntese e Identificação */}
+                    <div className="p-4 bg-slate-900/90 rounded-2xl border border-indigo-500/30 text-slate-100 text-sm leading-relaxed space-y-3 font-sans shadow-inner">
+                      {msg.summaryData.titulo_identificado && (
+                        <div className="text-xs text-indigo-200 font-bold border-b border-white/10 pb-2">
+                          <span className="text-slate-400">Documento identificado:</span> {msg.summaryData.titulo_identificado}
+                          <span className="ml-2 px-2 py-0.5 bg-indigo-950/80 text-indigo-300 rounded border border-indigo-400/30 text-[10px]">
+                            {msg.summaryData.tipo_documento || 'Oficial'}
+                          </span>
+                        </div>
+                      )}
+                      <div className="whitespace-pre-wrap leading-relaxed">
+                        {msg.summaryData.resumo}
+                      </div>
+                    </div>
+
+                    {/* Pontos Principais */}
+                    {msg.summaryData.pontos_principais && msg.summaryData.pontos_principais.length > 0 && (
+                      <div className="space-y-2 pt-2 border-t border-white/10">
+                        <h4 className="text-xs font-black uppercase text-slate-300 flex items-center gap-1.5">
+                          <span>📌</span> Pontos Principais
+                        </h4>
+                        <ul className="space-y-1.5">
+                          {msg.summaryData.pontos_principais.map((p, idx) => (
+                            <li key={idx} className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-700/40 text-xs text-slate-200 flex items-start gap-2">
+                              <span className="text-indigo-400 font-bold">•</span>
+                              <span>{p}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Prazos e Datas */}
+                    {msg.summaryData.datas_e_prazos && msg.summaryData.datas_e_prazos.length > 0 && (
+                      <div className="space-y-2 pt-2 border-t border-white/10">
+                        <h4 className="text-xs font-black uppercase text-amber-300 flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5" /> Prazos e Datas Identificadas
+                        </h4>
+                        <ul className="space-y-1">
+                          {msg.summaryData.datas_e_prazos.map((d, didx) => (
+                            <li key={didx} className="p-2 bg-amber-950/30 border border-amber-500/30 rounded-lg text-xs text-amber-200 flex items-center gap-2">
+                              <span>⏱️</span>
+                              <span>{d}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Providências */}
+                    {msg.summaryData.providencias_mencionadas && msg.summaryData.providencias_mencionadas.length > 0 && (
+                      <div className="space-y-2 pt-2 border-t border-white/10">
+                        <h4 className="text-xs font-black uppercase text-blue-300 flex items-center gap-1.5">
+                          <span>⚖️</span> Providências Mencionadas
+                        </h4>
+                        <ul className="space-y-1">
+                          {msg.summaryData.providencias_mencionadas.map((prov, pidx) => (
+                            <li key={pidx} className="p-2 bg-blue-950/30 border border-blue-500/30 rounded-lg text-xs text-blue-200">
+                              {prov}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Alertas */}
+                    {msg.summaryData.alertas && msg.summaryData.alertas.length > 0 && (
+                      <div className="space-y-2 pt-2 border-t border-white/10">
+                        <h4 className="text-xs font-black uppercase text-rose-300 flex items-center gap-1.5">
+                          <AlertTriangle className="w-3.5 h-3.5 text-rose-400" /> Alertas e Observações Críticas
+                        </h4>
+                        <ul className="space-y-1">
+                          {msg.summaryData.alertas.map((a, aidx) => (
+                            <li key={aidx} className="p-2 bg-rose-950/30 border border-rose-500/30 rounded-lg text-xs text-rose-200 flex items-start gap-2">
+                              <span>⚠️</span>
+                              <span>{a}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Rodapé do Resumo */}
+                    <div className="pt-2 text-[11px] text-slate-400 flex flex-wrap items-center justify-between gap-2 border-t border-white/10">
+                      <span>Páginas analisadas: <strong>{msg.summaryData.paginas_processadas || 1}</strong></span>
+                      {msg.summaryData.exige_revisao_humana && (
+                        <span className="text-amber-400/90 font-medium">
+                          ⚠️ Exige conferência com a peça documental original
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 ) : (
                   <div
                     className="prose prose-invert max-w-none text-slate-100"
@@ -2356,7 +2681,11 @@ const handlePrintMessage = (msg: JarvisMessage) => {
               </div>
               <div className="bg-slate-800/80 border border-white/10 rounded-3xl p-4 text-xs text-blue-300 flex items-center gap-3">
                 <div className="w-2 h-2 bg-blue-400 rounded-full animate-ping" />
-                <span>JARVIS está consultando o ECA, normas do CONANDA e o banco do SIMCT...</span>
+                <span>
+                  {acaoAtiva === "RESUMIR_DOCUMENTO" || arquivoSelecionado
+                    ? "JARVIS está analisando o PDF e estruturando o resumo oficial..."
+                    : "JARVIS está consultando o ECA, normas do CONANDA e o banco do SIMCT..."}
+                </span>
               </div>
             </div>
           )}
@@ -2382,7 +2711,28 @@ const handlePrintMessage = (msg: JarvisMessage) => {
             </div>
           )}
 
-          {uploadedFileName && (
+          {acaoAtiva === "RESUMIR_DOCUMENTO" && arquivoSelecionado && (
+            <div className="mb-2 px-4 py-2 bg-indigo-950/80 border border-indigo-500/40 rounded-2xl flex items-center justify-between text-xs text-indigo-200 shadow-md">
+              <span className="flex items-center gap-2 font-bold truncate">
+                <FileText className="w-4 h-4 text-indigo-400 shrink-0" />
+                Modo Ativo: Resumo de PDF — <span className="text-white underline">{arquivoSelecionado.name}</span> ({(arquivoSelecionado.size / 1024).toFixed(1)} KB)
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setAcaoAtiva(null);
+                  setArquivoSelecionado(null);
+                  setUploadedFileName(null);
+                  setUploadedFileText(null);
+                }}
+                className="text-indigo-300 hover:text-white px-2.5 py-1 bg-indigo-900/80 hover:bg-indigo-800 rounded-lg text-[10px] font-bold border border-indigo-400/30 transition-all shrink-0 ml-2"
+              >
+                Cancelar PDF
+              </button>
+            </div>
+          )}
+
+          {uploadedFileName && !arquivoSelecionado && (
             <div className="mb-2 px-4 py-2 bg-slate-800 border border-blue-500/30 rounded-2xl flex items-center justify-between text-xs text-blue-200">
               <span className="flex items-center gap-2 font-bold truncate">
                 <Paperclip className="w-4 h-4 text-blue-400 shrink-0" />
@@ -2410,16 +2760,20 @@ const handlePrintMessage = (msg: JarvisMessage) => {
             <input
               type="file"
               ref={fileInputRef}
-              onChange={handleFileChange}
-              accept=".pdf,.txt,.docx,.doc,.json,.csv"
+              accept=".pdf,application/pdf"
               className="hidden"
+              onChange={handleFileChange}
             />
 
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="p-3 bg-slate-800 text-slate-300 hover:text-white rounded-2xl hover:bg-slate-700 transition-all border border-white/10 shrink-0"
-              title="Anexar Documento (PDF, TXT, DOCX)"
+              className={`p-3 rounded-2xl transition-all border shrink-0 ${
+                arquivoSelecionado
+                  ? 'bg-indigo-600 text-white border-indigo-400 shadow-md shadow-indigo-600/30'
+                  : 'bg-slate-800 text-slate-300 hover:text-white rounded-2xl hover:bg-slate-700 border-white/10'
+              }`}
+              title="Anexar Documento PDF para Leitura e Resumo"
             >
               <Paperclip className="w-5 h-5" />
             </button>
@@ -2441,13 +2795,19 @@ const handlePrintMessage = (msg: JarvisMessage) => {
               type="text"
               value={inputPrompt}
               onChange={(e) => setInputPrompt(e.target.value)}
-              placeholder={acaoAtiva === "CORRIGIR_TEXTO" ? "Digite ou cole o texto para correção da norma-padrão..." : "Pergunte ao JARVIS sobre ECA, casos, relatórios ou dados do SIMCT..."}
+              placeholder={
+                acaoAtiva === "CORRIGIR_TEXTO"
+                  ? "Digite ou cole o texto para correção da norma-padrão..."
+                  : acaoAtiva === "RESUMIR_DOCUMENTO"
+                  ? "Clique em Enviar para resumir o PDF (ou digite uma instrução específica)..."
+                  : "Pergunte ao JARVIS sobre ECA, casos, relatórios ou dados do SIMCT..."
+              }
               className="flex-1 bg-slate-800 border border-white/10 rounded-2xl px-5 py-3.5 text-sm text-white placeholder-slate-400 outline-none focus:border-blue-500 transition-all font-medium"
             />
 
             <button
               type="submit"
-              disabled={loading || (!inputPrompt.trim() && !uploadedFileText)}
+              disabled={loading || (!inputPrompt.trim() && !arquivoSelecionado && !uploadedFileText)}
               className="p-3.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-2xl transition-all shadow-lg shadow-blue-600/30 shrink-0"
             >
               <Send className="w-5 h-5" />

@@ -6,6 +6,7 @@ import { GoogleGenAI } from "@google/genai";
 import handleCorrigirTexto from "./api/corrigir-texto";
 import handleGerarDocumento from "./api/gerar-documento";
 import handleJarvisChat from "./api/jarvis-chat";
+import handleResumirDocumento from "./api/resumir-documento";
 
 function generateSIMCTFallbackResponse(contents: any[]): string {
   let userQuestion = "";
@@ -283,6 +284,11 @@ async function startServer() {
   // Módulo de Chat Conversacional / Assistente (JARVIS)
   app.post("/api/jarvis-chat", (req, res, next) => {
     handleJarvisChat(req, res).catch(next);
+  });
+
+  // Módulo Exclusivo de Leitura e Resumo de Documentos PDF (JARVIS)
+  app.post("/api/resumir-documento", (req, res, next) => {
+    handleResumirDocumento(req, res).catch(next);
   });
 
   // Health check
