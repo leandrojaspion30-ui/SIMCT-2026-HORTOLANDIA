@@ -2,7 +2,7 @@
 // POST /api/corrigir-texto — MÓDULO EXCLUSIVO DE CORREÇÃO DE TEXTO
 // ============================================================================
 import { Type } from "@google/genai";
-import { gerar, json, erroLegivel, MODELO_RAPIDO } from "./_lib/genai";
+import { gerar, json, erroLegivel, MODELO_RAPIDO } from "./_lib/genai.js";
 
 const PROMPT_CORRETOR_EXCLUSIVO = `Você é um revisor-chefe especializado na norma-padrão da língua portuguesa do Brasil. Domina ortografia, acentuação, crase, concordância nominal e verbal, regência, pontuação, coesão, clareza, concisão, colocação pronominal, o Acordo Ortográfico da Língua Portuguesa, o VOLP e a redação oficial brasileira.
 

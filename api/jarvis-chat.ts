@@ -1,9 +1,9 @@
 // ============================================================================
 // POST /api/jarvis-chat — conversa geral
 // ============================================================================
-import { gerar, erroLegivel, MODELO_RAPIDO } from "./_lib/genai";
-import { ORGAO, ESTRUTURA_PERMITIDA, GLOSSARIO_SGDCA, REGRAS_REDACAO_OFICIAL, BLINDAGEM } from "./_lib/institucional";
-import { envelopar, validarTexto } from "./_lib/guard";
+import { gerar, erroLegivel, MODELO_RAPIDO } from "./_lib/genai.js";
+import { ORGAO, ESTRUTURA_PERMITIDA, GLOSSARIO_SGDCA, REGRAS_REDACAO_OFICIAL, BLINDAGEM } from "./_lib/institucional.js";
+import { envelopar, validarTexto } from "./_lib/guard.js";
 
 const system = (conselheiro: string, hoje: string, ctx: string) => `
 Você é o JARVIS, assistente técnico-jurídico do ${ORGAO.nome}/${ORGAO.uf} (sistema ${ORGAO.sistema}).

@@ -1,7 +1,7 @@
 // ============================================================================
 // JARVIS · ROTA POST /api/gerar-documento
 // ============================================================================
-import { gerar, erroLegivel, MODELO_PROFUNDO, MODELO_RAPIDO } from "./_lib/genai";
+import { gerar, erroLegivel, MODELO_PROFUNDO, MODELO_RAPIDO } from "./_lib/genai.js";
 import {
   ORGAO,
   IDENTIDADE_INSTITUCIONAL,
@@ -9,8 +9,8 @@ import {
   REGRAS_REDACAO_OFICIAL,
   REGRAS_GRAMATICA,
   BLINDAGEM,
-} from "./_lib/institucional";
-import { dadosSensiveis, envelopar, validarTexto, numerosPermitidos, numerosSuspeitos } from "./_lib/guard";
+} from "./_lib/institucional.js";
+import { dadosSensiveis, envelopar, validarTexto, numerosPermitidos, numerosSuspeitos } from "./_lib/guard.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
