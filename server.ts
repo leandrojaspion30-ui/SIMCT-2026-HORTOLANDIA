@@ -3,7 +3,9 @@ import path from "path";
 import cors from "cors";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
-import { handleCorrigirTexto } from "./src/server/corrigirTexto";
+import handleCorrigirTexto from "./api/corrigir-texto";
+import handleGerarDocumento from "./api/gerar-documento";
+import handleJarvisChat from "./api/jarvis-chat";
 
 function generateSIMCTFallbackResponse(contents: any[]): string {
   let userQuestion = "";
@@ -271,6 +273,16 @@ async function startServer() {
   // Módulo de Correção de Texto SGDCA (JARVIS)
   app.post("/api/corrigir-texto", (req, res, next) => {
     handleCorrigirTexto(req, res).catch(next);
+  });
+
+  // Módulo de Geração de Documentos Oficiais (JARVIS)
+  app.post("/api/gerar-documento", (req, res, next) => {
+    handleGerarDocumento(req, res).catch(next);
+  });
+
+  // Módulo de Chat Conversacional / Assistente (JARVIS)
+  app.post("/api/jarvis-chat", (req, res, next) => {
+    handleJarvisChat(req, res).catch(next);
   });
 
   // Health check

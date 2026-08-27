@@ -1416,14 +1416,28 @@ ${simctStatsSummary}
 
       let responseData: any = null;
       try {
-        const res = await fetch("/api/ai/analyze", {
+        const res = await fetch("/api/jarvis-chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contents: contentsHistory, model: "gemini-3.7-flash" })
+          body: JSON.stringify({
+            prompt: textToSend,
+            messages: contentsHistory,
+            contextData: { stats: simctStatsSummary, user: currentUser?.nome },
+          }),
         });
-        const responseText = await res.text();
-        if (responseText && responseText.trim().startsWith("{")) {
-          responseData = JSON.parse(responseText);
+        if (res.ok) {
+          responseData = await res.json();
+        } else {
+          // Fallback para /api/ai/analyze se necessário
+          const fallbackRes = await fetch("/api/ai/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contents: contentsHistory, model: "gemini-3.7-flash" }),
+          });
+          const responseText = await fallbackRes.text();
+          if (responseText && responseText.trim().startsWith("{")) {
+            responseData = JSON.parse(responseText);
+          }
         }
       } catch (fErr) {
         console.warn("Fetch Error in JARVIS:", fErr);
