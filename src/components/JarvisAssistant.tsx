@@ -1278,8 +1278,6 @@ Você deve reconhecer e executar corretamente estes comandos/botões do SIMCT:
 - CRIAR RELATÓRIO: siga o Bloco 5.1.
 - RELATÓRIO CMDCA: relatório + formato de ofício institucional quando aplicável (Bloco 5.1 + 5.2).
 - CORRIGIR TEXTO: revise gramática, clareza e formalidade sem alterar o sentido original; aponte as mudanças se solicitado.
-- MODO FAÇA TUDO: combine múltiplas etapas (analisar dados + gerar relatório + sugerir ofício), sempre seguindo todas as travas de segurança acima.
-- PESQUISA JURÍDICA: busque fundamentação legal aplicável, seguindo rigorosamente o Bloco 2 (nunca inventar) e citando necessidade de verificação em fonte oficial quando pertinente.
 
 ============================================================
 BLOCO 7 — LIMITES DO AGENTE
@@ -1308,6 +1306,113 @@ ${simctStatsSummary}
         ...messages.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
         { role: 'user', parts: [{ text: fullUserPrompt }] }
       ];
+
+      // Se for uma requisição direta de correção de texto, direciona para o endpoint especialista /api/corrigir-texto
+      const isCorrectionRequest = (
+        textToSend.toUpperCase().includes('CORRIJA O TEXTO') ||
+        textToSend.toUpperCase().includes('POR FAVOR, CORRIJA') ||
+        textToSend.toUpperCase().includes('[CORREÇÃO ORTOGRÁFICA]') ||
+        textToSend.toUpperCase().includes('[LINGUAGEM FORMAL]') ||
+        textToSend.toUpperCase().includes('[LINGUAGEM TÉCNICA]') ||
+        (textToSend.toUpperCase().startsWith('CORRIGIR:') || textToSend.toUpperCase().startsWith('REVISAR:'))
+      );
+
+      if (isCorrectionRequest) {
+        try {
+          let extractedText = textToSend
+            .replace(/^[\s\S]*?\[CORREÇÃO ORTOGRÁFICA\]:?/gi, '')
+            .replace(/^[\s\S]*?\[LINGUAGEM FORMAL\]:?/gi, '')
+            .replace(/^[\s\S]*?\[LINGUAGEM TÉCNICA\]:?/gi, '')
+            .replace(/^.*?corrija o texto abaixo:?/gi, '')
+            .replace(/^.*?corrija o texto:?/gi, '')
+            .replace(/^.*?por favor, corrija:?/gi, '')
+            .replace(/^CORRIGIR:?/gi, '')
+            .replace(/^REVISAR:?/gi, '')
+            .trim();
+
+          if (extractedText.startsWith('"') && extractedText.endsWith('"')) {
+            extractedText = extractedText.slice(1, -1).trim();
+          }
+
+          if (extractedText && extractedText.length >= 3) {
+            let modo = 'COMPLETA';
+            const upper = textToSend.toUpperCase();
+            if (upper.includes('ORTOGRÁF') || upper.includes('ORTOGRAF') || upper.includes('GRAMATICAL')) modo = 'ORTOGRAFICA';
+            else if (upper.includes('OFICIAL') || upper.includes('OFÍCIO') || upper.includes('OFICIO')) modo = 'OFICIAL';
+            else if (upper.includes('TÉCNIC') || upper.includes('TECNIC') || upper.includes('SGDCA') || upper.includes('ECA')) modo = 'TECNICA';
+            else if (upper.includes('SIMPLES')) modo = 'SIMPLES';
+
+            const corrRes = await fetch('/api/corrigir-texto', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ texto: extractedText, modo }),
+            });
+
+            if (corrRes.ok) {
+              const corrData = await corrRes.json();
+              if (corrData && corrData.texto_corrigido) {
+                let md = `### ✍️ TEXTO CORRIGIDO (REVISÃO TÉCNICA E NORMATIVA SGDCA)\n\n`;
+                md += `> "${corrData.texto_corrigido}"\n\n`;
+                md += `---\n\n`;
+                if (corrData.resumo) {
+                  md += `📌 **Avaliação Geral:** ${corrData.resumo}\n`;
+                }
+                if (corrData.nivel_formalidade) {
+                  md += `🏷️ **Nível de Formalidade:** \`${corrData.nivel_formalidade}\`\n\n`;
+                }
+
+                if (Array.isArray(corrData.correcoes) && corrData.correcoes.length > 0) {
+                  md += `#### 🔍 Correções e Adequações Realizadas:\n\n`;
+                  md += `| Trecho Original | Versão Corrigida | Categoria & Gravidade | Justificativa / Regra Aplicada |\n`;
+                  md += `| :--- | :--- | :--- | :--- |\n`;
+                  corrData.correcoes.forEach((c: any) => {
+                    const orig = (c.original || '').replace(/\|/g, '\\|');
+                    const corr = (c.corrigido || '').replace(/\|/g, '\\|');
+                    const cat = `${c.categoria || 'GERAL'} (${c.gravidade || 'INADEQUAÇÃO'})`;
+                    const exp = `${c.explicacao || ''} *[${c.regra || ''}]*`.replace(/\|/g, '\\|');
+                    md += `| **${orig}** | **${corr}** | \`${cat}\` | ${exp} |\n`;
+                  });
+                  md += `\n`;
+                }
+
+                if (Array.isArray(corrData.alertas_juridicos) && corrData.alertas_juridicos.length > 0) {
+                  md += `\n⚖️ **Alertas Jurídicos (Citações / Conceitos SGDCA):**\n`;
+                  corrData.alertas_juridicos.forEach((a: string) => {
+                    md += `- ⚠️ ${a}\n`;
+                  });
+                }
+
+                if (Array.isArray(corrData.alertas_sigilo) && corrData.alertas_sigilo.length > 0) {
+                  md += `\n🔒 **Alertas de Sigilo e LGPD (ECA art. 143):**\n`;
+                  corrData.alertas_sigilo.forEach((s: string) => {
+                    md += `- 🛡️ ${s}\n`;
+                  });
+                }
+
+                if (Array.isArray(corrData.sugestoes_estrutura) && corrData.sugestoes_estrutura.length > 0) {
+                  md += `\n💡 **Sugestões de Estrutura Documental:**\n`;
+                  corrData.sugestoes_estrutura.forEach((s: string) => {
+                    md += `- 📌 ${s}\n`;
+                  });
+                }
+
+                const botMessage: JarvisMessage = {
+                  id: (Date.now() + 1).toString(),
+                  role: 'model',
+                  text: md,
+                  timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                };
+
+                setMessages(prev => [...prev, botMessage]);
+                setLoading(false);
+                return;
+              }
+            }
+          }
+        } catch (cErr) {
+          console.warn('Falha no endpoint /api/corrigir-texto, continuando com pipeline geral:', cErr);
+        }
+      }
 
       let responseData: any = null;
       try {
@@ -1972,85 +2077,7 @@ const handlePrintMessage = (msg: JarvisMessage) => {
         </div>
       </div>
 
-      {/* QUICK ACTIONS PANEL (CENTRAL JARVIS) */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-        <button 
-          onClick={() => setActiveModal("DOC_UPLOAD")}
-          className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-3xl hover:border-blue-500 hover:shadow-xl hover:shadow-blue-500/10 transition-all group"
-        >
-          <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-            <Paperclip className="w-5 h-5 text-blue-600" />
-          </div>
-          <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider text-center">Anexar Documento</span>
-        </button>
-
-        <button 
-          onClick={() => setActiveModal("OFICIO")}
-          className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-3xl hover:border-indigo-500 hover:shadow-xl hover:shadow-indigo-500/10 transition-all group"
-        >
-          <div className="w-10 h-10 rounded-2xl bg-indigo-50 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-            <FilePlus className="w-5 h-5 text-indigo-600" />
-          </div>
-          <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider text-center">Criar Ofício</span>
-        </button>
-
-        <button 
-          onClick={() => setActiveModal("RELATORIO")}
-          className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-3xl hover:border-emerald-500 hover:shadow-xl hover:shadow-emerald-500/10 transition-all group"
-        >
-          <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-            <FileText className="w-5 h-5 text-emerald-600" />
-          </div>
-          <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider text-center">Criar Relatório</span>
-        </button>
-
-        <button 
-          onClick={() => {
-            handleSendMessage("JARVIS, prepare o Relatório Trimestral para o CMDCA com gráficos e análise territorial.");
-          }}
-          className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-3xl hover:border-amber-500 hover:shadow-xl hover:shadow-amber-500/10 transition-all group"
-        >
-          <div className="w-10 h-10 rounded-2xl bg-amber-50 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-            <Building2 className="w-5 h-5 text-amber-600" />
-          </div>
-          <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider text-center">Relatório CMDCA</span>
-        </button>
-
-        <button 
-          onClick={() => setActiveModal("CORRIGIR")}
-          className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-3xl hover:border-purple-500 hover:shadow-xl hover:shadow-purple-500/10 transition-all group"
-        >
-          <div className="w-10 h-10 rounded-2xl bg-purple-50 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-            <Brain className="w-5 h-5 text-purple-600" />
-          </div>
-          <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider text-center">Corrigir Texto</span>
-        </button>
-
-        <button 
-          onClick={() => {
-            handleSendMessage("JARVIS, faça uma análise completa dos dados do SIMCT identificando fragilidades e propondo políticas públicas.");
-          }}
-          className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-3xl hover:border-rose-500 hover:shadow-xl hover:shadow-rose-500/10 transition-all group"
-        >
-          <div className="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-            <Sparkles className="w-5 h-5 text-rose-600" />
-          </div>
-          <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider text-center">Modo Faça Tudo</span>
-        </button>
-
-        <button 
-          onClick={() => {
-            handleSendMessage("JARVIS, pesquise a fundamentação jurídica mais recente sobre Guarda e Poder Familiar na Biblioteca Jurídica Viva.");
-          }}
-          className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-3xl hover:border-cyan-500 hover:shadow-xl hover:shadow-cyan-500/10 transition-all group"
-        >
-          <div className="w-10 h-10 rounded-2xl bg-cyan-50 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-            <Search className="w-5 h-5 text-cyan-600" />
-          </div>
-          <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider text-center">Pesquisa Jurídica</span>
-        </button>
-      </div>
-      {/* ÁREA PRINCIPAL DO CHAT / MENSSAGENS */}
+      {/* ÁREA PRINCIPAL DO CHAT / MENSAGENS */}
       <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] flex flex-col h-[650px] shadow-2xl overflow-hidden">
         {/* CHAT MESSAGES SCROLL AREA */}
         <div className="flex-1 p-6 overflow-y-auto space-y-6 scrollbar-thin scrollbar-thumb-slate-700">

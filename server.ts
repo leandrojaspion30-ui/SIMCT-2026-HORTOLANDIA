@@ -3,6 +3,7 @@ import path from "path";
 import cors from "cors";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
+import { handleCorrigirTexto } from "./src/server/corrigirTexto";
 
 function generateSIMCTFallbackResponse(contents: any[]): string {
   let userQuestion = "";
@@ -265,6 +266,11 @@ async function startServer() {
       console.info("Acionando fallback SIMCT por captura global.");
       return res.json({ text: generateSIMCTFallbackResponse(req.body?.contents) });
     }
+  });
+
+  // Módulo de Correção de Texto SGDCA (JARVIS)
+  app.post("/api/corrigir-texto", (req, res, next) => {
+    handleCorrigirTexto(req, res).catch(next);
   });
 
   // Health check
