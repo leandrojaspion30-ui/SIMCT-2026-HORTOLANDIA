@@ -23,6 +23,14 @@ interface JarvisMessage {
   text: string;
   timestamp: string;
   attachmentName?: string;
+  isCorrectionResult?: boolean;
+  isCorrectionError?: boolean;
+  correctedRawText?: string;
+  correctionData?: {
+    texto_corrigido: string;
+    correcoes?: Array<{ original: string; corrigido: string; explicacao: string }>;
+    observacoes?: string[];
+  };
 }
 
 interface JarvisAssistantProps {
@@ -63,6 +71,7 @@ Como posso auxiliar seu trabalho hoje? Escolha um das **Ações Rápidas** abaix
   
   // Modal / Quick action states
   const [activeModal, setActiveModal] = useState<'NONE' | 'CORRIGIR' | 'OFICIO' | 'RELATORIO' | 'CASO' | 'DOC_UPLOAD' | 'ANALYTICS' | 'PREVIEW'>('NONE');
+  const [acaoAtiva, setAcaoAtiva] = useState<'CORRIGIR_TEXTO' | null>(null);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [activeSubMode, setActiveSubMode] = useState<'GENERAL' | 'CMDCA' | 'EXECUTIVO' | 'LEGAL'>('GENERAL');
 
@@ -70,6 +79,7 @@ Como posso auxiliar seu trabalho hoje? Escolha um das **Ações Rápidas** abaix
   const [documentPreview, setDocumentPreview] = useState<{ title: string; content: string; type: 'OFÍCIO' | 'RELATÓRIO' } | null>(null);
 
   const handleNewConversation = () => {
+    setAcaoAtiva(null);
     setMessages([
       {
         id: Date.now().toString(),
@@ -81,6 +91,99 @@ Como posso auxiliar seu trabalho hoje? Escolha um das **Ações Rápidas** abaix
     setInputPrompt('');
     setUploadedFileName(null);
     setUploadedFileText(null);
+  };
+
+  /** Função exclusiva de correção textual: sem dados jurídicos, sem histórico, sem regras do ECA */
+  const corrigirTexto = async (textoDigitado: string): Promise<{
+    texto_corrigido: string;
+    correcoes?: Array<{ original: string; corrigido: string; explicacao: string }>;
+    observacoes?: string[];
+  }> => {
+    const res = await fetch('/api/corrigir-texto', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ texto: textoDigitado }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Erro ${res.status} ao processar a correção textual.`);
+    }
+
+    const data = await res.json();
+    return data;
+  };
+
+  /** Formatação e exibição estrita do resultado de correção */
+  const exibirResultadoCorrecao = (resultado: {
+    texto_corrigido: string;
+    correcoes?: Array<{ original: string; corrigido: string; explicacao: string }>;
+    observacoes?: string[];
+  }) => {
+    let md = `### Texto corrigido\n\n${resultado.texto_corrigido}\n\n`;
+
+    md += `### Alterações realizadas\n\n`;
+    if (resultado.correcoes && resultado.correcoes.length > 0) {
+      resultado.correcoes.forEach((c, idx) => {
+        md += `${idx + 1}. **Original:** \`${c.original}\` → **Corrigido:** \`${c.corrigido}\`\n   *Regra aplicada:* ${c.explicacao}\n\n`;
+      });
+    } else {
+      md += `O texto apresentado já está de acordo com a norma-padrão da língua portuguesa. Nenhuma alteração foi necessária.\n\n`;
+    }
+
+    if (resultado.observacoes && resultado.observacoes.length > 0) {
+      md += `**Observações:**\n${resultado.observacoes.map(o => `• ${o}`).join('\n')}\n`;
+    }
+
+    const botMessage: JarvisMessage = {
+      id: (Date.now() + 1).toString(),
+      role: 'model',
+      text: md.trim(),
+      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      isCorrectionResult: true,
+      correctedRawText: resultado.texto_corrigido,
+      correctionData: resultado,
+    };
+
+    setMessages(prev => [...prev, botMessage]);
+  };
+
+  /** Exibição de erro real da correção (sem usar templates jurídicos de fallback) */
+  const exibirErroCorrecao = (mensagemErro: string) => {
+    const botMessage: JarvisMessage = {
+      id: (Date.now() + 1).toString(),
+      role: 'model',
+      text: `⚠️ **Erro na Correção de Texto:**\n\n${mensagemErro}`,
+      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      isCorrectionError: true,
+    };
+    setMessages(prev => [...prev, botMessage]);
+  };
+
+  /** Execução direta do fluxo de correção */
+  const handleExecutarCorrecao = async (textoDigitado: string) => {
+    const texto = textoDigitado.trim();
+    if (!texto) return;
+
+    setAcaoAtiva("CORRIGIR_TEXTO");
+    const userMessage: JarvisMessage = {
+      id: Date.now().toString(),
+      role: 'user',
+      text: texto,
+      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    };
+    setMessages(prev => [...prev, userMessage]);
+    setInputPrompt('');
+    setLoading(true);
+
+    try {
+      const resultado = await corrigirTexto(texto);
+      exibirResultadoCorrecao(resultado);
+    } catch (err: any) {
+      exibirErroCorrecao(err?.message || "Falha ao processar a correção do texto.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const [isSearchingLibrary, setIsSearchingLibrary] = useState(false);
@@ -318,6 +421,95 @@ DADOS ATUALIZADOS DO SIMCT HORTOLÂNDIA:
   const handleSendMessage = async (customPrompt?: string, attachName?: string) => {
     const textToSend = customPrompt || inputPrompt;
     if (!textToSend.trim() && !uploadedFileText) return;
+
+    // =========================================================================
+    // 1. ISOLAMENTO TOTAL DO MODO CORRIGIR_TEXTO (REGRA OBRIGATÓRIA)
+    // =========================================================================
+    if (acaoAtiva === "CORRIGIR_TEXTO") {
+      const textoDigitado = textToSend.trim();
+      if (!textoDigitado) return;
+
+      const userMessage: JarvisMessage = {
+        id: Date.now().toString(),
+        role: 'user',
+        text: textoDigitado,
+        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        attachmentName: attachName || uploadedFileName || undefined
+      };
+
+      setMessages(prev => [...prev, userMessage]);
+      setInputPrompt('');
+      setUploadedFileName(null);
+      setUploadedFileText(null);
+      setLoading(true);
+
+      try {
+        const resultado = await corrigirTexto(textoDigitado);
+        exibirResultadoCorrecao(resultado);
+      } catch (err: any) {
+        exibirErroCorrecao(err?.message || "Falha ao processar a correção do texto.");
+      } finally {
+        setLoading(false);
+      }
+      return; // RETURN OBRIGATÓRIO: impede continuidade para qualquer outro fluxo
+    }
+
+    // =========================================================================
+    // 2. ISOLAMENTO SE A MENSAGEM FOR UMA REQUISIÇÃO DIRETA DE CORREÇÃO
+    // =========================================================================
+    const isCorrectionRequest = (
+      textToSend.toUpperCase().includes('CORRIJA O TEXTO') ||
+      textToSend.toUpperCase().includes('POR FAVOR, CORRIJA') ||
+      textToSend.toUpperCase().includes('[CORREÇÃO ORTOGRÁFICA]') ||
+      textToSend.toUpperCase().includes('[LINGUAGEM FORMAL]') ||
+      textToSend.toUpperCase().includes('[LINGUAGEM TÉCNICA]') ||
+      (textToSend.toUpperCase().startsWith('CORRIGIR:') || textToSend.toUpperCase().startsWith('REVISAR:'))
+    );
+
+    if (isCorrectionRequest) {
+      let extractedText = textToSend
+        .replace(/^[\s\S]*?\[CORREÇÃO ORTOGRÁFICA\]:?/gi, '')
+        .replace(/^[\s\S]*?\[LINGUAGEM FORMAL\]:?/gi, '')
+        .replace(/^[\s\S]*?\[LINGUAGEM TÉCNICA\]:?/gi, '')
+        .replace(/^.*?corrija o texto abaixo:?/gi, '')
+        .replace(/^.*?corrija o texto:?/gi, '')
+        .replace(/^.*?por favor, corrija:?/gi, '')
+        .replace(/^CORRIGIR:?/gi, '')
+        .replace(/^REVISAR:?/gi, '')
+        .trim();
+
+      if (extractedText.startsWith('"') && extractedText.endsWith('"')) {
+        extractedText = extractedText.slice(1, -1).trim();
+      }
+
+      if (!extractedText || extractedText.length < 2) {
+        extractedText = textToSend;
+      }
+
+      const userMessage: JarvisMessage = {
+        id: Date.now().toString(),
+        role: 'user',
+        text: textToSend,
+        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        attachmentName: attachName || uploadedFileName || undefined
+      };
+
+      setMessages(prev => [...prev, userMessage]);
+      setInputPrompt('');
+      setUploadedFileName(null);
+      setUploadedFileText(null);
+      setLoading(true);
+
+      try {
+        const resultado = await corrigirTexto(extractedText);
+        exibirResultadoCorrecao(resultado);
+      } catch (cErr: any) {
+        exibirErroCorrecao(cErr?.message || "Falha ao processar a correção do texto.");
+      } finally {
+        setLoading(false);
+      }
+      return; // RETURN OBRIGATÓRIO
+    }
 
     let fullUserPrompt = textToSend;
     if (uploadedFileText) {
@@ -1307,113 +1499,6 @@ ${simctStatsSummary}
         { role: 'user', parts: [{ text: fullUserPrompt }] }
       ];
 
-      // Se for uma requisição direta de correção de texto, direciona para o endpoint especialista /api/corrigir-texto
-      const isCorrectionRequest = (
-        textToSend.toUpperCase().includes('CORRIJA O TEXTO') ||
-        textToSend.toUpperCase().includes('POR FAVOR, CORRIJA') ||
-        textToSend.toUpperCase().includes('[CORREÇÃO ORTOGRÁFICA]') ||
-        textToSend.toUpperCase().includes('[LINGUAGEM FORMAL]') ||
-        textToSend.toUpperCase().includes('[LINGUAGEM TÉCNICA]') ||
-        (textToSend.toUpperCase().startsWith('CORRIGIR:') || textToSend.toUpperCase().startsWith('REVISAR:'))
-      );
-
-      if (isCorrectionRequest) {
-        try {
-          let extractedText = textToSend
-            .replace(/^[\s\S]*?\[CORREÇÃO ORTOGRÁFICA\]:?/gi, '')
-            .replace(/^[\s\S]*?\[LINGUAGEM FORMAL\]:?/gi, '')
-            .replace(/^[\s\S]*?\[LINGUAGEM TÉCNICA\]:?/gi, '')
-            .replace(/^.*?corrija o texto abaixo:?/gi, '')
-            .replace(/^.*?corrija o texto:?/gi, '')
-            .replace(/^.*?por favor, corrija:?/gi, '')
-            .replace(/^CORRIGIR:?/gi, '')
-            .replace(/^REVISAR:?/gi, '')
-            .trim();
-
-          if (extractedText.startsWith('"') && extractedText.endsWith('"')) {
-            extractedText = extractedText.slice(1, -1).trim();
-          }
-
-          if (extractedText && extractedText.length >= 3) {
-            let modo = 'COMPLETA';
-            const upper = textToSend.toUpperCase();
-            if (upper.includes('ORTOGRÁF') || upper.includes('ORTOGRAF') || upper.includes('GRAMATICAL')) modo = 'ORTOGRAFICA';
-            else if (upper.includes('OFICIAL') || upper.includes('OFÍCIO') || upper.includes('OFICIO')) modo = 'OFICIAL';
-            else if (upper.includes('TÉCNIC') || upper.includes('TECNIC') || upper.includes('SGDCA') || upper.includes('ECA')) modo = 'TECNICA';
-            else if (upper.includes('SIMPLES')) modo = 'SIMPLES';
-
-            const corrRes = await fetch('/api/corrigir-texto', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ texto: extractedText, modo }),
-            });
-
-            if (corrRes.ok) {
-              const corrData = await corrRes.json();
-              if (corrData && corrData.texto_corrigido) {
-                let md = `### ✍️ TEXTO CORRIGIDO (REVISÃO TÉCNICA E NORMATIVA SGDCA)\n\n`;
-                md += `> "${corrData.texto_corrigido}"\n\n`;
-                md += `---\n\n`;
-                if (corrData.resumo) {
-                  md += `📌 **Avaliação Geral:** ${corrData.resumo}\n`;
-                }
-                if (corrData.nivel_formalidade) {
-                  md += `🏷️ **Nível de Formalidade:** \`${corrData.nivel_formalidade}\`\n\n`;
-                }
-
-                if (Array.isArray(corrData.correcoes) && corrData.correcoes.length > 0) {
-                  md += `#### 🔍 Correções e Adequações Realizadas:\n\n`;
-                  md += `| Trecho Original | Versão Corrigida | Categoria & Gravidade | Justificativa / Regra Aplicada |\n`;
-                  md += `| :--- | :--- | :--- | :--- |\n`;
-                  corrData.correcoes.forEach((c: any) => {
-                    const orig = (c.original || '').replace(/\|/g, '\\|');
-                    const corr = (c.corrigido || '').replace(/\|/g, '\\|');
-                    const cat = `${c.categoria || 'GERAL'} (${c.gravidade || 'INADEQUAÇÃO'})`;
-                    const exp = `${c.explicacao || ''} *[${c.regra || ''}]*`.replace(/\|/g, '\\|');
-                    md += `| **${orig}** | **${corr}** | \`${cat}\` | ${exp} |\n`;
-                  });
-                  md += `\n`;
-                }
-
-                if (Array.isArray(corrData.alertas_juridicos) && corrData.alertas_juridicos.length > 0) {
-                  md += `\n⚖️ **Alertas Jurídicos (Citações / Conceitos SGDCA):**\n`;
-                  corrData.alertas_juridicos.forEach((a: string) => {
-                    md += `- ⚠️ ${a}\n`;
-                  });
-                }
-
-                if (Array.isArray(corrData.alertas_sigilo) && corrData.alertas_sigilo.length > 0) {
-                  md += `\n🔒 **Alertas de Sigilo e LGPD (ECA art. 143):**\n`;
-                  corrData.alertas_sigilo.forEach((s: string) => {
-                    md += `- 🛡️ ${s}\n`;
-                  });
-                }
-
-                if (Array.isArray(corrData.sugestoes_estrutura) && corrData.sugestoes_estrutura.length > 0) {
-                  md += `\n💡 **Sugestões de Estrutura Documental:**\n`;
-                  corrData.sugestoes_estrutura.forEach((s: string) => {
-                    md += `- 📌 ${s}\n`;
-                  });
-                }
-
-                const botMessage: JarvisMessage = {
-                  id: (Date.now() + 1).toString(),
-                  role: 'model',
-                  text: md,
-                  timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-                };
-
-                setMessages(prev => [...prev, botMessage]);
-                setLoading(false);
-                return;
-              }
-            }
-          }
-        } catch (cErr) {
-          console.warn('Falha no endpoint /api/corrigir-texto, continuando com pipeline geral:', cErr);
-        }
-      }
-
       let responseData: any = null;
       try {
         const res = await fetch("/api/jarvis-chat", {
@@ -2075,6 +2160,16 @@ const handlePrintMessage = (msg: JarvisMessage) => {
           <div className="flex flex-col items-end gap-3">
             <div className="flex flex-wrap items-center gap-2">
               <button
+                id="btn-corrigir-texto-header"
+                onClick={() => {
+                  setAcaoAtiva("CORRIGIR_TEXTO");
+                  setActiveModal("CORRIGIR");
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-[11px] font-bold shadow-md transition-all active:scale-95 border border-blue-400/30"
+              >
+                <FileCheck2 className="w-3.5 h-3.5" /> CORRIGIR TEXTO
+              </button>
+              <button
                 onClick={() => setActiveModal("ANALYTICS")}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[11px] font-bold shadow-md transition-all active:scale-95 border border-indigo-400/30"
               >
@@ -2122,6 +2217,90 @@ const handlePrintMessage = (msg: JarvisMessage) => {
 
                 {msg.role === 'user' ? (
                   <div className="whitespace-pre-wrap font-medium">{msg.text}</div>
+                ) : msg.isCorrectionResult && msg.correctionData ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                      <div className="flex items-center gap-2 text-sm font-black text-blue-300 uppercase tracking-wide">
+                        <FileCheck2 className="w-4 h-4 text-emerald-400" />
+                        Texto corrigido
+                      </div>
+                      <button
+                        onClick={() => handleCopyText(msg.id, msg.correctionData?.texto_corrigido || msg.text)}
+                        className="flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shadow"
+                        title="Copiar texto corrigido"
+                      >
+                        {copiedId === msg.id ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" /> Copiado
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" /> Copiar texto
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Texto Final Corrigido */}
+                    <div className="p-4 bg-slate-900/90 rounded-2xl border border-emerald-500/30 text-slate-100 text-sm leading-relaxed whitespace-pre-wrap font-sans select-text shadow-inner">
+                      {msg.correctionData.texto_corrigido}
+                    </div>
+
+                    {/* Seção Alterações realizadas */}
+                    <div className="space-y-2 pt-2 border-t border-white/10">
+                      <h4 className="text-xs font-black uppercase text-slate-300 flex items-center gap-1.5">
+                        <span>📋</span> Alterações realizadas
+                      </h4>
+                      {msg.correctionData.correcoes && msg.correctionData.correcoes.length > 0 ? (
+                        <div className="space-y-2">
+                          {msg.correctionData.correcoes.map((c, i) => (
+                            <div key={i} className="p-3 bg-slate-900/70 rounded-xl border border-slate-700/50 text-xs space-y-1.5">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="font-semibold text-rose-300 line-through bg-rose-950/40 px-2 py-0.5 rounded">
+                                  {c.original}
+                                </span>
+                                <span className="text-slate-400 font-bold">→</span>
+                                <span className="font-bold text-emerald-300 bg-emerald-950/40 px-2 py-0.5 rounded">
+                                  {c.corrigido}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-300 font-normal">
+                                <span className="text-slate-400 font-semibold">Regra:</span> {c.explicacao}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-300 italic">
+                          O texto apresentado já está de acordo com a norma-padrão da língua portuguesa. Nenhuma alteração foi necessária.
+                        </p>
+                      )}
+
+                      {msg.correctionData.observacoes && msg.correctionData.observacoes.length > 0 && (
+                        <div className="pt-2 text-xs text-slate-400 space-y-1">
+                          <span className="font-bold text-slate-300">Observações:</span>
+                          <ul className="list-disc pl-4 space-y-0.5">
+                            {msg.correctionData.observacoes.map((obs, oi) => (
+                              <li key={oi}>{obs}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Botão Nova Correção */}
+                    <div className="pt-2 flex justify-end">
+                      <button
+                        onClick={() => {
+                          setAcaoAtiva("CORRIGIR_TEXTO");
+                          setActiveModal("CORRIGIR");
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all border border-blue-400/30 shadow"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" /> Nova correção
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <div
                     className="prose prose-invert max-w-none text-slate-100"
@@ -2187,6 +2366,22 @@ const handlePrintMessage = (msg: JarvisMessage) => {
 
         {/* INPUT DE MENSAGEM & CONTROLES */}
         <div className="p-4 bg-slate-950/80 border-t border-slate-800">
+          {acaoAtiva === "CORRIGIR_TEXTO" && (
+            <div className="mb-2 px-4 py-2 bg-blue-950/80 border border-blue-500/40 rounded-2xl flex items-center justify-between text-xs text-blue-200 shadow-md">
+              <span className="flex items-center gap-2 font-bold">
+                <FileCheck2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                Modo Ativo: Correção de Texto (Revisão da Norma-Padrão)
+              </span>
+              <button
+                type="button"
+                onClick={() => setAcaoAtiva(null)}
+                className="text-blue-300 hover:text-white px-2.5 py-1 bg-blue-900/80 hover:bg-blue-800 rounded-lg text-[10px] font-bold border border-blue-400/30 transition-all"
+              >
+                Voltar ao Modo Geral
+              </button>
+            </div>
+          )}
+
           {uploadedFileName && (
             <div className="mb-2 px-4 py-2 bg-slate-800 border border-blue-500/30 rounded-2xl flex items-center justify-between text-xs text-blue-200">
               <span className="flex items-center gap-2 font-bold truncate">
@@ -2246,7 +2441,7 @@ const handlePrintMessage = (msg: JarvisMessage) => {
               type="text"
               value={inputPrompt}
               onChange={(e) => setInputPrompt(e.target.value)}
-              placeholder="Pergunte ao JARVIS sobre ECA, casos, relatórios ou dados do SIMCT..."
+              placeholder={acaoAtiva === "CORRIGIR_TEXTO" ? "Digite ou cole o texto para correção da norma-padrão..." : "Pergunte ao JARVIS sobre ECA, casos, relatórios ou dados do SIMCT..."}
               className="flex-1 bg-slate-800 border border-white/10 rounded-2xl px-5 py-3.5 text-sm text-white placeholder-slate-400 outline-none focus:border-blue-500 transition-all font-medium"
             />
 
@@ -2269,35 +2464,23 @@ const handlePrintMessage = (msg: JarvisMessage) => {
           <div className="bg-white rounded-3xl max-w-xl w-full p-6 space-y-4 shadow-2xl border border-slate-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-black uppercase text-slate-900 flex items-center gap-2">
-                ✍️ CORRETOR E REVISOR TÉCNICO JARVIS
+                ✍️ CORRETOR E REVISOR TÉCNICO
               </h3>
               <button onClick={() => setActiveModal('NONE')} className="p-1 text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div>
-              <label className="text-xs font-bold text-slate-600 uppercase">Selecione o Estilo de Revisão:</label>
-              <select
-                value={correctionType}
-                onChange={(e) => setCorrectionType(e.target.value)}
-                className="w-full mt-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-blue-600"
-              >
-                <option value="CORREÇÃO ORTOGRÁFICA">CORREÇÃO ORTOGRÁFICA E GRAMATICAL</option>
-                <option value="LINGUAGEM FORMAL">LINGUAGEM FORMAL ADMINISTRATIVA</option>
-                <option value="LINGUAGEM TÉCNICA">LINGUAGEM TÉCNICA DO ECA (SGDCA)</option>
-                <option value="RELATÓRIO">FORMATO DE RELATÓRIO DE ATENDIMENTO</option>
-                <option value="OFÍCIO">FORMATO DE MINUTA DE OFÍCIO</option>
-                <option value="INFORMAÇÃO TÉCNICA">PARECER / INFORMAÇÃO TÉCNICA</option>
-              </select>
-            </div>
+            <p className="text-xs text-slate-600 font-medium">
+              Revisão ortográfica, gramatical, acentuação, crase e concordância segundo a norma-padrão da língua portuguesa.
+            </p>
 
             <div>
-              <label className="text-xs font-bold text-slate-600 uppercase">Digite ou Cole o Texto:</label>
+              <label className="text-xs font-bold text-slate-600 uppercase">Digite ou Cole o Texto a Ser Corrigido:</label>
               <textarea
                 value={textToCorrect}
                 onChange={(e) => setTextToCorrect(e.target.value)}
-                placeholder="Cole aqui o texto do relatório, termo de depoimento ou notificação..."
+                placeholder="Cole aqui o texto que deseja revisar e corrigir..."
                 rows={6}
                 className="w-full mt-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 font-sans"
               />
@@ -2311,15 +2494,19 @@ const handlePrintMessage = (msg: JarvisMessage) => {
                 Cancelar
               </button>
               <button
-                onClick={() => {
+                id="btn-modal-corrigir-texto"
+                onClick={async () => {
+                  const texto = textToCorrect.trim();
+                  if (!texto) return;
                   setActiveModal('NONE');
-                  handleSendMessage(`Por favor, corrija o texto abaixo no estilo [${correctionType}]:\n\n"${textToCorrect}"`);
+                  setAcaoAtiva("CORRIGIR_TEXTO");
                   setTextToCorrect('');
+                  await handleExecutarCorrecao(texto);
                 }}
                 disabled={!textToCorrect.trim()}
-                className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-xs uppercase hover:bg-blue-700 disabled:opacity-50"
+                className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-xs uppercase hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 shadow-md transition-all active:scale-95"
               >
-                Processar Correção
+                <FileCheck2 className="w-4 h-4" /> CORRIGIR TEXTO
               </button>
             </div>
           </div>
