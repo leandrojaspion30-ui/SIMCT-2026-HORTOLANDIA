@@ -66,7 +66,22 @@ export const JarvisAssistant: React.FC<JarvisAssistantProps> = ({
   users,
   currentUser
 }) => {
+  const storageKey = `simct_jarvis_messages_${currentUser?.id || 'default'}`;
+  const subModeKey = `simct_jarvis_submode_${currentUser?.id || 'default'}`;
+
   const [messages, setMessages] = useState<JarvisMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem(`simct_jarvis_messages_${currentUser?.id || 'default'}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn("Erro ao carregar histórico persistido do JARVIS:", e);
+    }
+
     return [
       {
         id: 'welcome',
@@ -95,23 +110,61 @@ Como posso auxiliar seu trabalho hoje? Escolha um das **Ações Rápidas** abaix
   const [arquivoSelecionado, setArquivoSelecionado] = useState<File | null>(null);
   const [erroMensagem, setErroMensagem] = useState<string | null>(null);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
-  const [activeSubMode, setActiveSubMode] = useState<'GENERAL' | 'CMDCA' | 'EXECUTIVO' | 'LEGAL'>('GENERAL');
+  const [activeSubMode, setActiveSubMode] = useState<'GENERAL' | 'CMDCA' | 'EXECUTIVO' | 'LEGAL'>(() => {
+    try {
+      const saved = localStorage.getItem(`simct_jarvis_submode_${currentUser?.id || 'default'}`);
+      if (saved && ['GENERAL', 'CMDCA', 'EXECUTIVO', 'LEGAL'].includes(saved)) {
+        return saved as 'GENERAL' | 'CMDCA' | 'EXECUTIVO' | 'LEGAL';
+      }
+    } catch {
+      // fallback to default
+    }
+    return 'GENERAL';
+  });
 
   // Preview state for document before generation
   const [documentPreview, setDocumentPreview] = useState<{ title: string; content: string; type: 'OFÍCIO' | 'RELATÓRIO' } | null>(null);
+
+  // Persistência automática do histórico de conversas e pesquisas no localStorage
+  useEffect(() => {
+    try {
+      if (currentUser?.id) {
+        localStorage.setItem(storageKey, JSON.stringify(messages));
+      }
+    } catch (e) {
+      console.warn("Erro ao salvar histórico do JARVIS no localStorage:", e);
+    }
+  }, [messages, storageKey, currentUser?.id]);
+
+  // Persistência automática do submodo ativo
+  useEffect(() => {
+    try {
+      if (currentUser?.id) {
+        localStorage.setItem(subModeKey, activeSubMode);
+      }
+    } catch {
+      // fallback
+    }
+  }, [activeSubMode, subModeKey, currentUser?.id]);
 
   const handleNewConversation = () => {
     setAcaoAtiva(null);
     setArquivoSelecionado(null);
     setErroMensagem(null);
-    setMessages([
+    const newSessionMessages: JarvisMessage[] = [
       {
         id: Date.now().toString(),
         role: 'model',
         text: `### 🤖 JARVIS — NOVA CONVERSA INICIADA\n*Sessão redefinida.* Como posso auxiliar seu trabalho hoje, Conselheiro(a) **${currentUser.nome}**? Escolha uma Ação Rápida ou digite sua solicitação.`,
         timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
       }
-    ]);
+    ];
+    setMessages(newSessionMessages);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(newSessionMessages));
+    } catch {
+      // fallback
+    }
     setInputPrompt('');
     setUploadedFileName(null);
     setUploadedFileText(null);
@@ -415,7 +468,7 @@ DADOS ATUALIZADOS DO SIMCT HORTOLÂNDIA:
 `;
   }, [documents, currentUser]);
 
-  // Markdown to HTML renderer including standard horizontal bar charts (Modelo Gráfico SIMCT)
+  // Markdown to HTML renderer with ChatGPT typography, blockquotes, citations, and standard horizontal bar charts (Modelo Gráfico SIMCT)
   const parseMarkdownToHtml = (markdown: string): string => {
     if (!markdown) return '';
 
@@ -423,6 +476,11 @@ DADOS ATUALIZADOS DO SIMCT HORTOLÂNDIA:
     let html = '';
     let inTable = false;
     let tableLines: string[] = [];
+    let inBlockquote = false;
+    let blockquoteLines: string[] = [];
+    let inUl = false;
+    let inOl = false;
+    let paragraphLines: string[] = [];
 
     const flushTable = (tLines: string[]): string => {
       if (tLines.length === 0) return '';
@@ -478,18 +536,18 @@ DADOS ATUALIZADOS DO SIMCT HORTOLÂNDIA:
           }
           if (widthPct <= 0) widthPct = 25;
 
-          const colors = ['#2563eb', '#dc2626', '#9333ea', '#16a34a', '#ea580c', '#0284c7', '#7c3aed'];
+          const colors = ['#3b82f6', '#ef4444', '#a855f7', '#22c55e', '#f97316', '#06b6d4', '#8b5cf6'];
           const barColor = colors[idx % colors.length];
 
           return `
-            <div style="display: flex; align-items: center; font-size: 11px; margin-bottom: 8px; line-height: 1.2;">
-              <div style="width: 200px; min-width: 200px; text-align: right; font-weight: 800; color: #334155; text-transform: uppercase; padding-right: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${item.label}">
+            <div style="display: flex; align-items: center; font-size: 12px; margin-bottom: 9px; line-height: 1.3;">
+              <div style="width: 190px; min-width: 190px; text-align: right; font-weight: 700; color: #334155; text-transform: uppercase; padding-right: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${item.label}">
                 ${item.label}
               </div>
               <div style="flex: 1; background-color: #f1f5f9; height: 14px; border-radius: 9999px; overflow: hidden; display: flex; align-items: center;">
                 <div style="height: 100%; width: ${widthPct}%; background-color: ${barColor}; border-radius: 9999px; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; transition: width 0.3s ease;"></div>
               </div>
-              <div style="min-width: 90px; padding-left: 12px; font-weight: 800; color: #0f172a; font-size: 11px; white-space: nowrap;">
+              <div style="min-width: 90px; padding-left: 12px; font-weight: 700; color: #0f172a; font-size: 12px; white-space: nowrap;">
                 ${item.valStr}
               </div>
             </div>
@@ -497,15 +555,15 @@ DADOS ATUALIZADOS DO SIMCT HORTOLÂNDIA:
         }).join('');
 
         return `
-          <div class="simct-chart-container" style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 16px; padding: 16px 18px; margin: 18px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); font-family: 'Segoe UI', Arial, sans-serif; page-break-inside: avoid; color: #0f172a;">
-            <div style="display: flex; align-items: center; justify-between; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; margin-bottom: 12px;">
+          <div class="simct-chart-container" style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 16px; padding: 18px 20px; margin: 20px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); font-family: ui-sans-serif, system-ui, sans-serif; page-break-inside: avoid; color: #0f172a;">
+            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; margin-bottom: 14px;">
               <div style="display: flex; align-items: center; gap: 6px;">
-                <span style="font-size: 11px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: -0.2px;">
+                <span style="font-size: 11.5px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: -0.2px;">
                   ${title}
                 </span>
                 <span style="display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid #cbd5e1; color: #64748b; font-size: 9px; font-weight: bold;">i</span>
               </div>
-              <span style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 2px 8px; font-size: 8.5px; font-weight: 700; color: #64748b; text-transform: uppercase;">
+              <span style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 2px 8px; font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase;">
                 MODELO GRÁFICO SIMCT
               </span>
             </div>
@@ -517,16 +575,16 @@ DADOS ATUALIZADOS DO SIMCT HORTOLÂNDIA:
       }
 
       // Fallback HTML table
-      const ths = headerRow.map(h => `<th style="border: 1px solid #cbd5e1; padding: 8px 10px; background-color: #f1f5f9; font-weight: 800; color: #1e3a8a; text-transform: uppercase; font-size: 10.5px; text-align: left;">${h.replace(/\*\*/g, '')}</th>`).join('');
+      const ths = headerRow.map(h => `<th style="border: 1px solid #cbd5e1; padding: 9px 12px; background-color: #f1f5f9; font-weight: 700; color: #1e3a8a; text-transform: uppercase; font-size: 11px; text-align: left;">${h.replace(/\*\*/g, '')}</th>`).join('');
       const trs = bodyRows.map((row, rIdx) => {
-        const tds = row.map(cell => `<td style="border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; color: #0f172a; font-size: 11px;">${cell.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</td>`).join('');
+        const tds = row.map(cell => `<td style="border: 1px solid #cbd5e1; padding: 9px 12px; text-align: left; color: #0f172a; font-size: 12px; line-height: 1.5;">${formatInline(cell)}</td>`).join('');
         const bg = rIdx % 2 === 0 ? '#ffffff' : '#f8fafc';
         return `<tr style="background-color: ${bg};">${tds}</tr>`;
       }).join('');
 
       return `
-        <div style="margin: 16px 0; overflow-x: auto; page-break-inside: avoid;">
-          <table style="width: 100%; border-collapse: collapse; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; background: #ffffff;">
+        <div style="margin: 18px 0; overflow-x: auto; page-break-inside: avoid;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; background: #ffffff;">
             <thead>
               <tr>${ths}</tr>
             </thead>
@@ -538,40 +596,164 @@ DADOS ATUALIZADOS DO SIMCT HORTOLÂNDIA:
       `;
     };
 
+    /** Formatador de elementos inline (Negrito, itálico, links, chips de fontes) */
+    const formatInline = (text: string): string => {
+      let res = text
+        .replace(/`([^`]+)`/g, '<code style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); padding: 2px 6px; border-radius: 6px; font-size: 13.5px; font-family: ui-monospace, monospace; color: #93c5fd;">$1</code>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong style="font-weight: 700; color: #ffffff;">$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em style="color: #cbd5e1;">$1</em>')
+        .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: #60a5fa; text-decoration: underline; text-underline-offset: 3px; font-weight: 500;">$1</a>');
+
+      // Formatação estilizada de chips de fontes institucionais (ex: Planalto, STF, STJ, ECA) estilo ChatGPT
+      res = res.replace(/(?:\[(Planalto|STF|STJ|CONANDA|ECA|DOU|Senado|Câmara)\]|\((planalto\.gov\.br|stf\.jus\.br|stj\.jus\.br)\)|🇧🇷\s*(Planalto))/gi, (_match, p1, p2, p3) => {
+        const label = p1 || p2 || p3;
+        return `<span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; margin: 0 4px; font-size: 11.5px; font-weight: 600; background: rgba(51, 65, 85, 0.7); border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 9999px; color: #93c5fd; vertical-align: middle; box-shadow: 0 1px 2px rgba(0,0,0,0.12);">🏛️ ${label}</span>`;
+      });
+
+      return res;
+    };
+
+    const flushParagraph = (): void => {
+      if (paragraphLines.length > 0) {
+        const text = paragraphLines.map(l => formatInline(l)).join('<br/>');
+        html += `<p style="margin-bottom: 1.15rem; line-height: 1.75; font-size: 15px; color: #f1f5f9; letter-spacing: 0.005em;">${text}</p>\n`;
+        paragraphLines = [];
+      }
+    };
+
+    const flushBlockquote = (): void => {
+      if (blockquoteLines.length > 0) {
+        const text = blockquoteLines.map(l => formatInline(l)).join('<br/>');
+        html += `<blockquote style="border-left: 3.5px solid #64748b; padding: 8px 16px; margin: 16px 0; background: rgba(51, 65, 85, 0.25); border-radius: 0 8px 8px 0; color: #f8fafc; font-size: 15px; line-height: 1.75; font-weight: 500;">${text}</blockquote>\n`;
+        blockquoteLines = [];
+        inBlockquote = false;
+      }
+    };
+
+    const closeLists = (): void => {
+      if (inUl) {
+        html += `</ul>\n`;
+        inUl = false;
+      }
+      if (inOl) {
+        html += `</ol>\n`;
+        inOl = false;
+      }
+    };
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const trimmed = line.trim();
 
+      // 1. Tabela Markdown
       if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+        flushParagraph();
+        flushBlockquote();
+        closeLists();
         if (!inTable) {
           inTable = true;
           tableLines = [line];
         } else {
           tableLines.push(line);
         }
-      } else {
-        if (inTable) {
-          inTable = false;
-          html += flushTable(tableLines);
-          tableLines = [];
-        }
-
-        let formatted = line
-          .replace(/^### (.*$)/gim, '<h3 style="color:#1e3a8a; border-bottom: 2px solid #e2e8f0; padding-bottom:4px; margin-top:18px; font-size:13px; font-weight:800; text-transform:uppercase;">$1</h3>')
-          .replace(/^## (.*$)/gim, '<h2 style="color:#0f172a; margin-top:20px; font-size:14px; font-weight:800; text-transform:uppercase; border-bottom:1px solid #cbd5e1; padding-bottom:4px;">$1</h2>')
-          .replace(/^# (.*$)/gim, '<h1 style="color:#1e3a8a; text-align:center; text-transform:uppercase; font-size:15px; font-weight:800; margin-bottom:14px;">$1</h1>')
-          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-          .replace(/\*(.*?)\*/g, '<em>$1</em>')
-          .replace(/^[\-*]\s+(.*$)/gim, '<li style="margin-bottom:4px; margin-left: 16px;">$1</li>')
-          .replace(/^---/g, '<hr style="border:none; border-top:1px solid #cbd5e1; margin:16px 0;"/>');
-
-        html += formatted + '\n';
+        continue;
+      } else if (inTable) {
+        inTable = false;
+        html += flushTable(tableLines);
+        tableLines = [];
       }
+
+      // 2. Linha em branco / separador de parágrafo
+      if (!trimmed) {
+        flushParagraph();
+        flushBlockquote();
+        closeLists();
+        continue;
+      }
+
+      // 3. Linha horizontal (---)
+      if (/^---+$/.test(trimmed) || /^\*\*\*+$/.test(trimmed)) {
+        flushParagraph();
+        flushBlockquote();
+        closeLists();
+        html += `<hr style="border: none; border-top: 1px solid rgba(255, 255, 255, 0.12); margin: 22px 0;"/>\n`;
+        continue;
+      }
+
+      // 4. Citações / Callout Bar (> ...)
+      if (trimmed.startsWith('>')) {
+        flushParagraph();
+        closeLists();
+        inBlockquote = true;
+        blockquoteLines.push(trimmed.replace(/^>\s*/, ''));
+        continue;
+      } else if (inBlockquote) {
+        flushBlockquote();
+      }
+
+      // 5. Títulos (#, ##, ###, ####)
+      if (trimmed.startsWith('#')) {
+        flushParagraph();
+        closeLists();
+        if (trimmed.startsWith('####')) {
+          const content = formatInline(trimmed.replace(/^####\s*/, ''));
+          html += `<h4 style="color: #cbd5e1; font-size: 14.5px; font-weight: 700; margin: 18px 0 8px 0; letter-spacing: -0.01em; line-height: 1.4;">${content}</h4>\n`;
+        } else if (trimmed.startsWith('###')) {
+          const content = formatInline(trimmed.replace(/^###\s*/, ''));
+          html += `<h3 style="color: #ffffff; font-size: 16px; font-weight: 700; margin: 22px 0 10px 0; letter-spacing: -0.01em; line-height: 1.4; display: flex; align-items: center; gap: 8px;">${content}</h3>\n`;
+        } else if (trimmed.startsWith('##')) {
+          const content = formatInline(trimmed.replace(/^##\s*/, ''));
+          html += `<h2 style="color: #ffffff; font-size: 18px; font-weight: 700; margin: 24px 0 12px 0; letter-spacing: -0.01em; line-height: 1.4;">${content}</h2>\n`;
+        } else if (trimmed.startsWith('#')) {
+          const content = formatInline(trimmed.replace(/^#\s*/, ''));
+          html += `<h1 style="color: #ffffff; font-size: 20px; font-weight: 800; margin: 26px 0 14px 0; letter-spacing: -0.015em; line-height: 1.3;">${content}</h1>\n`;
+        }
+        continue;
+      }
+
+      // 6. Lista não ordenada (- ou *)
+      if (/^[\-*]\s+/.test(trimmed)) {
+        flushParagraph();
+        if (inOl) {
+          html += `</ol>\n`;
+          inOl = false;
+        }
+        if (!inUl) {
+          html += `<ul style="margin: 10px 0 16px 0; padding-left: 22px; list-style-type: disc; color: #f1f5f9;">\n`;
+          inUl = true;
+        }
+        const itemContent = formatInline(trimmed.replace(/^[\-*]\s+/, ''));
+        html += `  <li style="margin-bottom: 8px; line-height: 1.75; font-size: 15px; color: #f1f5f9;">${itemContent}</li>\n`;
+        continue;
+      }
+
+      // 7. Lista ordenada (1. 2. etc)
+      if (/^\d+\.\s+/.test(trimmed)) {
+        flushParagraph();
+        if (inUl) {
+          html += `</ul>\n`;
+          inUl = false;
+        }
+        if (!inOl) {
+          html += `<ol style="margin: 10px 0 16px 0; padding-left: 24px; list-style-type: decimal; color: #f1f5f9;">\n`;
+          inOl = true;
+        }
+        const itemContent = formatInline(trimmed.replace(/^\d+\.\s+/, ''));
+        html += `  <li style="margin-bottom: 8px; line-height: 1.75; font-size: 15px; color: #f1f5f9;">${itemContent}</li>\n`;
+        continue;
+      }
+
+      // 8. Texto normal do parágrafo
+      closeLists();
+      paragraphLines.push(trimmed);
     }
 
     if (inTable) {
       html += flushTable(tableLines);
     }
+    flushBlockquote();
+    flushParagraph();
+    closeLists();
 
     return html;
   };
@@ -2442,10 +2624,10 @@ const handlePrintMessage = (msg: JarvisMessage) => {
               )}
 
               <div
-                className={`max-w-[88%] lg:max-w-[80%] rounded-3xl p-6 text-[13px] leading-relaxed shadow-lg ${
+                className={`max-w-[92%] lg:max-w-[85%] rounded-3xl p-6 md:p-7 text-[15px] leading-[1.75] font-sans tracking-normal shadow-xl ${
                   msg.role === 'user'
-                    ? 'bg-blue-600 text-white rounded-tr-none'
-                    : 'bg-slate-800 text-slate-100 border border-white/10 rounded-tl-none'
+                    ? 'bg-blue-600 text-white rounded-tr-none text-sm md:text-[15px]'
+                    : 'bg-slate-800/95 text-slate-100 border border-slate-700/60 rounded-tl-none'
                 }`}
               >
                 {msg.attachmentName && (
@@ -2684,7 +2866,14 @@ const handlePrintMessage = (msg: JarvisMessage) => {
                   </div>
                 ) : (
                   <div
-                    className="prose prose-invert max-w-none text-slate-100"
+                    className="prose prose-invert max-w-none text-slate-100 select-text"
+                    style={{
+                      fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+                      fontSize: '15px',
+                      lineHeight: '1.75',
+                      color: '#f1f5f9',
+                      letterSpacing: '0.005em'
+                    }}
                     dangerouslySetInnerHTML={{ __html: parseMarkdownToHtml(msg.text) }}
                   />
                 )}
