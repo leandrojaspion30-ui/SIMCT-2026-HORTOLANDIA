@@ -86,7 +86,7 @@ export async function handleCorrigirTexto(req: Request, res: Response) {
       },
     });
 
-    const candidateModels = ["gemini-3.7-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash"];
+    const candidateModels = ["gemini-3.7-flash", "gemini-3.1-flash-lite", "gemini-3.1-pro-preview"];
     let resultado: any = null;
     let lastError: any = null;
 

@@ -11,8 +11,8 @@ if (!API_KEY) {
 
 export const ai = new GoogleGenAI({ apiKey: API_KEY ?? "" });
 
-export const MODELO_RAPIDO = "gemini-2.5-flash";
-export const MODELO_PROFUNDO = "gemini-2.5-pro";
+export const MODELO_RAPIDO = "gemini-3.7-flash";
+export const MODELO_PROFUNDO = "gemini-3.1-pro-preview";
 
 let genAIClient: GoogleGenAI | null = null;
 
@@ -72,7 +72,7 @@ export function erroLegivel(e: any): { status: number; mensagem: string; dica: s
     return {
       status: 404,
       mensagem: "Modelo inexistente.",
-      dica: "Use 'gemini-2.5-flash' ou 'gemini-2.5-pro'.",
+      dica: "Use 'gemini-3.7-flash' ou 'gemini-3.1-pro-preview'.",
       detalhe: raw,
     };
   }
