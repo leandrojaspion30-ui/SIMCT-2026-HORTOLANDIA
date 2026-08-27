@@ -17,13 +17,18 @@ import mammoth from 'mammoth';
 // @ts-ignore
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
+export interface ItemComPagina {
+  conteudo: string;
+  pagina: string;
+}
+
 export interface ResumoDocumento {
   titulo_identificado: string;
   tipo_documento: string;
   resumo: string;
-  pontos_principais: string[];
-  datas_e_prazos: string[];
-  providencias_mencionadas: string[];
+  pontos_principais: Array<ItemComPagina | string>;
+  datas_e_prazos: Array<ItemComPagina | string>;
+  providencias_mencionadas: Array<ItemComPagina | string>;
   alertas: string[];
   paginas_processadas: number;
   exige_revisao_humana: boolean;
@@ -160,6 +165,29 @@ Como posso auxiliar seu trabalho hoje? Escolha um das **Ações Rápidas** abaix
     setErroMensagem(null);
   };
 
+  /** Helper para padronizar e exibir a referência de página */
+  const formatarPagina = (pagina?: string): string => {
+    if (!pagina || pagina.toLowerCase().includes("não identificada") || pagina.toLowerCase().includes("nao identificada")) {
+      return "Página não identificada";
+    }
+    const limpo = pagina.trim();
+    if (limpo.toLowerCase().startsWith("página") || limpo.toLowerCase().startsWith("pagina")) {
+      return limpo.replace(/^[Pp]agina/i, "Página");
+    }
+    return `Página ${limpo}`;
+  };
+
+  /** Helper para extrair texto e página de forma resiliente */
+  const extrairConteudo = (item: ItemComPagina | string): { texto: string; pagina: string } => {
+    if (typeof item === "string") {
+      return { texto: item, pagina: "Página não identificada" };
+    }
+    return {
+      texto: item?.conteudo || "",
+      pagina: formatarPagina(item?.pagina)
+    };
+  };
+
   /** Exibição estrita e institucional do resumo do PDF */
   const exibirResumoDocumento = (dados: ResumoDocumento, nomeDoArquivo?: string) => {
     let md = `### 📄 Resumo do documento\n\n`;
@@ -171,7 +199,8 @@ Como posso auxiliar seu trabalho hoje? Escolha um das **Ações Rápidas** abaix
     if (dados.pontos_principais && dados.pontos_principais.length > 0) {
       md += `**Pontos Principais:**\n`;
       dados.pontos_principais.forEach(p => {
-        md += `• ${p}\n`;
+        const { texto, pagina } = extrairConteudo(p);
+        md += `• ${texto} *(${pagina})*\n`;
       });
       md += `\n`;
     }
@@ -179,7 +208,8 @@ Como posso auxiliar seu trabalho hoje? Escolha um das **Ações Rápidas** abaix
     if (dados.datas_e_prazos && dados.datas_e_prazos.length > 0) {
       md += `**Prazos e Datas Identificadas:**\n`;
       dados.datas_e_prazos.forEach(d => {
-        md += `• ${d}\n`;
+        const { texto, pagina } = extrairConteudo(d);
+        md += `• ${texto} *(${pagina})*\n`;
       });
       md += `\n`;
     }
@@ -187,7 +217,8 @@ Como posso auxiliar seu trabalho hoje? Escolha um das **Ações Rápidas** abaix
     if (dados.providencias_mencionadas && dados.providencias_mencionadas.length > 0) {
       md += `**Providências Mencionadas:**\n`;
       dados.providencias_mencionadas.forEach(prov => {
-        md += `• ${prov}\n`;
+        const { texto, pagina } = extrairConteudo(prov);
+        md += `• ${texto} *(${pagina})*\n`;
       });
       md += `\n`;
     }
@@ -2556,12 +2587,20 @@ const handlePrintMessage = (msg: JarvisMessage) => {
                           <span>📌</span> Pontos Principais
                         </h4>
                         <ul className="space-y-1.5">
-                          {msg.summaryData.pontos_principais.map((p, idx) => (
-                            <li key={idx} className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-700/40 text-xs text-slate-200 flex items-start gap-2">
-                              <span className="text-indigo-400 font-bold">•</span>
-                              <span>{p}</span>
-                            </li>
-                          ))}
+                          {msg.summaryData.pontos_principais.map((p, idx) => {
+                            const { texto, pagina } = extrairConteudo(p);
+                            return (
+                              <li key={idx} className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-700/40 text-xs text-slate-200 flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-2 flex-1">
+                                  <span className="text-indigo-400 font-bold">•</span>
+                                  <span className="leading-relaxed">{texto}</span>
+                                </div>
+                                <span className="px-2 py-0.5 bg-slate-800 border border-slate-600/50 rounded text-[10px] font-semibold text-indigo-300 shrink-0 whitespace-nowrap">
+                                  {pagina}
+                                </span>
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     )}
@@ -2572,13 +2611,21 @@ const handlePrintMessage = (msg: JarvisMessage) => {
                         <h4 className="text-xs font-black uppercase text-amber-300 flex items-center gap-1.5">
                           <Calendar className="w-3.5 h-3.5" /> Prazos e Datas Identificadas
                         </h4>
-                        <ul className="space-y-1">
-                          {msg.summaryData.datas_e_prazos.map((d, didx) => (
-                            <li key={didx} className="p-2 bg-amber-950/30 border border-amber-500/30 rounded-lg text-xs text-amber-200 flex items-center gap-2">
-                              <span>⏱️</span>
-                              <span>{d}</span>
-                            </li>
-                          ))}
+                        <ul className="space-y-1.5">
+                          {msg.summaryData.datas_e_prazos.map((d, didx) => {
+                            const { texto, pagina } = extrairConteudo(d);
+                            return (
+                              <li key={didx} className="p-2.5 bg-amber-950/30 border border-amber-500/30 rounded-xl text-xs text-amber-200 flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-2 flex-1">
+                                  <span>⏱️</span>
+                                  <span className="leading-relaxed">{texto}</span>
+                                </div>
+                                <span className="px-2 py-0.5 bg-amber-900/50 border border-amber-500/40 rounded text-[10px] font-semibold text-amber-300 shrink-0 whitespace-nowrap">
+                                  {pagina}
+                                </span>
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     )}
@@ -2589,12 +2636,21 @@ const handlePrintMessage = (msg: JarvisMessage) => {
                         <h4 className="text-xs font-black uppercase text-blue-300 flex items-center gap-1.5">
                           <span>⚖️</span> Providências Mencionadas
                         </h4>
-                        <ul className="space-y-1">
-                          {msg.summaryData.providencias_mencionadas.map((prov, pidx) => (
-                            <li key={pidx} className="p-2 bg-blue-950/30 border border-blue-500/30 rounded-lg text-xs text-blue-200">
-                              {prov}
-                            </li>
-                          ))}
+                        <ul className="space-y-1.5">
+                          {msg.summaryData.providencias_mencionadas.map((prov, pidx) => {
+                            const { texto, pagina } = extrairConteudo(prov);
+                            return (
+                              <li key={pidx} className="p-2.5 bg-blue-950/30 border border-blue-500/30 rounded-xl text-xs text-blue-200 flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-2 flex-1">
+                                  <span className="text-blue-400 font-bold">•</span>
+                                  <span className="leading-relaxed">{texto}</span>
+                                </div>
+                                <span className="px-2 py-0.5 bg-blue-900/50 border border-blue-500/40 rounded text-[10px] font-semibold text-blue-300 shrink-0 whitespace-nowrap">
+                                  {pagina}
+                                </span>
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     )}

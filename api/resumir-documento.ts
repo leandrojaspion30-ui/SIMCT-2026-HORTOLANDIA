@@ -2,6 +2,7 @@
 // POST /api/resumir-documento — MÓDULO EXCLUSIVO DE ANÁLISE E RESUMO DE PDF
 // ============================================================================
 import { Type } from "@google/genai";
+import { PDFDocument } from "pdf-lib";
 import { gerar, json, erroLegivel, MODELO_RAPIDO } from "./_lib/genai.js";
 
 const PROMPT_RESUMO_DOCUMENTAL = `Você é um assistente técnico-documental de alta precisão especializado em análise, leitura e síntese fidedigna de documentos oficiais, laudos, relatórios, termos e peças administrativas/judiciais.
@@ -9,12 +10,27 @@ const PROMPT_RESUMO_DOCUMENTAL = `Você é um assistente técnico-documental de 
 Sua missão é extrair, resumir e estruturar estritamente as informações presentes no arquivo PDF enviado.
 
 DIRETRIZES OBRIGATÓRIAS:
-1. FIDELIDADE ABSOLUTA AO CONTEÚDO: Resuma apenas o que consta expressamente no PDF. Não invente nomes, números de processo, datas, órgãos ou decisões.
-2. ESTRUTURAÇÃO TÉCNICA: Identifique claramente o título/tipo do documento, pontos principais, prazos ou datas citadas, providências mencionadas e eventuais alertas/urgências apontados no texto.
-3. ISOLAMENTO DO ESCOPO: Não emita parecer jurídico opinativo pessoal, não aplique penalidades e não substitua a deliberação dos profissionais competentes.
-4. INDICAÇÃO DE PÁGINAS: Quando relevante, aponte a localização dos pontos identificados no documento.
+1. FIDELIDADE ABSOLUTA AO CONTEÚDO: Resuma apenas o que consta expressamente no PDF. Não acrescente leis, artigos, conclusões ou providências que não estejam literalmente presentes no PDF.
+2. ATRIBUIÇÃO AO DOCUMENTO: Toda afirmação legal ou técnica extraída do documento deve ser expressamente atribuída ao documento (ex: "Segundo o documento, a violação do sigilo funcional pode configurar crime", "Conforme consta no documento, ..."). O módulo de resumo não pode apresentar a afirmação do autor como validação jurídica independente.
+3. REFERÊNCIA DE PÁGINA OBRIGATÓRIA EM CADA ITEM: Em cada item de "pontos_principais", "datas_e_prazos" e "providencias_mencionadas", preencha obrigatoriamente os campos "conteudo" e "pagina". Não faça referências genéricas apenas no fim do resumo; cada ponto deve ter sua página individual.
+4. PÁGINAS FÍSICAS REAIS: Considere como páginas físicas a sequência 1, 2, 3... do arquivo PDF (ex: "Página 1", "Página 2"). Não invente a página. Se ela não puder ser identificada, retorne exatamente: "não identificada".
 5. REVISÃO HUMANA: Sinalize sempre que a conferência integral do original é indispensável.
 6. IDIOMA: Responda em língua portuguesa (Brasil).`.trim();
+
+const itemComPaginaSchema = {
+  type: Type.OBJECT,
+  properties: {
+    conteudo: {
+      type: Type.STRING,
+      description: "Texto descritivo do ponto, data/prazo ou providência identificado no PDF."
+    },
+    pagina: {
+      type: Type.STRING,
+      description: "Página física do PDF onde a informação se encontra (ex: 'Página 1', 'Página 2') ou exatamente 'não identificada'."
+    }
+  },
+  required: ["conteudo", "pagina"]
+};
 
 const schemaResumo = {
   type: Type.OBJECT,
@@ -29,22 +45,22 @@ const schemaResumo = {
     },
     resumo: {
       type: Type.STRING,
-      description: "Síntese executiva clara, coesa e fidedigna de todo o teor do documento."
+      description: "Síntese executiva clara, coesa e fidedigna de todo o teor do documento, atribuindo as afirmações ao texto."
     },
     pontos_principais: {
       type: Type.ARRAY,
-      items: { type: Type.STRING },
-      description: "Lista dos tópicos ou determinações centrais descritos no documento."
+      items: itemComPaginaSchema,
+      description: "Lista dos tópicos ou determinações centrais descritos no documento, com indicação individual obrigatória de página."
     },
     datas_e_prazos: {
       type: Type.ARRAY,
-      items: { type: Type.STRING },
-      description: "Datas, cronogramas ou prazos de resposta/cumprimento identificados."
+      items: itemComPaginaSchema,
+      description: "Datas, cronogramas ou prazos de resposta/cumprimento identificados, com indicação individual obrigatória de página."
     },
     providencias_mencionadas: {
       type: Type.ARRAY,
-      items: { type: Type.STRING },
-      description: "Encaminhamentos, ações requeridas ou orientações registradas no texto."
+      items: itemComPaginaSchema,
+      description: "Encaminhamentos, ações requeridas ou orientações registradas no texto, com indicação individual obrigatória de página."
     },
     alertas: {
       type: Type.ARRAY,
@@ -53,7 +69,7 @@ const schemaResumo = {
     },
     paginas_processadas: {
       type: Type.INTEGER,
-      description: "Estimativa ou contagem de páginas processadas."
+      description: "Total de páginas do PDF processadas."
     },
     exige_revisao_humana: {
       type: Type.BOOLEAN,
@@ -127,6 +143,18 @@ export default async function handler(req: any, res: any) {
     });
   }
 
+  // 6. Cálculo real do total de páginas com pdf-lib e verificação de senha/corrupção
+  let totalPaginas = 1;
+  try {
+    const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: false });
+    totalPaginas = pdfDoc.getPageCount();
+  } catch (err: any) {
+    return res.status(422).json({
+      error: "O arquivo PDF não pôde ser aberto ou está protegido por senha.",
+      dica: "Verifique se o arquivo está corrompido ou protegido por senha e tente novamente."
+    });
+  }
+
   const pdfBase64Validado = buffer.toString("base64");
 
   try {
@@ -144,7 +172,7 @@ export default async function handler(req: any, res: any) {
           {
             text:
               instrucao ||
-              "Resuma fielmente o documento e indique as páginas."
+              "Resuma fielmente o documento e indique as páginas de cada item identificado."
           }
         ]
       }],
@@ -157,6 +185,8 @@ export default async function handler(req: any, res: any) {
     });
 
     const parsed = json(respostaBruta);
+    // Define a contagem real de páginas a partir do totalPaginas calculado pelo pdf-lib
+    parsed.paginas_processadas = totalPaginas;
     return res.status(200).json(parsed);
   } catch (erro: any) {
     const formatado = erroLegivel(erro);
