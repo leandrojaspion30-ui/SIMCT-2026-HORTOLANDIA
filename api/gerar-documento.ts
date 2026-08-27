@@ -1,8 +1,7 @@
 // ============================================================================
 // JARVIS · ROTA POST /api/gerar-documento
 // ============================================================================
-
-import { getGenAIClient, traduzirErroGenAI } from "./_lib/genai";
+import { gerar, erroLegivel, MODELO_PROFUNDO, MODELO_RAPIDO } from "./_lib/genai";
 import {
   ORGAO,
   IDENTIDADE_INSTITUCIONAL,
@@ -11,7 +10,7 @@ import {
   REGRAS_GRAMATICA,
   BLINDAGEM,
 } from "./_lib/institucional";
-import { sanitizarEntradaTexto } from "./_lib/guard";
+import { dadosSensiveis, envelopar, validarTexto, numerosPermitidos, numerosSuspeitos } from "./_lib/guard";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
@@ -21,19 +20,30 @@ export default async function handler(req: any, res: any) {
   try {
     const {
       tipo = "OFICIO",
+      instrucao = "",
       destinatario = "",
       cargoDestinatario = "",
       orgao = "",
       assunto = "",
       fatos = "",
+      dados = null,
+      signatario = null,
+      profundo = true,
       numeroProcedimento = "",
       conselheiroNome = "Conselheiro(a) Tutelar",
       unidade = 1,
     } = req.body ?? {};
 
-    const fatosLimpos = sanitizarEntradaTexto(fatos || assunto || "Elaboração de documento institucional.");
+    const rawInput = instrucao || fatos || assunto || "Elaboração de documento institucional.";
+    const inval = validarTexto(rawInput, 3, 30000);
+    if (inval) {
+      return res.status(400).json({ error: inval });
+    }
 
-    const ai = getGenAIClient();
+    const nomeSignatario = signatario?.nome || signatario?.conselheiro || conselheiroNome;
+    const destStr = typeof destinatario === "string" 
+      ? destinatario 
+      : (destinatario?.nome ? `${destinatario.nome}${destinatario.cargo ? ` (${destinatario.cargo})` : ""}` : JSON.stringify(destinatario));
 
     const systemInstruction = `
 ${IDENTIDADE_INSTITUCIONAL}
@@ -67,64 +77,79 @@ DIRETRIZES DE FORMATAÇÃO:
 6. Fundamentação legal expressa (Artigos do ECA correspondentes: Art. 136 para requisições com prazo determinado; Art. 101 para medidas protetivas; Art. 129 para medidas aos pais; Art. 143 para preservação de sigilo).
 7. Para requisição a órgão público, use expressamente o verbo REQUISITAR com base no Art. 136, III, "a" do ECA, assinalando prazo razoável de resposta.
 8. Fecho oficial ("Atenciosamente" para mesma hierarquia ou inferior; "Respeitosamente" para autoridade superior).
-9. Campo de assinatura com o nome do conselheiro (${conselheiroNome}).
+9. Campo de assinatura com o nome do conselheiro (${nomeSignatario}).
 `.trim();
 
+    const dadosReaisObj: any = {
+      tipo,
+      destinatario: destStr || "[[PREENCHER: Nome do Destinatário]]",
+      cargoDestinatario,
+      orgao,
+      assunto,
+      numeroProcedimento: numeroProcedimento || "[[PREENCHER: Nº Procedimento]]",
+      conselheiro: nomeSignatario,
+      unidade,
+      instrucao: rawInput,
+    };
+
+    if (dados && typeof dados === "object") {
+      dadosReaisObj.dadosComplementares = dados;
+    }
+
+    const dadosReaisStr = JSON.stringify(dadosReaisObj, null, 2);
+
     const userPrompt = `
-<DADOS_REAIS>
-TIPO DE DOCUMENTO: ${tipo}
-DESTINATÁRIO: ${destinatario || "[[PREENCHER: Nome do Destinatário]]"}
-CARGO/ÓRGÃO: ${cargoDestinatario} - ${orgao}
-ASSUNTO: ${assunto}
-NÚMERO PROCEDIMENTO: ${numeroProcedimento || "[[PREENCHER: Nº Procedimento]]"}
-CONSELHEIRO(A): ${conselheiroNome}
-UNIDADE: ${unidade}
-RELATO DOS FATOS / NECESSIDADE:
-${fatosLimpos}
-</DADOS_REAIS>
+${envelopar("DADOS_REAIS", dadosReaisStr)}
 
 Por favor, elabore o documento completo, formatado e pronto para uso oficial.
 `.trim();
 
-    const candidateModels = ["gemini-2.5-flash", "gemini-3.7-flash", "gemini-3.1-flash-lite"];
+    const modeloEscolhido = profundo ? MODELO_PROFUNDO : MODELO_RAPIDO;
+    const modeloSecundario = profundo ? MODELO_RAPIDO : MODELO_PROFUNDO;
+
     let documentText = "";
-    let lastError: any = null;
-
-    for (const model of candidateModels) {
-      try {
-        const response = await ai.models.generateContent({
-          model,
-          contents: userPrompt,
-          config: {
-            systemInstruction,
-            temperature: 0.2,
-          },
-        });
-        if (response && response.text) {
-          documentText = response.text;
-          break;
-        }
-      } catch (err: any) {
-        lastError = err;
-      }
+    try {
+      documentText = await gerar({
+        model: modeloEscolhido,
+        contents: userPrompt,
+        config: {
+          systemInstruction,
+          temperature: 0.2,
+        },
+      });
+    } catch {
+      // Fallback de modelo
+      documentText = await gerar({
+        model: modeloSecundario,
+        contents: userPrompt,
+        config: {
+          systemInstruction,
+          temperature: 0.2,
+        },
+      });
     }
 
-    if (!documentText) {
-      throw lastError || new Error("Falha ao gerar documento pelo modelo.");
-    }
+    // Verificação de segurança pós-geração
+    const permitidos = numerosPermitidos(dadosReaisStr);
+    const suspeitos = numerosSuspeitos(documentText, permitidos);
+    const alertasSigilo = dadosSensiveis(documentText);
 
     return res.status(200).json({
       tipo,
+      texto: documentText,
       documento: documentText,
-      conselheiro: conselheiroNome,
+      conselheiro: nomeSignatario,
       unidade,
+      alertas_sigilo: alertasSigilo,
+      numeros_suspeitos: suspeitos,
       criado_em: new Date().toISOString(),
     });
   } catch (e: any) {
-    const errTraduzido = traduzirErroGenAI(e);
-    return res.status(errTraduzido.status).json({
-      error: errTraduzido.mensagem,
-      detalhes: errTraduzido.detalhe,
+    const err = erroLegivel(e);
+    console.error("[JARVIS/gerar-documento]", err, e);
+    return res.status(err.status).json({
+      error: err.mensagem,
+      dica: err.dica,
     });
   }
 }

@@ -1,126 +1,54 @@
 // ============================================================================
-// JARVIS API CLIENT (FRONTEND SERVICE)
+// Camada de acesso do front. NENHUMA chave de API aqui.
 // ============================================================================
 
-export interface CorrecaoItem {
-  original: string;
-  corrigido: string;
-  categoria: string;
-  gravidade: 'ERRO' | 'INADEQUACAO' | 'ESTILO';
-  explicacao: string;
-  regra: string;
-}
-
-export interface ResultadoCorrecao {
-  texto_corrigido: string;
-  resumo: string;
-  nivel_formalidade: 'INFORMAL' | 'NEUTRO' | 'FORMAL' | 'OFICIAL';
-  correcoes: CorrecaoItem[];
-  alertas_juridicos?: string[];
-  alertas_sigilo?: string[];
-  sugestoes_estrutura?: string[];
-  meta?: {
-    modo: string;
-    caracteres_original: number;
-    caracteres_corrigido: number;
-    total_correcoes: number;
-  };
-}
-
-export interface GerarDocumentoParams {
-  tipo: 'OFICIO' | 'RELATORIO_TECNICO' | 'RELATORIO_CMDCA' | 'NOTIFICACAO' | 'REQUISICAO_SERVICO' | 'DESPACHO_PROTETIVO';
-  destinatario?: string;
-  cargoDestinatario?: string;
-  orgao?: string;
-  assunto: string;
-  fatos: string;
-  numeroProcedimento?: string;
-  conselheiroNome?: string;
-  unidade?: number;
-}
-
-export interface ResultadoDocumento {
-  tipo: string;
-  documento: string;
-  conselheiro: string;
-  unidade: number;
-  criado_em: string;
-}
-
-export interface RespostaChatJarvis {
-  text: string;
-  groundingMetadata?: any;
-  fontes?: string[];
-  buscaExecutada?: boolean;
-  timestamp?: string;
-}
-
-/**
- * Envia um texto para o módulo especialista de revisão do JARVIS.
- */
-export async function corrigirTexto(
-  texto: string,
-  modo: 'ORTOGRAFICA' | 'COMPLETA' | 'OFICIAL' | 'TECNICA' | 'SIMPLES' = 'COMPLETA',
-  tipoDocumento = ''
-): Promise<ResultadoCorrecao> {
-  const res = await fetch('/api/corrigir-texto', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ texto, modo, tipoDocumento }),
+async function post<T>(rota: string, body: unknown): Promise<T> {
+  const r = await fetch(`/api/${rota}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Erro ${res.status} ao processar correção de texto.`);
-  }
-
-  return await res.json();
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error([data.error, data.dica].filter(Boolean).join(" — ") || `Erro ${r.status}`);
+  return data as T;
 }
 
-/**
- * Gera um documento oficial estruturado no padrão do Conselho Tutelar.
- */
-export async function gerarDocumento(params: GerarDocumentoParams): Promise<ResultadoDocumento> {
-  const res = await fetch('/api/gerar-documento', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  });
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Erro ${res.status} ao gerar documento oficial.`);
-  }
-
-  return await res.json();
+/** Monte com dados REAIS do seu banco. Agregado e anonimizado. */
+export function montarContextoSIMCT(s: any): string {
+  if (!s) return "";
+  return `
+DATA: ${new Date().toLocaleDateString("pt-BR")}
+CONSELHEIROS: Leandro, Luiza, Milena, Mirian, Sandra, Rosilda
+PROCEDIMENTOS ABERTOS: ${s.abertos ?? "n/d"}
+PRAZOS VENCENDO EM 7 DIAS: ${s.prazos ?? "n/d"}
+MONITORAMENTOS PENDENTES: ${s.monitoramentos ?? "n/d"}
+AGENDA DE HOJE: ${s.agendaHoje ?? "n/d"}
+POR TIPO DE VIOLAÇÃO (mês): ${JSON.stringify(s.porTipo ?? {})}
+POR BAIRRO (mês): ${JSON.stringify(s.porBairro ?? {})}
+`.trim();
 }
 
-/**
- * Envia mensagem conversacional com busca ativa e grounding para o JARVIS.
- */
-export async function enviarMensagemJarvis(
-  prompt: string,
-  messages: any[] = [],
-  contextData: any = {},
-  systemPromptExtra = ''
-): Promise<RespostaChatJarvis> {
-  const res = await fetch('/api/jarvis-chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, messages, contextData, systemPromptExtra }),
-  });
+export const jarvis = {
+  chat: (p: { pergunta: string; historico?: any[]; conselheiro?: string; contextoSistema?: string }) =>
+    post<{ texto: string }>("jarvis-chat", p),
 
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Erro ${res.status} ao consultar o assistente.`);
-  }
+  corrigir: (p: { texto: string; modo?: "ORTOGRAFICA" | "COMPLETA" | "OFICIAL" | "TECNICA" | "SIMPLES"; tipoDocumento?: string }) =>
+    post<any>("corrigir-texto", p),
 
-  return await res.json();
-}
+  documento: (p: { tipo: "OFICIO" | "REQUISICAO" | "RELATORIO_CMDCA"; instrucao: string; destinatario?: any; dados?: any; signatario?: any; profundo?: boolean }) =>
+    post<any>("gerar-documento", p),
+};
 
-/**
- * Verifica se o backend e os serviços do JARVIS estão operacionais.
- */
+// Aliases para compatibilidade com outros módulos do SIMCT
+export const corrigirTexto = (texto: string, modo: any = "COMPLETA", tipoDocumento = "") =>
+  jarvis.corrigir({ texto, modo, tipoDocumento });
+
+export const gerarDocumento = (params: any) =>
+  jarvis.documento(params);
+
+export const enviarMensagemJarvis = (pergunta: string, historico: any[] = [], contextoSistema = "") =>
+  jarvis.chat({ pergunta, historico, contextoSistema });
+
 export async function verificarSaudeBackend(): Promise<boolean> {
   try {
     const res = await fetch('/api/health');
