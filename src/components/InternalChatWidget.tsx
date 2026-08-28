@@ -381,7 +381,7 @@ export const InternalChatWidget: React.FC<InternalChatWidgetProps> = ({
         created_at: new Date().toISOString(),
         recipient_id: activeChannel,
         read_by: [currentUser.id]
-      });
+      }, currentUser);
 
       if (!customText) {
         setTextInput('');

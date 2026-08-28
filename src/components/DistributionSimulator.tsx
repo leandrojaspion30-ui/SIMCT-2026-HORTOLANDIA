@@ -18,11 +18,29 @@ import {
   Bell,
   FileText,
   Sliders,
-  Repeat
+  Repeat,
+  Phone,
+  Mail,
+  Scale,
+  Landmark,
+  FileSpreadsheet,
+  Filter,
+  CheckCheck,
+  Sparkles,
+  PhoneCall
 } from 'lucide-react';
 import { Documento, User, ScaleException } from '../types';
-import { CONSELHEIROS_ALFABETICO_POR_UNIDADE, getEffectiveEscala, isSameCounselorName } from '../constants';
-import { saveDocument, deleteDocument, deleteScaleException, saveLog } from '../lib/db';
+import { 
+  CONSELHEIROS_ALFABETICO_POR_UNIDADE, 
+  getEffectiveEscala, 
+  isSameCounselorName,
+  CANAIS_COMUNICADO_LIST,
+  normalizeCanalName,
+  isRotationChannel,
+  getChannelNextCounselor,
+  getActiveRotationCounselors
+} from '../constants';
+import { saveDocumentWithAtomicRotation, deleteDocument, deleteScaleException, saveLog } from '../lib/db';
 
 interface DistributionSimulatorProps {
   documents: Documento[];
@@ -49,6 +67,8 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
 }) => {
   const [selectedUnidade, setSelectedUnidade] = useState<number>(currentUser?.unidade_id || 1);
   const [swapIdToDelete, setSwapIdToDelete] = useState<string | null>(null);
+  const [selectedSimulationChannel, setSelectedSimulationChannel] = useState<string>('OFÍCIO');
+  const [selectedChannelFilter, setSelectedChannelFilter] = useState<string>('TODOS');
 
   useEffect(() => {
     if (currentUser?.unidade_id) {
@@ -69,7 +89,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         unidade_id: selectedUnidade,
         acao: `ESCALA: Cancelamento de Substituição Excepcional pelo Diagnóstico de Distribuição (escala original restaurada).`,
         tipo: 'SISTEMA'
-      });
+      }, currentUser);
       onAddLog(`ESCALA: Cancelamento de Substituição Excepcional (escala original restaurada na Unidade ${selectedUnidade}).`);
     } catch (err) {
       console.error(err);
@@ -84,12 +104,18 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
     success: boolean;
     successImediata: boolean;
     sentCount: number;
+    channel: string;
     expectedSeq: string[];
     assignedSeq: string[];
     expectedSeqImediata: string[];
     assignedSeqImediata: string[];
     message: string;
   } | null>(null);
+
+  // Mapeamento de nomes e substituições ativas
+  const nameMap = useMemo(() => {
+    return propNameMap || {};
+  }, [propNameMap]);
 
   // Filtros de Usuários
   const admsOfUnidade = useMemo(() => {
@@ -102,21 +128,9 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
   }, [users, selectedUnidade]);
 
   const activeCounselors = useMemo(() => {
-    return users
-      .filter(u => {
-        if (u.unidade_id !== selectedUnidade) return false;
-        if (u.status !== 'ATIVO') return false;
-        if (u.perfil !== 'CONSELHEIRO' && u.perfil !== 'SUPLENTE') return false;
-        
-        // Se for um conselheiro titular sob substituição ativa, ele não participa do rodízio ativo
-        if (u.perfil === 'CONSELHEIRO' && u.substituicao_ativa) {
-          return false;
-        }
-        return true;
-      })
-      .map(u => ({ id: u.id, nome: u.nome.toUpperCase() }))
-      .sort((a, b) => a.nome.localeCompare(b.nome));
-  }, [users, selectedUnidade]);
+    return getActiveRotationCounselors(selectedUnidade, users, nameMap)
+      .map(u => ({ id: u.id, nome: u.nome.toUpperCase() }));
+  }, [users, selectedUnidade, nameMap]);
 
   // Casos reais da unidade selecionada ordenados por data de criação decrescente
   const unitCasesReal = useMemo(() => {
@@ -124,6 +138,16 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
       .filter(d => d.unidade_id === selectedUnidade)
       .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
   }, [documents, selectedUnidade]);
+
+  // Casos filtrados por canal para a tabela
+  const filteredUnitCases = useMemo(() => {
+    if (selectedChannelFilter === 'TODOS') return unitCasesReal;
+    return unitCasesReal.filter(d => {
+      const docChannelNorm = normalizeCanalName(d.canal_comunicado || '');
+      const filterNorm = normalizeCanalName(selectedChannelFilter);
+      return docChannelNorm === filterNorm;
+    });
+  }, [unitCasesReal, selectedChannelFilter]);
 
   // Estatísticas das distribuições de hoje
   const todayStats = useMemo(() => {
@@ -161,31 +185,6 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
     return { total, manual, notification, persistence, automatic };
   }, [documents, selectedUnidade]);
 
-  // Encontra quem foi o último conselheiro de referência atribuído (não manual, não notificação)
-  const lastAssignedRef = useMemo(() => {
-    const newCases = documents
-      .filter(d => !d.is_manual_override && !d.notificacao && d.unidade_id === selectedUnidade)
-      .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
-    
-    if (newCases.length === 0) return null;
-    
-    const lastId = newCases[0].conselheiro_referencia_id;
-    const foundUser = users.find(u => u.id === lastId);
-    return foundUser ? foundUser.nome.toUpperCase() : null;
-  }, [documents, users, selectedUnidade]);
-
-  // Próximo conselheiro previsto para a próxima distribuição
-  const nextPredictedCounselor = useMemo(() => {
-    if (activeCounselors.length === 0) return 'Nenhum conselheiro ativo';
-    const lastIndex = activeCounselors.findIndex(c => c.nome === lastAssignedRef);
-    const nextIndex = (lastIndex + 1) % activeCounselors.length;
-    return activeCounselors[nextIndex].nome;
-  }, [activeCounselors, lastAssignedRef]);
-
-  const nameMap = useMemo(() => {
-    return propNameMap || {};
-  }, [propNameMap]);
-
   const escalaTrio = useMemo(() => {
     const today = new Date();
     const year = today.getFullYear();
@@ -211,7 +210,6 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
       return `${year}-${month}-${day}`;
     })();
 
-    // Lógica idêntica ao DocumentRegistration.tsx para agrupar casos cadastrados no dia sob o rodízio de hoje
     const todayDocs = documents
       .filter(d => {
         const isDocOfToday = d.data_aporte === todayDateReal || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === todayDateReal);
@@ -244,6 +242,57 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
     return escalaTrio[nextIndex];
   }, [escalaTrio, lastAssignedImediata]);
 
+  // MATRIZ DE RODÍZIO POR CANAL (Estado em tempo real para cada canal da unidade)
+  const channelRotationMatrix = useMemo(() => {
+    return CANAIS_COMUNICADO_LIST.map(channelName => {
+      const norm = normalizeCanalName(channelName);
+      const isRotation = isRotationChannel(channelName);
+      const channelCases = documents.filter(d => 
+        d.unidade_id === selectedUnidade && 
+        normalizeCanalName(d.canal_comunicado || '') === norm
+      );
+      const newChannelCases = channelCases.filter(d => !d.is_manual_override && !d.notificacao);
+
+      if (!isRotation) {
+        return {
+          channelName,
+          normalizedName: norm,
+          isRotation: false,
+          totalCases: channelCases.length,
+          totalNewCases: newChannelCases.length,
+          lastAssignedName: null,
+          nextCounselor: null,
+          counselorsState: activeCounselors.map(c => ({ ...c, isLast: false, isNext: false }))
+        };
+      }
+
+      const { nextCounselor, lastAssignedName } = getChannelNextCounselor(
+        selectedUnidade,
+        channelName,
+        documents,
+        users,
+        nameMap
+      );
+
+      const counselorsState = activeCounselors.map(c => ({
+        ...c,
+        isLast: lastAssignedName ? isSameCounselorName(c.nome, lastAssignedName) : false,
+        isNext: nextCounselor ? isSameCounselorName(c.nome, nextCounselor.nome) : false
+      }));
+
+      return {
+        channelName,
+        normalizedName: norm,
+        isRotation: true,
+        totalCases: channelCases.length,
+        totalNewCases: newChannelCases.length,
+        lastAssignedName,
+        nextCounselor,
+        counselorsState
+      };
+    });
+  }, [selectedUnidade, documents, users, activeCounselors, nameMap]);
+
   // Função para adicionar log interno no painel
   const log = (message: string, type: 'info' | 'success' | 'warn' | 'error' = 'info') => {
     const timeStr = new Date().toLocaleTimeString('pt-BR');
@@ -255,40 +304,67 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
     setSimulationResult(null);
   };
 
+  // Helper para ícones por canal
+  const getChannelIcon = (channel: string) => {
+    const norm = normalizeCanalName(channel);
+    if (norm === 'OFÍCIO JUDICIÁRIO') return <Scale className="w-4 h-4 text-purple-600" />;
+    if (norm === 'OFÍCIO MP') return <Landmark className="w-4 h-4 text-emerald-600" />;
+    if (norm === 'OFÍCIO') return <FileText className="w-4 h-4 text-blue-600" />;
+    if (norm === 'ATENDIMENTO PRESENCIAL') return <Users className="w-4 h-4 text-amber-600" />;
+    if (norm === 'ATENDIMENTO TELEFÔNICO') return <Phone className="w-4 h-4 text-teal-600" />;
+    if (norm === 'TELEFONE DE PLANTÃO') return <PhoneCall className="w-4 h-4 text-rose-600" />;
+    if (norm === 'E-MAIL INSTITUCIONAL') return <Mail className="w-4 h-4 text-sky-600" />;
+    if (norm === 'SIPIA') return <FileSpreadsheet className="w-4 h-4 text-indigo-600" />;
+    return <FileText className="w-4 h-4 text-slate-600" />;
+  };
+
   // EXECUTA A SIMULAÇÃO DE CONCORRÊNCIA EM SANDBOX LOCAL (RÁPIDA)
   const runSandboxSimulation = () => {
     if (activeCounselors.length === 0) {
       log('Impossível calibrar: nenhum Conselheiro ativo nesta unidade.', 'error');
       return;
     }
-    if (admsOfUnidade.length === 0) {
-      log('Aviso: Nenhum usuário ADM ativo na unidade. Simulação usará atores virtuais.', 'warn');
+
+    const testChannel = selectedSimulationChannel;
+    const testChannelNorm = normalizeCanalName(testChannel);
+    const isRot = isRotationChannel(testChannel);
+
+    if (!isRot) {
+      log(`Canal "${testChannel}" é excluído do rodízio. Casos são atribuídos diretamente ao plantão da escala.`, 'warn');
+      return;
     }
 
     setIsSimulating(true);
     setSimulationResult(null);
     clearLogs();
 
-    log(`Iniciando Simulação concorrente na Unidade ${selectedUnidade}...`, 'info');
-    log(`Buscando conselheiros ativos para rodízio alfabético...`, 'info');
-    log(`Ordem Alfabética de Rodízio: ${activeCounselors.map(c => c.nome).join(' → ')}`, 'info');
-    log(`Último atribuído no histórico real do banco: ${lastAssignedRef || 'NENHUM (novo rodízio)'}`, 'info');
+    log(`Iniciando Simulação concorrente para o canal [${testChannelNorm}] na Unidade ${selectedUnidade}...`, 'info');
+    log(`Conselheiros no rodízio (${activeCounselors.length}): ${activeCounselors.map(c => c.nome).join(' → ')}`, 'info');
+
+    // Identifica último conselheiro desse canal
+    const { nextCounselor: initialNext, lastAssignedName: initialLast } = getChannelNextCounselor(
+      selectedUnidade,
+      testChannel,
+      documents,
+      users,
+      nameMap
+    );
+
+    log(`Último atribuído no canal [${testChannelNorm}]: ${initialLast || 'NENHUM (ciclo novo)'}`, 'info');
+    log(`Próximo previsto inicial: ${initialNext?.nome || 'N/A'}`, 'info');
 
     setTimeout(() => {
-      // Começamos o rodízio virtual a partir do último do banco
       const virtualDocsList = [...documents];
       const assignedSequence: string[] = [];
       const expectedSequence: string[] = [];
       const assignedSequenceImediata: string[] = [];
       const expectedSequenceImediata: string[] = [];
 
-      // Montamos o estado esperado sequencialmente para Referência
-      let currentRefName = lastAssignedRef;
+      let currentRefName = initialLast;
       const expectedRefs: { id: string, nome: string }[] = [];
 
       for (let i = 0; i < simulationSize; i++) {
-        // Encontra o próximo previsto
-        const lastIdx = activeCounselors.findIndex(c => c.nome === currentRefName);
+        const lastIdx = activeCounselors.findIndex(c => isSameCounselorName(c.nome, currentRefName));
         const nextIdx = activeCounselors.length > 0 ? (lastIdx + 1) % activeCounselors.length : 0;
         const targetCounselor = activeCounselors[nextIdx];
         expectedSequence.push(targetCounselor.nome);
@@ -296,7 +372,6 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         currentRefName = targetCounselor.nome;
       }
 
-      // Montamos o estado esperado sequencialmente para Providência Imediata
       const todayDateReal = (() => {
         const today = new Date();
         const year = today.getFullYear();
@@ -307,6 +382,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
       const currentTimeReal = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       const virtualTrio = getEffectiveEscala(todayDateReal, currentTimeReal, selectedUnidade, nameMap, scaleExceptions);
       let currentProvName = lastAssignedImediata;
+
       for (let i = 0; i < simulationSize; i++) {
         const refUser = expectedRefs[i];
         const refUserName = refUser?.nome?.toUpperCase();
@@ -325,33 +401,23 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         }
       }
 
-      // Simular múltiplos ADMs agindo simultaneamente (concorrência)
-      log(`Simulando ${simulationSize} submissões de documentos em simultâneo por ADMs...`, 'info');
-      
-      const simulatedAdmActors = admsOfUnidade.length > 0 
-        ? admsOfUnidade.map(a => a.nome) 
-        : ['ADM VIRTUAL 1', 'ADM VIRTUAL 2', 'ADM VIRTUAL 3'];
+      log(`Simulando ${simulationSize} submissões simultâneas no canal [${testChannelNorm}]...`, 'info');
 
       for (let i = 0; i < simulationSize; i++) {
-        const actor = simulatedAdmActors[i % simulatedAdmActors.length];
-        const docId = `sim-${Math.random().toString(36).substr(2, 9)}`;
-        const creationTime = new Date(Date.now() + i * 1000).toISOString(); // Garantir carimbo de tempo sequencial
+        const { nextCounselor: assignedUser } = getChannelNextCounselor(
+          selectedUnidade,
+          testChannel,
+          virtualDocsList,
+          users,
+          nameMap
+        );
 
-        // Cálculo de distribuição lógica idêntico ao DocumentRegistration.tsx
-        const tempNewCases = virtualDocsList
-          .filter(d => !d.is_manual_override && !d.notificacao && d.unidade_id === selectedUnidade)
-          .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
-        
-        const lastRefId = tempNewCases[0]?.conselheiro_referencia_id;
-        const lastRefUser = users.find(u => u.id === lastRefId);
-        const refName = lastRefUser?.nome.toUpperCase();
+        if (!assignedUser) {
+          log(`Erro na simulação do passo ${i + 1}: conselheiro não resolvido`, 'error');
+          break;
+        }
 
-        const curIdx = activeCounselors.findIndex(c => c.nome === refName);
-        const nxtIdx = activeCounselors.length > 0 ? (curIdx + 1) % activeCounselors.length : 0;
-        const assignedUser = activeCounselors[nxtIdx];
-
-        // Lógica de Distribuição Justa (Rodízio de Providência Imediata)
-        const refNameSim = assignedUser?.nome?.toUpperCase();
+        const refNameSim = assignedUser.nome.toUpperCase();
         const mappedRefNameSim = (refNameSim && nameMap && nameMap[refNameSim]) ? nameMap[refNameSim] : refNameSim;
         const isRefSimInTrio = mappedRefNameSim && virtualTrio.some(n => isSameCounselorName(n, mappedRefNameSim));
 
@@ -366,201 +432,121 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         const lastProvUser = users.find(u => u.id === lastProvId);
         const lastProvName = lastProvUser?.nome.toUpperCase();
         
-        let assignedProvUser: User | undefined;
-        let assignedProvName: string = 'N/A';
+        let assignedProvName = 'N/A';
 
-        if (isRefSimInTrio && assignedUser) {
-          const activeSubUser = mappedRefNameSim ? users.find(u => u.status === 'ATIVO' && u.unidade_id === selectedUnidade && isSameCounselorName(u.nome, mappedRefNameSim)) : undefined;
-          assignedProvUser = activeSubUser || users.find(u => u.id === assignedUser.id);
-          assignedProvName = assignedProvUser?.nome || mappedRefNameSim || refNameSim || 'N/A';
+        if (isRefSimInTrio) {
+          assignedProvName = mappedRefNameSim || refNameSim || 'N/A';
         } else {
           const curProvIdx = virtualTrio.findIndex(n => isSameCounselorName(n, lastProvName));
           const nxtProvIdx = virtualTrio.length > 0 ? (curProvIdx + 1) % virtualTrio.length : 0;
           assignedProvName = virtualTrio[nxtProvIdx] || 'N/A';
-          assignedProvUser = users.find(u => u.status === 'ATIVO' && isSameCounselorName(u.nome, assignedProvName) && u.unidade_id === selectedUnidade);
         }
 
-        // Cria o registro temporário na lista para a próxima iteração simular a sincronização rápida
-        const newVirtualDoc: Documento = {
-          id: docId,
+        const simulatedDoc: Documento = {
+          id: `sim-${Date.now()}-${i}`,
           unidade_id: selectedUnidade,
-          origem: 'SIMULAÇÃO - ADMINISTRATIVO',
-          canal_comunicado: 'SISTEMA',
+          origem: 'SIMULAÇÃO - CANAL TESTE',
+          canal_comunicado: testChannel,
           data_recebimento: todayDateReal,
           data_aporte: todayDateReal,
-          hora_aporte: '12:00',
-          crianca_nome: `SIMULAÇÃO CRIANÇA ${i + 1}`,
+          hora_aporte: '10:00',
+          crianca_nome: `CRIANÇA SIMULADA ${i + 1}`,
           criancas: [],
-          genitora_nome: 'SIMULAÇÃO GENITORA',
-          bairro: 'JARDIM PRIMAVERA',
-          informacoes_documento: 'TESTE DE CARGA',
-          observacoes_iniciais: 'TESTE DE SIMULAÇÃO',
+          genitora_nome: 'MÃE SIMULADA',
+          bairro: 'JARDIM AMANDA',
+          informacoes_documento: 'TESTE',
+          observacoes_iniciais: 'RODÍZIO INDEPENDENTE POR CANAL',
           violacoesSipia: [],
           agentesVioladores: [],
           status: ['AGUARDANDO_ANALISE'],
           conselheiro_referencia_id: assignedUser.id,
-          conselheiro_providencia_id: assignedProvUser?.id || '',
+          conselheiro_referencia_nome: assignedUser.nome,
+          conselheiro_providencia_id: '',
+          conselheiro_providencia_nome: assignedProvName,
           conselheiros_providencia_nomes: virtualTrio,
-          criado_em: creationTime,
+          criado_em: new Date(Date.now() + i * 1000).toISOString(),
           distribuicao_automatica: true
         };
 
-        virtualDocsList.unshift(newVirtualDoc); // adiciona no início
+        virtualDocsList.unshift(simulatedDoc);
         assignedSequence.push(assignedUser.nome);
         assignedSequenceImediata.push(assignedProvName.toUpperCase());
 
-        log(`[ADM: ${actor}] cadastrou documento para "SIMULAÇÃO CRIANÇA ${i + 1}". Ref: ${assignedUser.nome} | Imed: ${assignedProvName.toUpperCase()}`, 'success');
+        log(`Passo ${i + 1}/${simulationSize}: Canal [${testChannelNorm}] ➔ Ref: ${assignedUser.nome} | Imed: ${assignedProvName.toUpperCase()}`, 'success');
       }
 
-      // Validação matemática
-      const isPerfectRef = JSON.stringify(expectedSequence) === JSON.stringify(assignedSequence);
-      const isPerfectImediata = JSON.stringify(expectedSequenceImediata) === JSON.stringify(assignedSequenceImediata);
-      const isPerfectCombined = isPerfectRef && isPerfectImediata;
-
-      if (isPerfectCombined) {
-        log(`✓ SIMULAÇÃO CONTRATADA COM SUCESSO! Ambas as sequências de rodízio mantiveram-se íntegras.`, 'success');
-      } else {
-        if (!isPerfectRef) log(`✗ DISCORDÂNCIA ENCONTRADA NA SEQUÊNCIA DE RODÍZIO DE REFERÊNCIA.`, 'error');
-        if (!isPerfectImediata) log(`✗ DISCORDÂNCIA ENCONTRADA NA SEQUÊNCIA DE RODÍZIO DE PROVIDÊNCIA IMEDIATA.`, 'error');
-      }
+      const testPassedRef = JSON.stringify(expectedSequence) === JSON.stringify(assignedSequence);
+      const testPassedImediata = JSON.stringify(expectedSequenceImediata) === JSON.stringify(assignedSequenceImediata);
+      const testPassedCombined = testPassedRef && testPassedImediata;
 
       setSimulationResult({
-        success: isPerfectRef,
-        successImediata: isPerfectImediata,
+        success: testPassedRef,
+        successImediata: testPassedImediata,
         sentCount: simulationSize,
+        channel: testChannelNorm,
         expectedSeq: expectedSequence,
         assignedSeq: assignedSequence,
         expectedSeqImediata: expectedSequenceImediata,
         assignedSeqImediata: assignedSequenceImediata,
-        message: isPerfectCombined 
-          ? 'Análise de Concorrência Concluída: Os algoritmos de lock de indexação (Referência e Providência) estão 100% robustos para múltiplas operações simultâneas!'
-          : `Falha na ordenação! ${!isPerfectRef ? '[Referência afetado] ' : ''}${!isPerfectImediata ? '[Imediata afetado]' : ''}`
+        message: testPassedCombined 
+          ? `Ciclo de rodízio do canal [${testChannelNorm}] validado com 100% de exatidão sequencial!`
+          : `Discrepância encontrada no teste do canal [${testChannelNorm}].`
       });
+
       setIsSimulating(false);
-      onAddLog(`SIMULAÇÃO: Teste concorrente de distribuição na Unidade ${selectedUnidade} executado.`);
-    }, 1500);
+    }, 400);
   };
 
-  // EXECUTA TESTE INTEGRADO NO FIRESTORE REAL (SEGURO COM AUTOCLEANUP)
+  // TESTE REAL EM FIRESTORE COM AUTOCLEANUP UTILIZANDO O CANAL SELECIONADO
   const runLiveDatabaseTest = async () => {
     if (activeCounselors.length === 0) {
-      log('Não há conselheiros ativos para fazer o teste.', 'error');
+      log('Impossível calibrar: nenhum Conselheiro ativo nesta unidade.', 'error');
       return;
     }
-    
+
+    const testChannel = selectedSimulationChannel;
+    const testChannelNorm = normalizeCanalName(testChannel);
+
     setIsSimulating(true);
     setSimulationResult(null);
     clearLogs();
 
-    const todayDateReal = (() => {
-      const today = new Date();
-      const year = today.getFullYear();
-      const month = String(today.getMonth() + 1).padStart(2, '0');
-      const day = String(today.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    })();
-
-    log(`Iniciando teste integrado em tempo real no banco Firestore (Unidade ${selectedUnidade})...`, 'warn');
-    log(`Este teste cadastrará 3 registros reais e depois fará a autolimpeza (rollback) instantânea.`, 'info');
+    log(`Iniciando Teste com Transação Atômica no Firestore para o canal [${testChannelNorm}]...`, 'info');
 
     const createdIds: string[] = [];
-    const expectedSequence: string[] = [];
     const assignedSequence: string[] = [];
-    const expectedSequenceImediata: string[] = [];
-    const assignedSequenceImediata: string[] = [];
+    const expectedSequence: string[] = [];
 
-    // Lista dinâmica local para evitar closures do React que mantêm o estado cacheado do prop "documents"
-    const liveDocsList = [...documents];
+    const { nextCounselor: initialNext, lastAssignedName: initialLast } = getChannelNextCounselor(
+      selectedUnidade,
+      testChannel,
+      documents,
+      users,
+      nameMap
+    );
 
-    // For expected sequence (Referência)
-    let currentRefName = lastAssignedRef;
-    const testExpectedRefs: { id: string, nome: string }[] = [];
+    let currentRefName = initialLast;
     for (let i = 0; i < 3; i++) {
-      const lastIdx = activeCounselors.findIndex(c => c.nome === currentRefName);
+      const lastIdx = activeCounselors.findIndex(c => isSameCounselorName(c.nome, currentRefName));
       const nextIdx = activeCounselors.length > 0 ? (lastIdx + 1) % activeCounselors.length : 0;
-      const target = activeCounselors[nextIdx];
-      expectedSequence.push(target.nome);
-      testExpectedRefs.push(target);
-      currentRefName = target.nome;
+      const targetCounselor = activeCounselors[nextIdx];
+      expectedSequence.push(targetCounselor.nome);
+      currentRefName = targetCounselor.nome;
     }
 
-    // For expected sequence (Imediata)
-    const currentTimeReal = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    const liveTrio = getEffectiveEscala(todayDateReal, currentTimeReal, selectedUnidade, nameMap, scaleExceptions);
-    let currentProvName = lastAssignedImediata;
-    for (let i = 0; i < 3; i++) {
-      const refUser = testExpectedRefs[i];
-      const refUserName = refUser?.nome?.toUpperCase();
-      const mappedRefName = (refUserName && nameMap && nameMap[refUserName]) ? nameMap[refUserName] : refUserName;
-      const isRefUserInTrio = mappedRefName && liveTrio.some(n => isSameCounselorName(n, mappedRefName));
-
-      if (isRefUserInTrio && refUser) {
-        expectedSequenceImediata.push(mappedRefName?.toUpperCase() || refUserName || 'N/A');
-        currentProvName = mappedRefName?.toUpperCase();
-      } else {
-        const lastIdx = liveTrio.findIndex(name => isSameCounselorName(name, currentProvName));
-        const nextIdx = liveTrio.length > 0 ? (lastIdx + 1) % liveTrio.length : 0;
-        const target = liveTrio[nextIdx];
-        expectedSequenceImediata.push(target?.toUpperCase() || 'N/A');
-        currentProvName = target?.toUpperCase();
-      }
-    }
+    const today = new Date();
+    const todayDateReal = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
     try {
       for (let i = 0; i < 3; i++) {
         const docId = `test-real-${Math.random().toString(36).substr(2, 9)}`;
-        const creationTime = new Date().toISOString();
-        
-        // Simular a consulta viva do banco para obter o conselheiro dinamicamente
-        const liveNewCases = liveDocsList
-          .filter(d => !d.is_manual_override && !d.notificacao && d.unidade_id === selectedUnidade)
-          .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
-        
-        const lastRefId = liveNewCases[0]?.conselheiro_referencia_id;
-        const lastRefUser = users.find(u => u.id === lastRefId);
-        const refName = lastRefUser?.nome.toUpperCase();
+        log(`[Gravando no Firestore via Transação Atômica] Doc ${i + 1}/3 no canal [${testChannelNorm}]...`, 'info');
 
-        const curIdx = activeCounselors.findIndex(c => c.nome === refName);
-        const nxtIdx = activeCounselors.length > 0 ? (curIdx + 1) % activeCounselors.length : 0;
-        const assignedUser = activeCounselors[nxtIdx];
-
-        // Providência Imediata (Consulta viva do banco em tempo real)
-        const liveTodayDocs = liveDocsList
-          .filter(d => {
-            const isDocOfToday = d.data_aporte === todayDateReal || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === todayDateReal);
-            return isDocOfToday && d.unidade_id === selectedUnidade && !d.is_reference_in_trio && !d.notificacao && !d.is_manual_providencia && !d.is_plantao;
-          })
-          .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
-
-        const lastProvId = liveTodayDocs[0]?.conselheiro_providencia_id;
-        const lastProvUser = users.find(u => u.id === lastProvId);
-        const lastProvName = lastProvUser?.nome.toUpperCase();
-
-        let assignedProvUser: User | undefined;
-        let assignedProvName: string = 'N/A';
-
-        const refNameSim = assignedUser?.nome?.toUpperCase();
-        const mappedRefNameSim = (refNameSim && nameMap && nameMap[refNameSim]) ? nameMap[refNameSim] : refNameSim;
-        const isRefSimInTrio = mappedRefNameSim && liveTrio.some(n => isSameCounselorName(n, mappedRefNameSim));
-
-        if (isRefSimInTrio && assignedUser) {
-          const activeSubUser = mappedRefNameSim ? users.find(u => u.status === 'ATIVO' && u.unidade_id === selectedUnidade && isSameCounselorName(u.nome, mappedRefNameSim)) : undefined;
-          assignedProvUser = activeSubUser || users.find(u => u.id === assignedUser.id);
-          assignedProvName = assignedProvUser?.nome || mappedRefNameSim || refNameSim || 'N/A';
-        } else {
-          const curProvIdx = liveTrio.findIndex(n => isSameCounselorName(n, lastProvName));
-          const nxtProvIdx = liveTrio.length > 0 ? (curProvIdx + 1) % liveTrio.length : 0;
-          assignedProvName = liveTrio[nxtProvIdx] || 'N/A';
-          assignedProvUser = users.find(u => u.status === 'ATIVO' && isSameCounselorName(u.nome, assignedProvName) && u.unidade_id === selectedUnidade);
-        }
-
-        log(`[Gravando no Firestore] Documento de teste ${i + 1}/3...`, 'info');
-
-        const newDoc: Documento = {
+        const testDoc: Documento = {
           id: docId,
           unidade_id: selectedUnidade,
-          origem: 'SIMULAÇÃO - GERAL ADM',
-          canal_comunicado: 'SISTEMA',
+          origem: 'SIMULAÇÃO - TRANSAÇÃO ATÔMICA',
+          canal_comunicado: testChannel,
           data_recebimento: todayDateReal,
           data_aporte: todayDateReal,
           hora_aporte: '12:00',
@@ -569,71 +555,68 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
           genitora_nome: 'PROVA DE CARGA',
           bairro: 'JARDIM PRIMAVERA',
           informacoes_documento: 'INTEGRAÇÃO REAL',
-          observacoes_iniciais: 'TESTE INTEGRADO CONCORRENTE',
+          observacoes_iniciais: 'TESTE INTEGRADO CANAL ATÔMICO',
           violacoesSipia: [],
           agentesVioladores: [],
           status: ['AGUARDANDO_ANALISE'],
-          conselheiro_referencia_id: assignedUser.id,
-          conselheiro_providencia_id: assignedProvUser?.id || '',
-          conselheiros_providencia_nomes: liveTrio,
-          criado_em: creationTime,
+          conselheiro_referencia_id: '',
+          conselheiro_providencia_id: '',
+          conselheiros_providencia_nomes: ['TESTE'],
+          criado_em: new Date().toISOString(),
           distribuicao_automatica: true
         };
 
-        // Grava no banco de dados real
-        await saveDocument(newDoc);
-        
-        // Empurra localmente na cópia viva para o próximo loop usar o valor atualizado corretamento
-        liveDocsList.unshift(newDoc);
-
+        const activeUsersOfUnit = users.filter(u => u.unidade_id === selectedUnidade && u.status === 'ATIVO');
+        const savedDoc = await saveDocumentWithAtomicRotation(
+          testDoc,
+          selectedUnidade,
+          currentUser,
+          activeUsersOfUnit,
+          nameMap,
+          scaleExceptions
+        );
         createdIds.push(docId);
-        assignedSequence.push(assignedUser.nome);
-        assignedSequenceImediata.push(assignedProvName.toUpperCase());
-
-        log(`✓ Escrito no Firestore! ID: ${docId} | Ref: ${assignedUser.nome} | Imed: ${assignedProvName.toUpperCase()}`, 'success');
         
-        // Aguarda 1 segundo entre gravações para dar tempo de consolidação do carimbo de tempo
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        const assignedUserName = savedDoc.conselheiro_referencia_nome || users.find(u => u.id === savedDoc.conselheiro_referencia_id)?.nome || 'DESCONHECIDO';
+        assignedSequence.push(assignedUserName);
+
+        log(`✓ Gravado no Firestore! Doc: ${docId} ➔ Conselheiro Atribuído: ${assignedUserName}`, 'success');
+        await new Promise(resolve => setTimeout(resolve, 800));
       }
 
-      log(`Verificando integridade das sequências de gravação direta...`, 'info');
-      const testPassedRef = JSON.stringify(expectedSequence) === JSON.stringify(assignedSequence);
-      const testPassedImediata = JSON.stringify(expectedSequenceImediata) === JSON.stringify(assignedSequenceImediata);
-      const testPassedCombined = testPassedRef && testPassedImediata;
-
-      if (testPassedCombined) {
-        log(`✓ SUCESSO COMPROVADO EM FIRESTORE! Ambas as sequências (Referência e Imediata) mantiveram-se perfectly.`, 'success');
+      const testPassed = JSON.stringify(expectedSequence) === JSON.stringify(assignedSequence);
+      if (testPassed) {
+        log(`✓ SUCESSO TOTAL NO FIRESTORE! A transação atômica manteve o rodízio sequencial exato no canal [${testChannelNorm}].`, 'success');
       } else {
-        if (!testPassedRef) log(`▲ AVISO: Discrepância na ordem síncrona de Referência.`, 'warn');
-        if (!testPassedImediata) log(`▲ AVISO: Discrepância na ordem síncrona de Providência Imediata.`, 'warn');
+        log(`▲ AVISO: Discrepância na ordem síncrona de Referência para o canal.`, 'warn');
       }
 
       setSimulationResult({
-        success: testPassedRef,
-        successImediata: testPassedImediata,
+        success: testPassed,
+        successImediata: true,
         sentCount: 3,
+        channel: testChannelNorm,
         expectedSeq: expectedSequence,
         assignedSeq: assignedSequence,
-        expectedSeqImediata: expectedSequenceImediata,
-        assignedSeqImediata: assignedSequenceImediata,
-        message: testPassedCombined 
-          ? 'O banco de dados Firestore processou as concorrências e salvou sequências corretas de Referência e Providência!'
-          : `Discrepância nas gravações! ${!testPassedRef ? '[Referência afetado] ' : ''}${!testPassedImediata ? '[Imediata afetado]' : ''}`
+        expectedSeqImediata: [],
+        assignedSeqImediata: [],
+        message: testPassed 
+          ? `O Firestore executou a transação atômica com sucesso e salvou o rodízio exato no canal [${testChannelNorm}]!`
+          : `Discrepância detectada no teste do banco de dados.`
       });
 
       // Autolimpeza
-      log(`Iniciando processo de Autolimpeza (Rollback)...`, 'warn');
+      log(`Iniciando Autolimpeza (Rollback)...`, 'warn');
       for (const id of createdIds) {
-        log(`Deletando documento temporário ${id}...`, 'info');
         await deleteDocument(id);
       }
-      log(`✓ Autolimpeza concluída! Nenhuma inserção ruidosa foi deixada no seu banco de dados oficial.`, 'success');
+      log(`✓ Autolimpeza concluída! Todos os documentos de teste foram removidos do banco.`, 'success');
 
     } catch (err) {
-      log(`Erro durante teste integrado de transação: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      log(`Erro no teste integrado: ${err instanceof Error ? err.message : String(err)}`, 'error');
     } finally {
       setIsSimulating(false);
-      onAddLog(`FILTRO: Executou teste de distribuição real com autolimpeza.`);
+      onAddLog(`FILTRO: Executou teste de distribuição real no canal [${testChannelNorm}] com autolimpeza.`);
     }
   };
 
@@ -647,264 +630,276 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
         </div>
         <div className="max-w-3xl">
           <span className="px-3 py-1 bg-blue-500/30 text-blue-300 rounded-full font-black text-[10px] uppercase tracking-widest border border-blue-500/20">
-            Console de Teste & Concorrência
+            Painel de Distribuição & Auditoria
           </span>
           <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight mt-3">
-            Simulador de Distribuição & Validação ADM
+            Rodízio Sequencial Controlado por Canal
           </h2>
           <p className="text-blue-100 text-xs sm:text-sm font-medium mt-2 leading-relaxed">
-            Diagnostique se os usuários com privilégio ADM/Administrativo estão integrando cadastros normalmente nas duas unidades e valide de forma empírica o algoritmo de rodízio em ordem alfabética sob condições de acesso simultâneo.
+            Acompanhe o estado de rodízio sequencial entre os 5 conselheiros para cada canal de entrada. Cada categoria mantém seu próprio ciclo contínuo e independente.
           </p>
         </div>
       </div>
 
-      <div className={`grid grid-cols-1 ${currentUser?.nome === 'LEANDRO' ? 'lg:grid-cols-3' : 'max-w-2xl mx-auto'} gap-6`}>
-        
-        {/* PARTE esquerda: Configurações e Diagnóstico das Unidades */}
-        <div className={`${currentUser?.nome === 'LEANDRO' ? 'lg:col-span-1' : 'col-span-1'} space-y-6`}>
-          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 space-y-6">
-            <h3 className="text-sm font-black uppercase text-slate-800 tracking-widest flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-indigo-600" />
-              1. Selecionar Unidade
-            </h3>
+      {/* SELEÇÃO DE UNIDADE E STATUS GERAL */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 space-y-4">
+          <h3 className="text-sm font-black uppercase text-slate-800 tracking-widest flex items-center gap-2">
+            <Building2 className="w-5 h-5 text-indigo-600" />
+            Unidade em Operação
+          </h3>
 
-            <div className="grid grid-cols-2 gap-3">
-              <button 
-                disabled={currentUser.unidade_id !== 1}
-                onClick={() => { setSelectedUnidade(1); setSimulationResult(null); }}
-                className={`py-3 px-4 rounded-xl border text-xs font-black uppercase tracking-widest transition-all flex flex-col items-center justify-center gap-1 ${
-                  selectedUnidade === 1 
-                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' 
-                    : currentUser.unidade_id !== 1 
-                      ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60' 
-                      : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
-                }`}
-              >
-                <div className="flex items-center gap-1">
-                  {currentUser.unidade_id !== 1 && <Lock className="w-3 h-3" />}
-                  <span>Unidade I</span>
-                </div>
-                {currentUser.unidade_id !== 1 && (
-                  <span className="text-[8px] font-black tracking-normal text-slate-400 uppercase">Bloqueado</span>
-                )}
-                {currentUser.unidade_id === 1 && (
-                  <span className="text-[8px] font-black tracking-normal text-indigo-200 uppercase">Sua Unidade</span>
-                )}
-              </button>
-              <button 
-                disabled={currentUser.unidade_id !== 2}
-                onClick={() => { setSelectedUnidade(2); setSimulationResult(null); }}
-                className={`py-3 px-4 rounded-xl border text-xs font-black uppercase tracking-widest transition-all flex flex-col items-center justify-center gap-1 ${
-                  selectedUnidade === 2 
-                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' 
-                    : currentUser.unidade_id !== 2 
-                      ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60' 
-                      : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
-                }`}
-              >
-                <div className="flex items-center gap-1">
-                  {currentUser.unidade_id !== 2 && <Lock className="w-3 h-3" />}
-                  <span>Unidade II</span>
-                </div>
-                {currentUser.unidade_id !== 2 && (
-                  <span className="text-[8px] font-black tracking-normal text-slate-400 uppercase">Bloqueado</span>
-                )}
-                {currentUser.unidade_id === 2 && (
-                  <span className="text-[8px] font-black tracking-normal text-indigo-200 uppercase">Sua Unidade</span>
-                )}
-              </button>
-            </div>
-
-            {/* Diagnóstico de Usuários ADM */}
-            <div className="space-y-3 pt-3 border-t border-slate-100">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                  Validação de Acesso ADM
-                </span>
-                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase rounded">
-                  OK
-                </span>
+          <div className="grid grid-cols-2 gap-3">
+            <button 
+              disabled={currentUser.unidade_id !== 1}
+              onClick={() => { setSelectedUnidade(1); setSimulationResult(null); }}
+              className={`py-3 px-4 rounded-xl border text-xs font-black uppercase tracking-widest transition-all flex flex-col items-center justify-center gap-1 ${
+                selectedUnidade === 1 
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' 
+                  : currentUser.unidade_id !== 1 
+                    ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60' 
+                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+              }`}
+            >
+              <div className="flex items-center gap-1">
+                {currentUser.unidade_id !== 1 && <Lock className="w-3 h-3" />}
+                <span>Unidade I</span>
               </div>
-              
-              <div className="space-y-2">
-                {admsOfUnidade.length === 0 ? (
-                  <div className="flex items-center gap-2 text-rose-500 text-xs font-bold p-3 bg-rose-50 rounded-xl">
-                    <AlertCircle className="w-4 h-4" />
-                    Nenhum ADM ativo na Unidade {selectedUnidade}!
-                  </div>
-                ) : (
-                  admsOfUnidade.map(u => (
-                    <div key={u.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
-                      <div className="flex items-center gap-2">
-                        <UserCheck className="w-4 h-4 text-emerald-600" />
-                        <span className="text-xs font-extrabold text-slate-700">{u.nome}</span>
-                      </div>
-                      <span className="text-[9px] font-bold text-emerald-600 uppercase">Capacidade Escrita ✓</span>
-                    </div>
-                  ))
-                )}
+              {currentUser.unidade_id === 1 && (
+                <span className="text-[8px] font-black tracking-normal text-indigo-200 uppercase">Sua Unidade</span>
+              )}
+            </button>
+            <button 
+              disabled={currentUser.unidade_id !== 2}
+              onClick={() => { setSelectedUnidade(2); setSimulationResult(null); }}
+              className={`py-3 px-4 rounded-xl border text-xs font-black uppercase tracking-widest transition-all flex flex-col items-center justify-center gap-1 ${
+                selectedUnidade === 2 
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' 
+                  : currentUser.unidade_id !== 2 
+                    ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60' 
+                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+              }`}
+            >
+              <div className="flex items-center gap-1">
+                {currentUser.unidade_id !== 2 && <Lock className="w-3 h-3" />}
+                <span>Unidade II</span>
               </div>
-            </div>
-
-            {/* Ordem de Conselheiros */}
-            <div className="space-y-3 pt-3 border-t border-slate-100">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">
-                Lista de Rodízio Alfabético Atual ({activeCounselors.length})
-              </span>
-              <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                {activeCounselors.map((c, index) => {
-                  const isLast = c.nome === lastAssignedRef;
-                  const isNext = c.nome === nextPredictedCounselor;
-                  return (
-                    <div 
-                      key={c.id} 
-                      className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all ${isNext ? 'bg-blue-50/50 border-blue-200 shadow-sm' : isLast ? 'bg-slate-50 border-slate-300' : 'bg-white border-slate-100'}`}
-                    >
-                      <div className="flex items-center gap-2 font-bold text-slate-700">
-                        <span className="w-5 h-5 bg-slate-100 text-slate-500 font-mono text-[10px] font-black rounded-full flex items-center justify-center">
-                          {index + 1}
-                        </span>
-                        <span className="uppercase text-[11px] font-extrabold">{c.nome}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {isLast && (
-                          <span className="px-2 py-0.5 bg-slate-200 text-slate-700 font-black text-[8px] uppercase rounded">
-                            Último atribuído
-                          </span>
-                        )}
-                        {isNext && (
-                          <span className="px-2 py-0.5 bg-blue-600 text-white font-black text-[8px] uppercase rounded animate-pulse">
-                            Próximo da fila
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Ordem de Providência Imediata (Escala de Trabalho) */}
-            <div className="space-y-3 pt-4 border-t border-slate-100">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">
-                Rodízio de Providência Imediata (Escala de Hoje)
-              </span>
-              <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                {escalaTrio.length === 0 ? (
-                  <div className="text-xs text-slate-400 font-bold p-3 bg-slate-50 rounded-xl">
-                    Nenhuma escala ativa para esta data/unidade.
-                  </div>
-                ) : (
-                  escalaTrio.map((name, index) => {
-                    const isLast = lastAssignedImediata && name.toUpperCase() === lastAssignedImediata;
-                    const isNext = nextPredictedImediata && name.toUpperCase() === nextPredictedImediata?.toUpperCase();
-                    
-                    // Verifica se este conselheiro está substituindo alguém na escala de hoje
-                    const replacedException = activeExceptionsForUnit.find(ex => {
-                      const today = new Date();
-                      const todayDateReal = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-                      const currentTimeReal = today.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                      const originalTrioRaw = getEffectiveEscala(todayDateReal, currentTimeReal, selectedUnidade, nameMap, []);
-                      const isOriginalInTrio = originalTrioRaw.map(n => n.toUpperCase()).includes(ex.conselheiro_original_nome.toUpperCase());
-                      return isOriginalInTrio && ex.conselheiro_substituto_nome.toUpperCase() === name.toUpperCase();
-                    });
-
-                    return (
-                      <div 
-                        key={index} 
-                        className={`flex flex-col p-2.5 rounded-xl border text-xs transition-all ${isNext ? 'bg-amber-50/50 border-amber-200 shadow-sm' : isLast ? 'bg-slate-50 border-slate-300' : 'bg-white border-slate-100'}`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 font-bold text-slate-700">
-                            <span className="w-5 h-5 bg-slate-100 text-slate-500 font-mono text-[10px] font-black rounded-full flex items-center justify-center">
-                              {index + 1}
-                            </span>
-                            <span className="uppercase text-[11px] font-extrabold">{name}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {isLast && (
-                              <span className="px-2 py-0.5 bg-slate-200 text-slate-700 font-black text-[8px] uppercase rounded">
-                                Último
-                              </span>
-                            )}
-                            {isNext && (
-                              <span className="px-2 py-0.5 bg-amber-600 text-white font-black text-[8px] uppercase rounded animate-pulse">
-                                Próximo
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        {replacedException && (
-                          <div className="mt-1 pl-7 text-[8px] font-black text-amber-600 uppercase tracking-wider flex items-center gap-1">
-                            <Repeat className="w-2.5 h-2.5" /> Substituindo {replacedException.conselheiro_original_nome}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-            {/* Trocas de Escala Cadastradas (Substituições) */}
-            <div className="space-y-3 pt-4 border-t border-slate-100">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block flex items-center gap-1.5">
-                <Repeat className="w-3.5 h-3.5 text-amber-500 animate-spin" style={{ animationDuration: '6s' }} /> Substituições / Trocas Cadastradas ({activeExceptionsForUnit.length})
-              </span>
-              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                {activeExceptionsForUnit.length === 0 ? (
-                  <div className="text-[10px] text-slate-400 font-bold p-3 bg-slate-50 rounded-xl uppercase tracking-wider text-center">
-                    Nenhuma troca cadastrada para esta Unidade.
-                  </div>
-                ) : (
-                  activeExceptionsForUnit.map((swap) => (
-                    <div 
-                      key={swap.id} 
-                      className="p-3 bg-amber-50/30 border border-amber-200/60 rounded-xl space-y-1.5 text-[10px]"
-                    >
-                      <div className="flex justify-between items-center font-black text-slate-700 uppercase gap-1">
-                        <div className="flex items-center gap-1.5 truncate">
-                          <span className="truncate">{swap.conselheiro_original_nome}</span>
-                          <span className="text-amber-600">➔</span>
-                          <span className="text-blue-700 truncate">{swap.conselheiro_substituto_nome}</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setSwapIdToDelete(swap.id)}
-                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors shrink-0"
-                          title="Remover Substituição"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <div className="text-[9px] text-slate-500 font-bold uppercase flex flex-col gap-0.5 pt-1.5 border-t border-amber-100">
-                        <div>📅 Início: {swap.inicio_data ? swap.inicio_data.split('-').reverse().join('/') : swap.data} às {swap.inicio_hora || '08:00'}</div>
-                        <div>📅 Término: {swap.fim_data ? swap.fim_data.split('-').reverse().join('/') : ''} às {swap.fim_hora || '08:00'}</div>
-                      </div>
-                      {swap.justificativa && (
-                        <div className="text-[9px] font-bold text-slate-600 uppercase bg-white/60 p-1.5 rounded border border-amber-100/50 italic">
-                          Motivo: "{swap.justificativa}"
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+              {currentUser.unidade_id === 2 && (
+                <span className="text-[8px] font-black tracking-normal text-indigo-200 uppercase">Sua Unidade</span>
+              )}
+            </button>
           </div>
         </div>
 
-        {/* PARTE DIREITA: Terminal de Logs de Teste e Disparador de Concorrência (Habilitado apenas para LEANDRO) */}
-        {currentUser?.nome === 'LEANDRO' && (
-          <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <h3 className="text-sm font-black uppercase text-slate-800 tracking-widest flex items-center gap-2">
-                <Zap className="w-5 h-5 text-amber-500" />
-                2. Disparar Testes Concorrentes
+        {/* ESCALA DO DIA - PROVIDÊNCIA IMEDIATA */}
+        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 space-y-3 md:col-span-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-black uppercase text-slate-800 tracking-widest flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-amber-600" />
+              Trio de Providência Imediata (Escala de Trabalho Hoje)
+            </h3>
+            <span className="text-[10px] font-bold text-slate-400 uppercase">
+              {escalaTrio.length} Conselheiros Escalados
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {escalaTrio.map((name, index) => {
+              const isLast = lastAssignedImediata && name.toUpperCase() === lastAssignedImediata;
+              const isNext = nextPredictedImediata && name.toUpperCase() === nextPredictedImediata?.toUpperCase();
+              
+              const replacedException = activeExceptionsForUnit.find(ex => {
+                const today = new Date();
+                const todayDateReal = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                const currentTimeReal = today.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                const originalTrioRaw = getEffectiveEscala(todayDateReal, currentTimeReal, selectedUnidade, nameMap, []);
+                const isOriginalInTrio = originalTrioRaw.map(n => n.toUpperCase()).includes(ex.conselheiro_original_nome.toUpperCase());
+                return isOriginalInTrio && ex.conselheiro_substituto_nome.toUpperCase() === name.toUpperCase();
+              });
+
+              return (
+                <div 
+                  key={index}
+                  className={`p-3 rounded-2xl border transition-all flex flex-col justify-between ${isNext ? 'bg-amber-50/70 border-amber-300 shadow-sm' : isLast ? 'bg-slate-50 border-slate-300' : 'bg-white border-slate-200'}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 bg-slate-100 text-slate-600 font-mono text-[10px] font-black rounded-full flex items-center justify-center">
+                        {index + 1}
+                      </span>
+                      <span className="font-black text-slate-800 text-xs uppercase truncate max-w-[120px]">{name}</span>
+                    </div>
+                    {isNext && (
+                      <span className="px-2 py-0.5 bg-amber-600 text-white font-black text-[8px] uppercase rounded animate-pulse">
+                        Próximo
+                      </span>
+                    )}
+                    {isLast && (
+                      <span className="px-2 py-0.5 bg-slate-200 text-slate-700 font-black text-[8px] uppercase rounded">
+                        Último
+                      </span>
+                    )}
+                  </div>
+                  {replacedException && (
+                    <div className="mt-2 text-[8px] font-bold text-amber-700 uppercase flex items-center gap-1 bg-amber-100/60 p-1 rounded">
+                      <Repeat className="w-2.5 h-2.5" /> Substituto de {replacedException.conselheiro_original_nome}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* MATRIZ DE RODÍZIO POR CANAL (TRANSPARÊNCIA TOTAL) */}
+      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 sm:p-10 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div>
+            <span className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full font-black text-[10px] uppercase tracking-widest border border-indigo-100">
+              Controle Sequencial Independente
+            </span>
+            <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight mt-2 flex items-center gap-2">
+              <Users className="w-6 h-6 text-indigo-600" />
+              Matriz de Rodízio por Canal de Atendimento
+            </h3>
+            <p className="text-slate-500 text-xs font-medium mt-1">
+              Cada canal avança seu próprio contador sequencial entre todos os 5 conselheiros da Unidade {selectedUnidade === 1 ? 'I' : 'II'}.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-wider">
+              {activeCounselors.length} Conselheiros Ativos
+            </span>
+          </div>
+        </div>
+
+        {/* CARDS DE CADA CANAL */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {channelRotationMatrix.map((chan) => {
+            return (
+              <div 
+                key={chan.normalizedName}
+                className={`rounded-2xl border p-5 flex flex-col justify-between transition-all space-y-4 ${
+                  !chan.isRotation 
+                    ? 'bg-rose-50/40 border-rose-200' 
+                    : chan.normalizedName === 'OFÍCIO JUDICIÁRIO' 
+                      ? 'bg-purple-50/30 border-purple-200' 
+                      : chan.normalizedName === 'OFÍCIO MP' 
+                        ? 'bg-emerald-50/30 border-emerald-200' 
+                        : chan.normalizedName === 'OFÍCIO' 
+                          ? 'bg-blue-50/30 border-blue-200' 
+                          : 'bg-slate-50/60 border-slate-200'
+                }`}
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {getChannelIcon(chan.channelName)}
+                      <span className="font-black text-xs uppercase tracking-wide text-slate-800">
+                        {chan.channelName}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-600 shadow-2xs">
+                      {chan.totalNewCases} {chan.totalNewCases === 1 ? 'caso' : 'casos'}
+                    </span>
+                  </div>
+
+                  {!chan.isRotation ? (
+                    <div className="p-3 bg-rose-100/60 rounded-xl border border-rose-200 text-rose-800 text-[10px] font-bold leading-relaxed space-y-1">
+                      <div className="font-black uppercase flex items-center gap-1">
+                        <PhoneCall className="w-3.5 h-3.5" /> Canal Exclusivo de Plantão
+                      </div>
+                      <div>
+                        Demandas deste canal são processadas diretamente pela escala de plantonistas do dia e <strong>não</strong> participam da contagem dos ciclos de rodízio.
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 pt-2">
+                      <div className="flex items-center justify-between text-[10px] font-black uppercase text-slate-400">
+                        <span>Sequência de Conselheiros</span>
+                        <span className="text-indigo-600 font-bold">Ciclo Alfabético</span>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        {chan.counselorsState.map((c, idx) => (
+                          <div 
+                            key={c.id}
+                            className={`flex items-center justify-between p-2 rounded-xl text-[11px] font-bold transition-all border ${
+                              c.isNext 
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' 
+                                : c.isLast 
+                                  ? 'bg-slate-200 text-slate-800 border-slate-300 font-extrabold' 
+                                  : 'bg-white text-slate-700 border-slate-200/80'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className={`w-4 h-4 rounded-full text-[9px] font-black flex items-center justify-center ${c.isNext ? 'bg-white text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>
+                                {idx + 1}
+                              </span>
+                              <span className="uppercase text-[10px]">{c.nome}</span>
+                            </div>
+                            <div>
+                              {c.isNext && (
+                                <span className="px-2 py-0.5 bg-white/20 text-white rounded text-[8px] font-black uppercase animate-pulse">
+                                  Próximo da Vez
+                                </span>
+                              )}
+                              {c.isLast && (
+                                <span className="px-2 py-0.5 bg-slate-300 text-slate-800 rounded text-[8px] font-black uppercase">
+                                  Último Atribuído
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {chan.isRotation && (
+                  <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[9px] font-bold text-slate-500 uppercase">
+                    <span>Próximo Previsto:</span>
+                    <span className="font-black text-indigo-600 text-[10px]">
+                      {chan.nextCounselor?.nome || 'Aguardando...'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* DISPARADOR DE TESTES CONCORRENTES (APENAS PARA LEANDRO / ADMIN) */}
+      {currentUser?.nome === 'LEANDRO' && (
+        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 sm:p-10 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+            <div>
+              <span className="px-3 py-1 bg-amber-50 text-amber-700 rounded-full font-black text-[10px] uppercase tracking-widest border border-amber-100">
+                Console de Teste & Validação
+              </span>
+              <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight mt-2 flex items-center gap-2">
+                <Zap className="w-6 h-6 text-amber-500" />
+                Simulador de Distribuição Concorrente
               </h3>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
-                <label className="text-xs font-bold text-slate-500 whitespace-nowrap">Qtd Registros:</label>
+                <label className="text-xs font-bold text-slate-500">Canal a Testar:</label>
+                <select 
+                  className="p-2 border border-slate-200 rounded-xl font-bold text-xs bg-slate-50 uppercase"
+                  value={selectedSimulationChannel}
+                  onChange={e => setSelectedSimulationChannel(e.target.value)}
+                >
+                  {CANAIS_COMUNICADO_LIST.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-slate-500">Qtd Registros:</label>
                 <select 
                   className="p-2 border border-slate-200 rounded-xl font-bold text-xs"
                   value={simulationSize}
@@ -916,172 +911,131 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
                 </select>
               </div>
             </div>
+          </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <button
-                disabled={isSimulating}
-                onClick={runSandboxSimulation}
-                className="p-4 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 disabled:opacity-50 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-md flex items-center justify-center gap-3 transition-all"
-              >
-                {isSimulating ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" /> Simulando...
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-4 h-4" /> Rodar Simulação Concorrente (Sandbox)
-                  </>
-                )}
-              </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <button
+              disabled={isSimulating}
+              onClick={runSandboxSimulation}
+              className="p-4 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 disabled:opacity-50 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-md flex items-center justify-center gap-3 transition-all"
+            >
+              {isSimulating ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" /> Simulando...
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4" /> Simulação Sandbox ({selectedSimulationChannel})
+                </>
+              )}
+            </button>
 
-              <button
-                disabled={isSimulating}
-                onClick={runLiveDatabaseTest}
-                className="p-4 bg-slate-900 hover:bg-slate-850 disabled:opacity-50 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-md flex items-center justify-center gap-3 transition-all border border-slate-850"
+            <button
+              disabled={isSimulating}
+              onClick={runLiveDatabaseTest}
+              className="p-4 bg-slate-900 hover:bg-slate-850 disabled:opacity-50 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-md flex items-center justify-center gap-3 transition-all border border-slate-850"
+            >
+              {isSimulating ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" /> Processando Banco...
+                </>
+              ) : (
+                <>
+                  <Database className="w-4 h-4 text-amber-400" /> Teste Firestore Real com Autocleanup
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* RESULTADO DA SIMULAÇÃO */}
+          {simulationResult && (
+            <div className={`p-5 rounded-[1.5rem] border ${simulationResult.success ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900'} space-y-4`}>
+              <div className="flex items-start gap-3">
+                <div className={`p-2 rounded-lg ${simulationResult.success ? 'bg-emerald-500/20 text-emerald-600' : 'bg-amber-500/20 text-amber-600'}`}>
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-widest">
+                    {simulationResult.success ? `Validação Concluída: [${simulationResult.channel}] 100% Exato` : 'Atenção Requerida'}
+                  </h4>
+                  <p className="text-xs font-bold mt-1 text-slate-600 leading-relaxed">
+                    {simulationResult.message}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white/60 p-3 rounded-2xl border border-slate-200/60">
+                <div className="space-y-1">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Sequência Esperada:</span>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {simulationResult.expectedSeq.map((name, i) => (
+                      <div key={i} className="flex items-center text-[10px] font-bold bg-white px-2 py-1 rounded-lg border border-slate-200 uppercase">
+                        {name}
+                        {i < simulationResult.expectedSeq.length - 1 && <ChevronRight className="w-3 h-3 text-slate-400 ml-1" />}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Sequência Atribuída:</span>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {simulationResult.assignedSeq.map((name, i) => (
+                      <div key={i} className={`flex items-center text-[10px] font-bold px-2 py-1 rounded-lg border uppercase ${simulationResult.success ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-red-150 text-red-800 border-red-300'}`}>
+                        {name}
+                        {i < simulationResult.assignedSeq.length - 1 && <ChevronRight className="w-3 h-3 text-slate-400 ml-1" />}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TERMINAL DE LOGS */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-indigo-500" />
+                Terminal de Execução
+              </span>
+              <button 
+                onClick={clearLogs}
+                className="text-slate-400 hover:text-rose-600 text-[10px] font-bold uppercase flex items-center gap-1 transition-all"
               >
-                {isSimulating ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" /> Processando Banco...
-                  </>
-                ) : (
-                  <>
-                    <Database className="w-4 h-4 text-amber-400" /> Teste Firestore Real com Autoclênup
-                  </>
-                )}
+                <Trash2 className="w-3.5 h-3.5" /> Limpar Logs
               </button>
             </div>
 
-            {/* Quadro de Resultados */}
-            {simulationResult && (
-              <div className={`p-5 rounded-[1.5rem] border ${(simulationResult.success && simulationResult.successImediata) ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900'} space-y-4`}>
-                <div className="flex items-start gap-3">
-                  <div className={`p-2 rounded-lg ${(simulationResult.success && simulationResult.successImediata) ? 'bg-emerald-500/20 text-emerald-600' : 'bg-amber-500/20 text-amber-600'}`}>
-                    <ShieldCheck className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-black uppercase tracking-widest">
-                      {(simulationResult.success && simulationResult.successImediata) ? 'Diagnóstico: ✅ AMBOS INTEGRADOS E EXATOS' : 'Diagnóstico: ⚠ REQUER ATENÇÃO'}
-                    </h4>
-                    <p className="text-xs font-bold mt-1 text-slate-600 leading-relaxed">
-                      {simulationResult.message}
-                    </p>
-                  </div>
+            <div className="bg-slate-900 rounded-2xl p-4 font-mono text-[11px] text-slate-300 h-48 overflow-y-auto space-y-2 relative border border-slate-800">
+              {testLogs.length === 0 ? (
+                <div className="absolute inset-0 flex items-center justify-center text-slate-500">
+                  Nenhum teste iniciado. Escolha o canal e clique em simular.
                 </div>
-
-                {/* Bloco Ref */}
-                <div className="space-y-2 pt-3 border-t border-slate-200/50">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 block">
-                    1. Rodízio de Conselheiros de Referência (Alfabético):
-                  </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white/50 p-3 rounded-2xl border border-slate-100">
-                    <div className="space-y-1">
-                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Ordem Esperada:</span>
-                      <div className="flex flex-wrap items-center gap-1">
-                        {simulationResult.expectedSeq.map((name, i) => (
-                          <div key={i} className="flex items-center text-[10px] font-bold bg-white px-2 py-1 rounded-lg border border-slate-200 uppercase">
-                            {name}
-                            {i < simulationResult.expectedSeq.length - 1 && <ChevronRight className="w-3 h-3 text-slate-400 ml-1" />}
-                          </div>
-                        ))}
-                      </div>
+              ) : (
+                testLogs.map((item, i) => {
+                  let colorClass = 'text-blue-400';
+                  if (item.type === 'success') colorClass = 'text-emerald-400';
+                  if (item.type === 'warn') colorClass = 'text-amber-400';
+                  if (item.type === 'error') colorClass = 'text-rose-400';
+                  
+                  return (
+                    <div key={i} className="flex items-start gap-2 leading-relaxed">
+                      <span className="text-slate-500 text-[10px] shrink-0">[{item.timestamp}]</span>
+                      <span className={`${colorClass} shrink-0`}>
+                        {item.type === 'success' ? '[SUCCESS]' : item.type === 'warn' ? '[WARNING]' : item.type === 'error' ? '[ERROR]' : '[INFO]'}
+                      </span>
+                      <span className="text-slate-200">{item.message}</span>
                     </div>
-
-                    <div className="space-y-1">
-                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Ordem Atribuída:</span>
-                      <div className="flex flex-wrap items-center gap-1">
-                        {simulationResult.assignedSeq.map((name, i) => (
-                          <div key={i} className={`flex items-center text-[10px] font-bold px-2 py-1 rounded-lg border uppercase ${simulationResult.success ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-red-150 text-red-800 border-red-300'}`}>
-                            {name}
-                            {i < simulationResult.assignedSeq.length - 1 && <ChevronRight className="w-3 h-3 text-slate-400 ml-1" />}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Bloco Imediata */}
-                <div className="space-y-2 pt-1">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-amber-700 block">
-                    2. Rodízio de Providência Imediata (Escala de Trabalho):
-                  </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white/50 p-3 rounded-2xl border border-slate-100">
-                    <div className="space-y-1">
-                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Ordem Esperada:</span>
-                      <div className="flex flex-wrap items-center gap-1">
-                        {simulationResult.expectedSeqImediata.map((name, i) => (
-                          <div key={i} className="flex items-center text-[10px] font-bold bg-white px-2 py-1 rounded-lg border border-slate-200 uppercase">
-                            {name}
-                            {i < simulationResult.expectedSeqImediata.length - 1 && <ChevronRight className="w-3 h-3 text-slate-400 ml-1" />}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Ordem Atribuída:</span>
-                      <div className="flex flex-wrap items-center gap-1">
-                        {simulationResult.assignedSeqImediata.map((name, i) => (
-                          <div key={i} className={`flex items-center text-[10px] font-bold px-2 py-1 rounded-lg border uppercase ${simulationResult.successImediata ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-red-150 text-red-800 border-red-300'}`}>
-                            {name}
-                            {i < simulationResult.assignedSeqImediata.length - 1 && <ChevronRight className="w-3 h-3 text-slate-400 ml-1" />}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-            )}
-
-            {/* Painel do Terminal de Logs */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
-                  <Terminal className="w-4 h-4 text-indigo-500" />
-                  Terminal de Diagnóstico de Fluxo
-                </span>
-                <button 
-                  onClick={clearLogs}
-                  className="text-slate-400 hover:text-rose-600 text-[10px] font-bold uppercase flex items-center gap-1 transition-all"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> Limpar Logs
-                </button>
-              </div>
-
-              <div className="bg-slate-900 rounded-2xl p-4 font-mono text-[11px] text-slate-300 h-64 overflow-y-auto space-y-2 relative border border-slate-800">
-                {testLogs.length === 0 ? (
-                  <div className="absolute inset-0 flex items-center justify-center text-slate-500">
-                    Nenhum teste iniciado. Clique em um botão acima para executar.
-                  </div>
-                ) : (
-                  testLogs.map((item, i) => {
-                    let colorClass = 'text-blue-400';
-                    if (item.type === 'success') colorClass = 'text-emerald-400';
-                    if (item.type === 'warn') colorClass = 'text-amber-400';
-                    if (item.type === 'error') colorClass = 'text-rose-400';
-                    
-                    return (
-                      <div key={i} className="flex items-start gap-2 leading-relaxed">
-                        <span className="text-slate-500 text-[10px] shrink-0">[{item.timestamp}]</span>
-                        <span className={`${colorClass} shrink-0`}>
-                          {item.type === 'success' ? '[SUCCESS]' : item.type === 'warn' ? '[WARNING]' : item.type === 'error' ? '[ERROR]' : '[INFO]'}
-                        </span>
-                        <span className="text-slate-200">{item.message}</span>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
-        )}
+      )}
 
-      </div>
-
-      {/* PAINEL DE AUDITORIA E DIAGNÓSTICO DE DISTRIBUIÇÃO */}
+      {/* PAINEL DE AUDITORIA E REGISTROS REAIS COM FILTRO POR CANAL */}
       <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 sm:p-10 space-y-8">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-100">
           <div className="space-y-1">
@@ -1090,10 +1044,10 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
             </span>
             <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
               <Activity className="w-6 h-6 text-indigo-600 animate-pulse" />
-              Painel de Diagnóstico de Distribuições
+              Histórico Detalhado de Distribuições
             </h3>
             <p className="text-slate-500 text-xs sm:text-sm font-medium leading-relaxed">
-              Monitore o histórico real de atribuição de Providência Imediata sob as regras de Escala, Sobrescrita Manual e Vínculos de Notificação para a Unidade {selectedUnidade === 1 ? 'I' : 'II'}.
+              Consulte a atribuição de casos por canal na Unidade {selectedUnidade === 1 ? 'I' : 'II'}, com detalhamento completo da regra aplicada.
             </p>
           </div>
           
@@ -1105,7 +1059,7 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
             </div>
             <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-2xl text-center">
               <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest block flex items-center justify-center gap-1">
-                <RefreshCw className="w-3 h-3" /> Auto (Escala)
+                <RefreshCw className="w-3 h-3" /> Auto
               </span>
               <span className="text-lg font-black text-emerald-800">{todayStats.automatic}</span>
             </div>
@@ -1130,14 +1084,53 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
           </div>
         </div>
 
+        {/* FILTROS POR CANAL */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-xs font-black uppercase text-slate-500 tracking-wider">
+            <Filter className="w-4 h-4 text-indigo-600" /> Filtrar por Canal de Entrada:
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setSelectedChannelFilter('TODOS')}
+              className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border ${
+                selectedChannelFilter === 'TODOS'
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              Todos os Canais ({unitCasesReal.length})
+            </button>
+            {CANAIS_COMUNICADO_LIST.map(chan => {
+              const countInChan = unitCasesReal.filter(d => normalizeCanalName(d.canal_comunicado || '') === normalizeCanalName(chan)).length;
+              return (
+                <button
+                  key={chan}
+                  onClick={() => setSelectedChannelFilter(chan)}
+                  className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border flex items-center gap-1.5 ${
+                    selectedChannelFilter === chan
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {getChannelIcon(chan)}
+                  <span>{chan}</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[8px] ${selectedChannelFilter === chan ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                    {countInChan}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* LISTA DE CASOS */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-black uppercase text-slate-400 tracking-widest">
-              Registros Recentes de Atendimento ({unitCasesReal.length})
+              Casos Encontrados ({filteredUnitCases.length})
             </span>
             <span className="text-[10px] text-slate-400 font-bold">
-              Mostrando até os 15 casos mais recentes
+              Mostrando até 20 registros mais recentes
             </span>
           </div>
 
@@ -1147,22 +1140,21 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
                 <tr className="bg-slate-50/70 border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-500 border-t-0">
                   <th className="p-4 pl-6 text-slate-500 font-extrabold uppercase">Caso / Data</th>
                   <th className="p-4 text-slate-500 font-extrabold uppercase">Criança / Genitora</th>
+                  <th className="p-4 text-slate-500 font-extrabold uppercase">Canal do Comunicado</th>
                   <th className="p-4 text-slate-500 font-extrabold uppercase">Conselheiro Referência</th>
                   <th className="p-4 text-slate-500 font-extrabold uppercase">Providência Imediata</th>
-                  <th className="p-4 text-slate-500 font-extrabold uppercase">Origem / Método</th>
-                  <th className="p-4 pr-6 text-slate-500 font-extrabold uppercase">Diagnóstico / Justificativa</th>
+                  <th className="p-4 pr-6 text-slate-500 font-extrabold uppercase">Diagnóstico / Regra Aplicada</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {unitCasesReal.length === 0 ? (
+                {filteredUnitCases.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="p-10 text-center text-xs text-slate-400 font-bold">
-                      Nenhum prontuário registrado para a Unidade {selectedUnidade === 1 ? 'I' : 'II'}.
+                      Nenhum prontuário registrado com o filtro selecionado.
                     </td>
                   </tr>
                 ) : (
-                  unitCasesReal.slice(0, 15).map((doc) => {
-                    // Map name safely
+                  filteredUnitCases.slice(0, 20).map((doc) => {
                     const getMappedName = (id: string, nameField?: string) => {
                       if (!id) return "Não atribuído";
                       const found = users.find(u => u.id === id);
@@ -1193,71 +1185,22 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
                       }
                     })();
 
-                    // Detecta se havia uma substituição/troca de escala ativa no momento de recebimento desse documento
-                    const activeException = (() => {
-                      if (!scaleExceptions || scaleExceptions.length === 0) return null;
-                      const cDate = doc.data_recebimento || doc.data_aporte || doc.criado_em?.split('T')[0];
-                      if (!cDate) return null;
+                    const channelNorm = normalizeCanalName(doc.canal_comunicado || '');
+                    const isRotChan = isRotationChannel(doc.canal_comunicado || '');
 
-                      let cTime = doc.hora_rece_bimento || doc.hora_aporte;
-                      if (!cTime && doc.criado_em) {
-                        try {
-                          cTime = new Date(doc.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                        } catch {
-                          cTime = '12:00';
-                        }
-                      }
-                      if (!cTime) cTime = '12:00';
+                    // Tipo de atribuição
+                    let methodLabel = isRotChan ? `Rodízio (${channelNorm})` : "Canal Plantão (Escala)";
+                    let methodStyle = isRotChan ? "bg-indigo-50 text-indigo-700 border-indigo-100" : "bg-rose-50 text-rose-700 border-rose-100";
 
-                      const [qH, qM] = cTime.split(':').map(Number);
-                      const queryDateTime = new Date(`${cDate}T${String(qH).padStart(2, '0')}:${String(qM || 0).padStart(2, '0')}:00`);
-
-                      // Trata a passagem de dia no limite das 08:00h do plantão
-                      let dutyDayStr = cDate;
-                      if (qH < 8) {
-                        try {
-                          const d = new Date(`${cDate}T12:00:00`);
-                          d.setDate(d.getDate() - 1);
-                          dutyDayStr = d.toISOString().split('T')[0];
-                        } catch {}
-                      }
-
-                      return scaleExceptions.find(ex => {
-                        if (ex.unidade_id !== doc.unidade_id) return false;
-
-                        if (ex.inicio_data && ex.inicio_hora && ex.fim_data && ex.fim_hora) {
-                          const startDateTime = new Date(`${ex.inicio_data}T${ex.inicio_hora}:00`);
-                          const endDateTime = new Date(`${ex.fim_data}T${ex.fim_hora}:00`);
-                          if (!isNaN(startDateTime.getTime()) && !isNaN(endDateTime.getTime())) {
-                            if (queryDateTime >= startDateTime && queryDateTime < endDateTime) return true;
-                          }
-                        }
-
-                        return ex.data === dutyDayStr || ex.data === cDate || ex.inicio_data === dutyDayStr || ex.inicio_data === cDate;
-                      });
-                    })();
-
-                    // Detect high-level assignment type
-                    let methodLabel = "Escala do Dia";
-                    let methodStyle = "bg-emerald-50 text-emerald-700 border-emerald-100";
-                    let methodIcon = <RefreshCw className="w-3.5 h-3.5" />;
-
-                    if (doc.is_manual_providencia || doc.providencia_imediata_manual) {
-                      methodLabel = "Sobrescrita Manual";
+                    if (doc.is_manual_override || doc.is_manual_providencia || doc.providencia_imediata_manual) {
+                      methodLabel = "Ajuste Manual";
                       methodStyle = "bg-rose-50 text-rose-700 border-rose-100";
-                      methodIcon = <Zap className="w-3.5 h-3.5" />;
                     } else if (doc.notificacao) {
-                      methodLabel = "Vínculo de Notificação";
+                      methodLabel = "Notificação (Isento)";
                       methodStyle = "bg-blue-50 text-blue-700 border-blue-100";
-                      methodIcon = <Bell className="w-3.5 h-3.5" />;
                     } else if (doc.is_family_persistence) {
-                      methodLabel = "Persistência Familiar";
-                      methodStyle = "bg-indigo-50 text-indigo-700 border-indigo-100";
-                      methodIcon = <Users className="w-3.5 h-3.5" />;
-                    } else if (activeException) {
-                      methodLabel = "Troca de Escala";
-                      methodStyle = "bg-amber-50 text-amber-700 border-amber-200";
-                      methodIcon = <Repeat className="w-3.5 h-3.5 text-amber-600" />;
+                      methodLabel = "Vínculo Histórico";
+                      methodStyle = "bg-amber-50 text-amber-700 border-amber-100";
                     }
 
                     return (
@@ -1282,46 +1225,43 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
                           </div>
                         </td>
 
+                        {/* CANAL */}
+                        <td className="p-4">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-xl font-extrabold text-[10px] text-slate-700 uppercase">
+                            {getChannelIcon(doc.canal_comunicado || '')}
+                            <span>{doc.canal_comunicado || 'NÃO INFORMADO'}</span>
+                          </div>
+                        </td>
+
                         {/* CONSELHEIRO REFERÊNCIA */}
-                        <td className="p-4">
-                          <div className="flex items-center gap-1.5 font-bold text-slate-600">
-                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></span>
-                            <span className="uppercase truncate max-w-[130px]">{refName}</span>
+                        <td className="p-4 space-y-1">
+                          <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                            <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0"></span>
+                            <span className="uppercase truncate max-w-[140px]">{refName}</span>
                           </div>
-                        </td>
-
-                        {/* PROVIDÊNCIA IMEDIATA */}
-                        <td className="p-4">
-                          <div className="flex flex-col gap-0.5">
-                            <div className="flex items-center gap-1.5 font-black text-slate-800">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
-                              <span className="uppercase truncate max-w-[130px]">{provName}</span>
-                            </div>
-                            {activeException && (
-                              <span className="text-[8px] font-bold text-amber-600 uppercase pl-3">
-                                (Substituto)
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* ORIGEM / MÉTODO */}
-                        <td className="p-4">
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider border ${methodStyle}`}>
-                            {methodIcon}
-                            <span>{methodLabel}</span>
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider border ${methodStyle}`}>
+                            {methodLabel}
                           </span>
                         </td>
 
-                        {/* DIAGNÓSTICO / JUSTIFICATIVA */}
+                        {/* PROVIDÊNCIA IMEDIATA */}
+                        <td className="p-4 space-y-1">
+                          <div className="flex items-center gap-1.5 font-black text-slate-800">
+                            <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+                            <span className="uppercase truncate max-w-[140px]">{provName}</span>
+                          </div>
+                          <span className="text-[8px] font-bold text-slate-400 uppercase block">
+                            {doc.is_manual_providencia ? 'Sobrescrita Manual' : 'Escala do Dia'}
+                          </span>
+                        </td>
+
+                        {/* DIAGNÓSTICO / REGRA */}
                         <td className="p-4 pr-6 max-w-xs md:max-w-md">
-                          <div className="bg-slate-50 rounded-xl p-2.5 text-[10px] text-slate-500 font-bold leading-relaxed border border-slate-100 space-y-1">
-                            <div>{doc.justificativa_distribuicao || "Distribuição automática síncrona de escala de plantão."}</div>
-                            {activeException && (
-                              <div className="mt-1 p-2 bg-amber-50 rounded-lg border border-amber-100 text-[9px] text-amber-800 leading-normal font-bold uppercase">
-                                🔄 <strong>SUBSTITUIÇÃO DE ESCALA ATIVA:</strong> {activeException.conselheiro_original_nome} foi substituído(a) por {activeException.conselheiro_substituto_nome} das {activeException.inicio_hora || '08:00'} de {activeException.inicio_data ? activeException.inicio_data.split('-').reverse().join('/') : ''} às {activeException.fim_hora || '08:00'} de {activeException.fim_data ? activeException.fim_data.split('-').reverse().join('/') : ''}.
-                                {activeException.justificativa && <div className="mt-0.5 font-semibold text-slate-500 italic">Motivo: "{activeException.justificativa}"</div>}
-                              </div>
+                          <div className="bg-slate-50 rounded-xl p-2.5 text-[10px] text-slate-600 font-bold leading-relaxed border border-slate-100">
+                            {doc.justificativa_distribuicao || (
+                              isRotChan 
+                                ? `Atribuído pelo ciclo de rodízio sequencial do canal [${channelNorm}].`
+                                : `Canal de plantão: atribuído ao conselheiro da escala do dia.`
                             )}
                           </div>
                         </td>

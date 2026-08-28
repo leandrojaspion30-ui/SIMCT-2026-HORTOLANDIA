@@ -25,6 +25,8 @@ export interface User {
   deletado_em?: string;
   current_session_id?: string;
   last_heartbeat?: string;
+  trocar_senha_proximo_acesso?: boolean;
+  senha_alterada_em?: string;
 }
 
 export type DocumentStatus = 
@@ -222,6 +224,10 @@ export interface Documento {
   local_ocorrencia?: string;
   alertas_status_referencia?: AlertaStatusReferencia[];
   is_pasta_guardada?: boolean;
+  createdAt?: any;
+  updatedAt?: any;
+  createdBy?: string;
+  updatedBy?: string;
 }
 
 export interface Atribuicao136Entry {
@@ -242,6 +248,8 @@ export interface Log {
   acao: string;
   tipo: LogType;
   data_hora: string;
+  createdAt?: any;
+  createdBy?: string;
 }
 
 export interface ChildData {
@@ -291,6 +299,14 @@ export interface AgendaEntry {
   tipo: string;
   status?: 'PENDENTE' | 'COMPARECEU' | 'NAO_COMPARECEU' | 'REAGENDADO';
   excluido?: boolean;
+  excluido_em?: string;
+  excluido_por?: string;
+  createdAt?: any;
+  updatedAt?: any;
+  created_at?: string;
+  updated_at?: string;
+  createdBy?: string;
+  updatedBy?: string;
 }
 
 export interface ScaleException {
@@ -309,6 +325,10 @@ export interface ScaleException {
   inicio_hora?: string;
   fim_data?: string;
   fim_hora?: string;
+  createdAt?: any;
+  updatedAt?: any;
+  createdBy?: string;
+  updatedBy?: string;
 }
 
 export interface ChatMessage {
@@ -323,5 +343,9 @@ export interface ChatMessage {
   recipient_id?: string; // 'ALL' or specific user ID
   read_by?: string[];
   deleted_for?: string[];
+  createdAt?: any;
+  updatedAt?: any;
+  createdBy?: string;
+  updatedBy?: string;
 }
 

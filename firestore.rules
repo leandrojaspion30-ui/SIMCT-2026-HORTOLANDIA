@@ -57,5 +57,11 @@ service cloud.firestore {
     match /legal_library/{docId} {
       allow read, write: if true;
     }
+    match /settings/{settingId} {
+      allow read, write: if true;
+    }
+    match /rotation_state/{stateId} {
+      allow read, write: if true;
+    }
   }
 }

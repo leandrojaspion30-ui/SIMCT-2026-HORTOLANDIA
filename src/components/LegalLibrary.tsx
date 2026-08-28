@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LegalLibraryService, LegalDocument } from '../services/legalLibrary';
+import { useLegalLibraryRealtime } from '../hooks/useLegalLibraryRealtime';
 
 const CATEGORIES = [
   "CONSTITUIÇÃO", "CÓDIGOS", "ECA", "LEIS FEDERAIS", "DECRETOS FEDERAIS", 
@@ -43,13 +44,25 @@ import mammoth from 'mammoth';
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 export function LegalLibrary() {
-  const [documents, setDocuments] = useState<LegalDocument[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedSphere, setSelectedSphere] = useState<string | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<LegalDocument | null>(null);
   const [isAddingDoc, setIsAddingDoc] = useState(false);
+  const [analyzingAI, setAnalyzingAI] = useState(false);
+
+  // Hook Reativo em Tempo Real para Biblioteca Jurídica
+  const { 
+    documents, 
+    loading, 
+    ultimaAtualizacao, 
+    fromCache, 
+    recarregarManual 
+  } = useLegalLibraryRealtime({
+    category: selectedCategory || undefined,
+    sphere: selectedSphere || undefined,
+    searchQuery: searchQuery || undefined
+  });
 
   // Form for new document
   const [newDoc, setNewDoc] = useState<Partial<LegalDocument>>({
@@ -99,40 +112,8 @@ export function LegalLibrary() {
     }
   };
 
-  useEffect(() => {
-    fetchDocuments();
-  }, [selectedCategory, selectedSphere]);
-
-  const fetchDocuments = async () => {
-    setLoading(true);
-    try {
-      const results = await LegalLibraryService.searchDocuments({
-        category: selectedCategory || undefined,
-        sphere: selectedSphere || undefined
-      });
-      setDocuments(results);
-    } catch (error) {
-      console.error("Erro ao buscar documentos:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSearch = async (e: React.FormEvent) => {
+  const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    try {
-      const results = await LegalLibraryService.searchDocuments({
-        query: searchQuery,
-        category: selectedCategory || undefined,
-        sphere: selectedSphere || undefined
-      });
-      setDocuments(results);
-    } catch (error) {
-      console.error("Erro na busca:", error);
-    } finally {
-      setLoading(false);
-    }
   };
 
   const analyzeWithAI = async () => {
@@ -141,7 +122,7 @@ export function LegalLibrary() {
       return;
     }
 
-    setLoading(true);
+    setAnalyzingAI(true);
     try {
       const response = await fetch("/api/ai/analyze", {
         method: "POST",
@@ -208,7 +189,7 @@ ${newDoc.content.substring(0, 10000)}`
         }));
       }
     } finally {
-      setLoading(false);
+      setAnalyzingAI(false);
     }
   };
 
@@ -224,7 +205,7 @@ ${newDoc.content.substring(0, 10000)}`
         confidentiality: 'PÚBLICO',
         isPublic: true
       });
-      fetchDocuments();
+      recarregarManual();
     } catch (error) {
       console.error("Erro ao adicionar documento:", error);
     }

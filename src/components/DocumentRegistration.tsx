@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check, Repeat, Lock, ArrowLeft, Sparkles, Loader2, RotateCcw } from 'lucide-react';
 import { Documento, User, ChildData, DocumentStatus, AgendaEntry, ScaleException } from '../types';
-import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, getOrigensHierarquicasByUnidade, CANAIS_COMUNICADO_LIST, getEffectiveEscala, isSameCounselorName, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade, getUnidadeByBairro, LOCAL_OCORRENCIA_OPTIONS } from '../constants';
+import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, getOrigensHierarquicasByUnidade, CANAIS_COMUNICADO_LIST, getEffectiveEscala, isSameCounselorName, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade, getUnidadeByBairro, LOCAL_OCORRENCIA_OPTIONS, normalizeCanalName, isRotationChannel, getChannelNextCounselor, getActiveRotationCounselors } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
 import { saveScaleException, deleteScaleException, saveLog } from '../lib/db';
 import { SearchableSelect } from './SearchableSelect';
@@ -249,7 +249,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
         inicio_hora: swapStartTime,
         fim_data: swapEndDate,
         fim_hora: swapEndTime
-      });
+      }, currentUser);
 
       await saveLog({
         id: `log-${Date.now()}`,
@@ -260,7 +260,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
         unidade_id: formData.unidade_id,
         acao: `ESCALA: Substituição Excepcional na Unidade ${formData.unidade_id}. Conselheiro(a) ${originalUser.nome.toUpperCase()} substituído(a) por ${substituteUser.nome.toUpperCase()} de ${swapStartDate} ${swapStartTime} até ${swapEndDate} ${swapEndTime}. Justificativa: ${swapJustification.trim()}`,
         tipo: 'SISTEMA'
-      });
+      }, currentUser);
 
       setSwapJustification('');
       setIsScaleSwapModalOpen(false);
@@ -283,7 +283,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
         unidade_id: formData.unidade_id,
         acao: `ESCALA: Cancelamento de Substituição Excepcional (escala original restaurada).`,
         tipo: 'SISTEMA'
-      });
+      }, currentUser);
     } catch (err) {
       console.error(err);
       alert("Erro ao remover a alteração de escala.");
@@ -420,39 +420,36 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     return getEffectiveEscala(d, t, formData.unidade_id, nameMap, scaleExceptions);
   }, [initialData, formData.data_aporte, formData.hora_aporte, todayDate, todayTime, formData.unidade_id, nameMap, scaleExceptions]);
 
-    // DIRETRIZ 51/52: Rodízio Alfabético Estável para Referência
+  // DIRETRIZ 51/52: Rodízio Alfabético Estável para Referência por Canal
   const assignedReference = useMemo(() => {
-    // Usamos a lista viva de usuários ativos para definir a ordem de rodízio
-    const activeConselheiros = allUsers
-      .filter(u => {
-        if (u.unidade_id !== formData.unidade_id) return false;
-        if (u.status !== 'ATIVO') return false;
-        if (u.perfil !== 'CONSELHEIRO' && u.perfil !== 'SUPLENTE') return false;
-        if (u.perfil === 'CONSELHEIRO' && u.substituicao_ativa) return false;
-        return true;
-      })
-      .map(u => u.nome.toUpperCase())
-      .sort();
+    if (isManualReference && formData.conselheiro_referencia_id) {
+      return allUsers.find(u => u.id === formData.conselheiro_referencia_id && (u.unidade_id || 1) === formData.unidade_id);
+    }
+    if (initialData) {
+      return allUsers.find(u => u.id === (formData.conselheiro_referencia_id || initialData.conselheiro_referencia_id) && (u.unidade_id || 1) === formData.unidade_id);
+    }
+    if (isReferenceLocked) {
+      return allUsers.find(u => u.id === formData.conselheiro_referencia_id && (u.unidade_id || 1) === formData.unidade_id);
+    }
     
-    if (isManualReference && formData.conselheiro_referencia_id) return allUsers.find(u => u.id === formData.conselheiro_referencia_id && (u.unidade_id || 1) === formData.unidade_id);
-    if (initialData) return allUsers.find(u => u.id === (formData.conselheiro_referencia_id || initialData.conselheiro_referencia_id) && (u.unidade_id || 1) === formData.unidade_id);
-    if (isReferenceLocked) return allUsers.find(u => u.id === formData.conselheiro_referencia_id && (u.unidade_id || 1) === formData.unidade_id);
-    
-    // Filtra casos novos (sem histórico e sem notificação) ordenando descendente por data de criação para obter o último de forma consistente
-    const newCases = documents
-      .filter(d => !d.is_manual_override && !d.notificacao && d.unidade_id === formData.unidade_id)
-      .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
-    const lastAssignedRefId = newCases[0]?.conselheiro_referencia_id;
-    const lastRefUser = allUsers.find(u => u.id === lastAssignedRefId && (u.unidade_id || 1) === formData.unidade_id);
-    const lastRefNameRaw = lastRefUser?.nome.toUpperCase();
-    const lastRefName = (lastRefNameRaw && nameMap && nameMap[lastRefNameRaw]) ? nameMap[lastRefNameRaw] : lastRefNameRaw;
+    // Se for 'TELEFONE DE PLANTÃO' (excluído de rodízio):
+    if (!isRotationChannel(formData.canal_comunicado)) {
+      const firstTrioName = trioNames[0];
+      const plantonista = allUsers.find(u => (u.unidade_id || 1) === formData.unidade_id && u.status === 'ATIVO' && isSameCounselorName(u.nome, firstTrioName));
+      if (plantonista) return plantonista;
+    }
 
-    const currentIndex = activeConselheiros.indexOf(lastRefName || '');
-    const nextIndex = activeConselheiros.length > 0 ? (currentIndex + 1) % activeConselheiros.length : 0;
-    const nextName = activeConselheiros[nextIndex];
-    
-    return allUsers.find(u => u.status === 'ATIVO' && u.nome.toUpperCase() === nextName && (u.unidade_id || 1) === formData.unidade_id);
-  }, [allUsers, documents, isReferenceLocked, formData.conselheiro_referencia_id, initialData, formData.unidade_id, isManualReference, nameMap]);
+    // Para outros canais com rodízio (Ofício, Ofício MP, Ofício Judiciário, Presencial, etc.):
+    const { nextCounselor } = getChannelNextCounselor(
+      formData.unidade_id,
+      formData.canal_comunicado,
+      documents,
+      allUsers,
+      nameMap
+    );
+
+    return nextCounselor || null;
+  }, [allUsers, documents, isReferenceLocked, formData.conselheiro_referencia_id, initialData, formData.unidade_id, isManualReference, nameMap, formData.canal_comunicado, trioNames]);
 
   const currentRefUser = useMemo(() => {
     if (formData.conselheiro_referencia_id) {
@@ -1001,10 +998,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                   onChange={e => setFormData({...formData, canal_comunicado: e.target.value})}
                 >
                   <option value="">SELECIONE CANAL...</option>
-                  {CANAIS_COMUNICADO_LIST.filter(c => {
-                    const restricted = ['RELATÓRIO', 'OFÍCIO', 'OFÍCIO MP', 'OFÍCIO JUDICIÁRIO', 'DISQUE 100', 'E-MAIL INSTITUCIONAL'].includes(c);
-                    return !restricted || canEditCase;
-                  }).map(c => <option key={c} value={c}>{c}</option>)}
+                  {CANAIS_COMUNICADO_LIST.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
             </div>
@@ -1075,15 +1069,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                   onChange={e => setFormData({...formData, notificacao: e.target.value})}
                 >
                   <option value="">NENHUMA...</option>
-                  {allUsers
-                    .filter(u => {
-                      if (u.unidade_id !== formData.unidade_id) return false;
-                      if (u.status !== 'ATIVO') return false;
-                      if (u.perfil !== 'CONSELHEIRO' && u.perfil !== 'SUPLENTE') return false;
-                      if (u.perfil === 'CONSELHEIRO' && u.substituicao_ativa) return false;
-                      return true;
-                    })
-                    .sort((a, b) => a.nome.localeCompare(b.nome))
+                  {getActiveRotationCounselors(formData.unidade_id, allUsers, nameMap)
                     .map(u => (
                       <option key={u.id} value={u.nome.toUpperCase()}>{u.nome.toUpperCase()}</option>
                     ))}
@@ -1407,15 +1393,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                   onChange={e => setFormData({...formData, conselheiro_referencia_id: e.target.value})}
                 >
                   <option value="">Selecione o Conselheiro...</option>
-                  {allUsers
-                    .filter(u => {
-                      if (u.unidade_id !== formData.unidade_id) return false;
-                      if (u.status !== 'ATIVO') return false;
-                      if (u.perfil !== 'CONSELHEIRO' && u.perfil !== 'SUPLENTE') return false;
-                      if (u.perfil === 'CONSELHEIRO' && u.substituicao_ativa) return false;
-                      return true;
-                    })
-                    .sort((a, b) => a.nome.localeCompare(b.nome))
+                  {getActiveRotationCounselors(formData.unidade_id, allUsers, nameMap)
                     .map(u => (
                       <option key={u.id} value={u.id}>{u.nome.toUpperCase()}</option>
                     ))}
@@ -1433,7 +1411,9 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                           ? (isManualReference ? (isFabio ? 'Ajuste Manual (Fábio)' : 'Ajuste Manual (ADM)') : 'Vínculo Histórico') 
                           : (formData.notificacao 
                               ? 'Notificação (Isento do Rodízio)' 
-                              : (isManualReference ? (isFabio ? 'Ajuste Manual (Fábio)' : 'Ajuste Manual (ADM)') : 'Rodízio Alfabético')))}
+                              : (!isRotationChannel(formData.canal_comunicado)
+                                  ? 'Canal Plantão (Escala do Dia)'
+                                  : (isManualReference ? (isFabio ? 'Ajuste Manual (Fábio)' : 'Ajuste Manual (ADM)') : `Rodízio (${normalizeCanalName(formData.canal_comunicado)})`))))}
                   </span>
                 </div>
               )}

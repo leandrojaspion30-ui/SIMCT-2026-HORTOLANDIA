@@ -78,6 +78,17 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const [numeroSipia, setNumeroSipia] = useState(doc.numero_sipia || '');
   const [localOcorrencia, setLocalOcorrencia] = useState(doc.local_ocorrencia || '');
 
+  const parseCustomLocalText = (val?: string) => {
+    if (!val) return '';
+    if (val === 'OUTRO') return '';
+    if (val.startsWith('OUTRO:')) return val.replace(/^OUTRO:\s*/i, '').trim();
+    if (val.startsWith('OUTRO -')) return val.replace(/^OUTRO\s*-\s*/i, '').trim();
+    if (!LOCAL_OCORRENCIA_OPTIONS.includes(val)) return val;
+    return '';
+  };
+
+  const [customLocalText, setCustomLocalText] = useState<string>(parseCustomLocalText(doc.local_ocorrencia));
+
   const parseOrigem = (origemStr?: string, categoriaStr?: string) => {
     let cat = categoriaStr || '';
     let inst = origemStr || '';
@@ -147,6 +158,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     setNumeroComunicadoViolacao(doc.numero_comunicado_violacao || '');
     setNumeroSipia(doc.numero_sipia || '');
     setLocalOcorrencia(doc.local_ocorrencia || '');
+    setCustomLocalText(parseCustomLocalText(doc.local_ocorrencia));
     const parsed = parseOrigem(doc.origem, doc.origem_categoria);
     setOrigemCategoria(parsed.cat);
     setOrigemInstituicao(parsed.inst);
@@ -1125,7 +1137,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                   color="bg-sky-600" 
                   active={activeSection} 
                   onToggle={setActiveSection} 
-                  saved={!!origemCategoria || !!origemInstituicao || !!canalComunicado}
+                  saved={Boolean(origemCategoria || (origemInstituicao && origemInstituicao !== 'NÃO INFORMADO'))}
                 >
                   <div className="space-y-4">
                     <div className="flex items-center justify-between pb-1 border-b border-sky-100/60">
@@ -1237,22 +1249,76 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                 </AccordionSection>
 
                 <AccordionSection id="local" title={isLocalMandatory ? "Local da Ocorrência (Obrigatório)" : "Local da Ocorrência"} color="bg-slate-700" active={activeSection} onToggle={setActiveSection} saved={!!localOcorrencia}>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {LOCAL_OCORRENCIA_OPTIONS.map(opt => (
-                      <div 
-                        key={opt} 
-                        onClick={() => {
-                          if (!canEditTechnicalFields) return;
-                          const nextLocal = localOcorrencia === opt ? '' : opt;
-                          setLocalOcorrencia(nextLocal);
-                          onUpdateDocument(doc.id, { local_ocorrencia: nextLocal });
-                        }} 
-                        className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer text-[10px] uppercase font-bold transition-all ${localOcorrencia === opt ? 'bg-slate-700 text-white shadow-sm' : 'hover:bg-slate-50 text-slate-600'}`}
-                      >
-                        {localOcorrencia === opt ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4 opacity-20" />} 
-                        {opt}
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {LOCAL_OCORRENCIA_OPTIONS.map(opt => {
+                        const isOutro = opt === 'OUTRO';
+                        const isSelected = isOutro 
+                          ? Boolean(localOcorrencia && (localOcorrencia === 'OUTRO' || localOcorrencia.startsWith('OUTRO:') || localOcorrencia.startsWith('OUTRO -') || !LOCAL_OCORRENCIA_OPTIONS.filter(o => o !== 'OUTRO').includes(localOcorrencia)))
+                          : localOcorrencia === opt;
+
+                        return (
+                          <div 
+                            key={opt} 
+                            onClick={() => {
+                              if (!canEditTechnicalFields) return;
+                              if (isSelected) {
+                                setLocalOcorrencia('');
+                                setCustomLocalText('');
+                                onUpdateDocument(doc.id, { local_ocorrencia: '' });
+                              } else {
+                                if (isOutro) {
+                                  const nextVal = customLocalText.trim() ? `OUTRO: ${customLocalText.trim().toUpperCase()}` : 'OUTRO';
+                                  setLocalOcorrencia(nextVal);
+                                  onUpdateDocument(doc.id, { local_ocorrencia: nextVal });
+                                } else {
+                                  setLocalOcorrencia(opt);
+                                  onUpdateDocument(doc.id, { local_ocorrencia: opt });
+                                }
+                              }
+                            }} 
+                            className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer text-[10px] uppercase font-bold transition-all ${isSelected ? 'bg-slate-700 text-white shadow-sm' : 'hover:bg-slate-50 text-slate-600'}`}
+                          >
+                            {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4 opacity-20" />} 
+                            {opt}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Campo de preenchimento para especificar o local exato quando a opção OUTRO estiver acionada */}
+                    {Boolean(localOcorrencia && (localOcorrencia === 'OUTRO' || localOcorrencia.startsWith('OUTRO:') || localOcorrencia.startsWith('OUTRO -') || !LOCAL_OCORRENCIA_OPTIONS.filter(o => o !== 'OUTRO').includes(localOcorrencia))) && (
+                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 animate-fadeIn">
+                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                          <Building2 className="w-3.5 h-3.5 text-slate-500" />
+                          Especifique o Local Exato da Ocorrência:
+                        </label>
+                        <div className="flex gap-2">
+                          <input 
+                            type="text"
+                            disabled={!canEditTechnicalFields}
+                            placeholder="Digite o local exato (ex: Terreno baldio, Estação rodoviária, Praça central, etc.)..."
+                            value={customLocalText}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setCustomLocalText(val);
+                              const nextVal = val.trim() ? `OUTRO: ${val.trim().toUpperCase()}` : 'OUTRO';
+                              setLocalOcorrencia(nextVal);
+                            }}
+                            onBlur={() => {
+                              if (!canEditTechnicalFields) return;
+                              const nextVal = customLocalText.trim() ? `OUTRO: ${customLocalText.trim().toUpperCase()}` : 'OUTRO';
+                              setLocalOcorrencia(nextVal);
+                              onUpdateDocument(doc.id, { local_ocorrencia: nextVal });
+                            }}
+                            className="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 uppercase focus:ring-2 focus:ring-slate-500 focus:outline-none placeholder:text-slate-400 placeholder:normal-case shadow-sm"
+                          />
+                        </div>
+                        <span className="text-[9px] text-slate-500 font-medium italic block">
+                          O local especificado será gravado no prontuário e integrado às estatísticas do caso.
+                        </span>
                       </div>
-                    ))}
+                    )}
                   </div>
                 </AccordionSection>
 

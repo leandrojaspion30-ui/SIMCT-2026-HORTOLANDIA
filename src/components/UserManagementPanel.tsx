@@ -1,14 +1,15 @@
 
 import React, { useState, useRef } from 'react';
-import { UserWithPassword } from '../constants';
-import { UserCog, Shield, User as UserIcon, Lock, Power, Calendar, UserCheck, Plus, Trash2, Edit3, X, Save, AlertCircle, RefreshCw, ArrowRight, Download, Upload } from 'lucide-react';
+import { User } from '../types';
+import { UserCog, Shield, User as UserIcon, Lock, Power, Calendar, UserCheck, Plus, Trash2, Edit3, X, Save, AlertCircle, RefreshCw, ArrowRight, Download, Upload, KeyRound, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 
 interface UserManagementPanelProps {
-  users: UserWithPassword[];
+  users: User[];
   documents: any[];
-  onUpdateUser: (id: string, update: Partial<UserWithPassword>) => Promise<void> | void;
+  currentUser?: User;
+  onUpdateUser: (id: string, update: Partial<User & { senha?: string }>) => Promise<void> | void;
   onDeleteUser?: (id: string) => Promise<void> | void;
-  onAddUser?: (user: UserWithPassword) => Promise<void> | void;
+  onAddUser?: (user: Partial<User & { senha?: string }>) => Promise<void> | void;
   onResetDocuments?: (unidadeId?: number) => Promise<void> | void;
   onRestoreDocuments?: (documents: any[]) => Promise<void> | void;
   onAddLog: (action: string) => void;
@@ -18,6 +19,7 @@ interface UserManagementPanelProps {
 const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ 
   users, 
   documents,
+  currentUser,
   onUpdateUser, 
   onDeleteUser, 
   onAddUser, 
@@ -32,23 +34,30 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
   const [targetReplaceId, setTargetReplaceId] = useState<string>('');
   const [isCreatingNewInReplace, setIsCreatingNewInReplace] = useState(false);
   const [newReplaceUserData, setNewReplaceUserData] = useState({ id: '', nome: '' });
-  const [editingUser, setEditingUser] = useState<UserWithPassword | null>(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editNewPassword, setEditNewPassword] = useState<string>('');
+  const [showEditPassword, setShowEditPassword] = useState<boolean>(false);
+  const [resettingUserForAdmin, setResettingUserForAdmin] = useState<User | null>(null);
+  const [adminTempPassword, setAdminTempPassword] = useState<string>('123456');
+  const [showAdminTempPassword, setShowAdminTempPassword] = useState<boolean>(false);
+  const [adminResetSuccess, setAdminResetSuccess] = useState<boolean>(false);
   const [isAddingNew, setIsAddingNew] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState<boolean>(false);
   const [tempDates, setTempDates] = useState({ start: '', end: '' });
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [resetConfirmText, setResetConfirmText] = useState('');
   const [pendingResetAction, setPendingResetAction] = useState<'ONLY_RESET' | 'BACKUP_AND_RESET'>('ONLY_RESET');
-  const [userToDelete, setUserToDelete] = useState<UserWithPassword | null>(null);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [userToStopSubstituicao, setUserToStopSubstituicao] = useState<UserWithPassword | null>(null);
+  const [userToStopSubstituicao, setUserToStopSubstituicao] = useState<User | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [replaceSuccess, setReplaceSuccess] = useState<{from: string, to: string} | null>(null);
   const [resetTargetUnit, setResetTargetUnit] = useState<number | 'ALL'>('ALL');
-  const [newUser, setNewUser] = useState<UserWithPassword>({
+  const [newUser, setNewUser] = useState<Partial<User> & { senha?: string }>({
     id: '',
     nome: '',
-    senha: '123',
+    senha: '',
     perfil: 'CONSELHEIRO',
     cargo: 'CONSELHEIRO(A)',
     unidade_id: 1,
@@ -62,12 +71,20 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
       return;
     }
     if (onAddUser) {
-      await onAddUser({ ...newUser, nome: newUser.nome.toUpperCase() });
+      const initialPassword = newUser.senha && newUser.senha.trim() ? newUser.senha.trim() : '123456';
+      await onAddUser({ 
+        ...newUser, 
+        nome: newUser.nome.toUpperCase(),
+        senha: initialPassword,
+        trocar_senha_proximo_acesso: true,
+        senha_alterada_em: new Date().toISOString()
+      });
+      onAddLog(`RH: Novo usuário cadastrado: ${newUser.nome.toUpperCase()} (${newUser.id}). Exigida troca de senha no primeiro acesso.`);
       setIsAddingNew(false);
       setNewUser({
         id: '',
         nome: '',
-        senha: '123',
+        senha: '',
         perfil: 'CONSELHEIRO',
         cargo: 'CONSELHEIRO(A)',
         unidade_id: 1,
@@ -79,16 +96,45 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingUser) {
-      await onUpdateUser(editingUser.id, { 
+      const updateData: Partial<User & { senha?: string }> = { 
         nome: editingUser.nome.toUpperCase(), 
         cargo: editingUser.cargo.toUpperCase(),
         perfil: editingUser.perfil,
         unidade_id: editingUser.unidade_id,
-        senha: editingUser.senha,
         fotoUrl: editingUser.fotoUrl
-      });
+      };
+
+      // Apenas define senha se o administrador digitou uma nova senha
+      if (editNewPassword && editNewPassword.trim().length > 0) {
+        updateData.senha = editNewPassword.trim();
+        updateData.trocar_senha_proximo_acesso = true;
+        updateData.senha_alterada_em = new Date().toISOString();
+        onAddLog(`RH: Senha do usuário ${editingUser.nome} alterada pelo Administrador Geral. Exigida troca no próximo acesso.`);
+      }
+
+      await onUpdateUser(editingUser.id, updateData);
       setEditingUser(null);
+      setEditNewPassword('');
     }
+  };
+
+  const handleAdminResetPassword = async () => {
+    if (!resettingUserForAdmin) return;
+    const tempPass = adminTempPassword.trim() || '123456';
+    
+    await onUpdateUser(resettingUserForAdmin.id, {
+      senha: tempPass,
+      trocar_senha_proximo_acesso: true,
+      senha_alterada_em: new Date().toISOString()
+    });
+
+    onAddLog(`RH: Senha temporária do usuário ${resettingUserForAdmin.nome} redefinida pelo Administrador Geral (${currentUser?.nome || 'ADM GERAL'}). Exigida troca no próximo login.`);
+    setAdminResetSuccess(true);
+    setTimeout(() => {
+      setAdminResetSuccess(false);
+      setResettingUserForAdmin(null);
+      setAdminTempPassword('123456');
+    }, 2000);
   };
 
   const handlePermanentReplace = async () => {
@@ -113,10 +159,11 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
           successorId = newId;
           successorName = newName;
           
-          const newUserObj: UserWithPassword = {
+          const newUserObj: Partial<User & { senha?: string }> = {
             id: newId,
             nome: newName,
-            senha: '123',
+            senha: '123456',
+            trocar_senha_proximo_acesso: true,
             perfil: source.perfil || 'CONSELHEIRO',
             cargo: source.cargo || 'CONSELHEIRO(A)',
             unidade_id: source.unidade_id || 1,
@@ -311,6 +358,17 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                 </div>
                 <div className="flex gap-2">
                   <button 
+                    onClick={() => {
+                      setResettingUserForAdmin(user);
+                      setAdminTempPassword('123456');
+                      setShowAdminTempPassword(false);
+                    }}
+                    className="p-2 text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                    title="Redefinir Senha de Acesso (ADM Geral)"
+                  >
+                    <KeyRound className="w-4 h-4" />
+                  </button>
+                  <button 
                     onClick={() => setPermanentReplaceId(user.id)}
                     className="p-2 text-slate-300 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
                     title="Substituição Permanente (Migrar Funções)"
@@ -318,7 +376,11 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                     <RefreshCw className="w-4 h-4" />
                   </button>
                   <button 
-                    onClick={() => setEditingUser(user)}
+                    onClick={() => {
+                      setEditingUser(user);
+                      setEditNewPassword('');
+                      setShowEditPassword(false);
+                    }}
                     className="p-2 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                     title="Editar Nome/Cargo"
                   >
@@ -730,9 +792,27 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                  </div>
                  <div className="space-y-2">
                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha Inicial</label>
-                   <input required type="text" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-sm outline-none focus:border-red-500" value={newUser.senha} onChange={e => setNewUser({...newUser, senha: e.target.value})} />
+                   <div className="relative">
+                     <input 
+                       type={showNewPassword ? "text" : "password"} 
+                       placeholder="Padrão: 123456" 
+                       className="w-full p-4 pr-11 bg-slate-50 border border-slate-200 rounded-2xl font-black text-sm outline-none focus:border-red-500" 
+                       value={newUser.senha || ''} 
+                       onChange={e => setNewUser({...newUser, senha: e.target.value})} 
+                     />
+                     <button 
+                       type="button" 
+                       onClick={() => setShowNewPassword(!showNewPassword)}
+                       className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                     >
+                       {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                     </button>
+                   </div>
                  </div>
                </div>
+               <p className="text-[11px] font-bold text-slate-400 leading-tight">
+                 ℹ️ O usuário será cadastrado com exigência de troca de senha no primeiro acesso por motivos de segurança.
+               </p>
                <div className="grid grid-cols-1 gap-6">
                  <div className="space-y-2">
                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Perfil de Acesso</label>
@@ -821,14 +901,100 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                    </select>
                  </div>
                </div>
-               <div className="space-y-2">
-                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha de Acesso</label>
-                 <input required className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-sm outline-none focus:border-blue-500" value={editingUser.senha || ''} onChange={e => setEditingUser({...editingUser, senha: e.target.value})} />
+               <div className="space-y-2 pt-2 border-t border-slate-100">
+                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Redefinir Nova Senha (Opcional)</label>
+                 <div className="relative">
+                   <input 
+                     type={showEditPassword ? "text" : "password"}
+                     placeholder="Deixar em branco para manter a atual" 
+                     className="w-full p-4 pr-11 bg-slate-50 border border-slate-200 rounded-2xl font-black text-sm outline-none focus:border-blue-500" 
+                     value={editNewPassword} 
+                     onChange={e => setEditNewPassword(e.target.value)} 
+                   />
+                   <button 
+                     type="button" 
+                     onClick={() => setShowEditPassword(!showEditPassword)}
+                     className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                   >
+                     {showEditPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                   </button>
+                 </div>
+                 <p className="text-[10px] text-slate-400 font-bold ml-1">
+                   Por segurança, a senha atual não é exibida. Se informada uma nova senha, o usuário deverá alterá-la no próximo acesso.
+                 </p>
                </div>
                <button type="submit" className="w-full py-6 bg-blue-600 text-white rounded-[1.5rem] font-black uppercase text-[13px] tracking-widest shadow-2xl shadow-blue-100 hover:bg-blue-700 transition-all flex items-center justify-center gap-3">
                   <Save className="w-6 h-6" /> Atualizar Cadastro
                </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Redefinição Rápida de Senha pelo ADM Geral */}
+      {resettingUserForAdmin && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-xl bg-slate-900/60 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[3rem] shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 animate-in zoom-in-95 flex flex-col">
+            <header className="p-8 bg-emerald-600 text-white flex justify-between items-center shrink-0">
+               <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white/20 rounded-xl"><KeyRound className="w-5 h-5" /></div>
+                  <div>
+                    <h3 className="font-black uppercase tracking-tight text-lg">Redefinir Senha</h3>
+                    <p className="text-[11px] font-bold text-emerald-100 uppercase">{resettingUserForAdmin.nome}</p>
+                  </div>
+               </div>
+               <button onClick={() => setResettingUserForAdmin(null)} className="p-2 hover:bg-white/10 rounded-xl transition-all"><X className="w-6 h-6" /></button>
+            </header>
+            <div className="p-8 space-y-6">
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+                <p className="text-[11px] font-bold text-amber-800 uppercase leading-relaxed">
+                  ⚠️ Ação Administrativa: A senha será redefinida temporariamente. O usuário será orientado a cadastrar uma nova senha pessoal no próximo acesso.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha Temporária</label>
+                <div className="relative">
+                  <input 
+                    type={showAdminTempPassword ? "text" : "password"}
+                    className="w-full p-4 pr-11 bg-slate-50 border border-slate-200 rounded-2xl font-black text-sm outline-none focus:border-emerald-500 font-mono"
+                    value={adminTempPassword}
+                    onChange={e => setAdminTempPassword(e.target.value)}
+                    placeholder="123456"
+                  />
+                  <button 
+                    type="button" 
+                    onClick={() => setShowAdminTempPassword(!showAdminTempPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showAdminTempPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {adminResetSuccess && (
+                <div className="p-3 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-xl border border-emerald-200 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> Senha temporária redefinida com sucesso!
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button 
+                  type="button"
+                  onClick={handleAdminResetPassword}
+                  className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-emerald-700 transition-all shadow-lg flex items-center justify-center gap-2"
+                >
+                  <KeyRound className="w-4 h-4" /> Confirmar
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setResettingUserForAdmin(null)}
+                  className="px-6 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-slate-200 transition-all"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

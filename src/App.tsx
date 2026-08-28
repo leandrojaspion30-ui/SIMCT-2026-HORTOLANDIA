@@ -6,9 +6,9 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, ArrowLeft, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart, Timer, Save, Eye, EyeOff, RefreshCw, MessageSquare, Bot, Scale } from 'lucide-react';
 import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada, ScaleException, ChatMessage } from './types';
-import { INITIAL_USERS, UserWithPassword, INITIAL_AGENDA, getUnidadeByBairro, STATUS_LABELS, getEffectiveEscala, isSameCounselorName } from './constants';
+import { INITIAL_USERS, INITIAL_AGENDA, getUnidadeByBairro, STATUS_LABELS, getEffectiveEscala, isSameCounselorName } from './constants';
 import { db, ensureAuthenticated } from './lib/firebase';
-import { syncCollection, saveDocument, saveLog, saveAgenda, deleteDocument, deleteAgenda, saveUser, deleteUser, deleteAllDocuments, saveScaleException, deleteScaleException } from './lib/db';
+import { syncCollection, saveDocument, saveDocumentWithAtomicRotation, saveLog, saveAgenda, deleteDocument, deleteAgenda, saveUser, deleteUser, deleteAllDocuments, saveScaleException, deleteScaleException, verifyUserCredentials, SyncMetadata } from './lib/db';
 import ConfidentialityTermModal from './components/ConfidentialityTermModal';
 import DocumentList from './components/DocumentList';
 import DocumentRegistration from './components/DocumentRegistration';
@@ -29,38 +29,54 @@ import { LegalLibrary } from './components/LegalLibrary';
 const CT_LOGO_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR6A8u03A307V8A6_vC3B0C77z1u5w8rW6pLg&s";
 
 const LoginIllustration: React.FC = () => (
-  <div className="w-full h-64 bg-gradient-to-br from-[#EFF6FF] to-[#ECFDF5] relative overflow-hidden">
+  <div className="w-full h-72 relative overflow-hidden bg-amber-50 select-none">
+    {/* Fotografia em Ultra Alta Resolução com Iluminação Natural e Cores Vivas */}
     <img 
-      src="https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=1000&auto=format&fit=crop" 
-      alt="Rede de Proteção" 
-      className="w-full h-full object-cover opacity-20 mix-blend-multiply"
+      src="https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?auto=format&fit=crop&w=2400&q=100&dpr=2" 
+      alt="Retrato fotográfico profissional de crianças sorrindo - Rede de Proteção da Infância" 
+      className="w-full h-full object-cover object-[center_25%] contrast-[1.04] saturate-[1.15] brightness-[1.08] filter transition-transform duration-700 ease-out hover:scale-105"
+      loading="eager"
+      decoding="async"
     />
-    <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent"></div>
-    <div className="absolute inset-0 flex items-center justify-center p-8">
-      <div className="relative w-full max-w-xs flex items-center justify-center">
-        <div className="absolute -top-10 -left-4 p-2.5 bg-white rounded-xl shadow-md border border-blue-100 animate-bounce duration-[3000ms]">
-          <GraduationCap className="w-5 h-5 text-blue-500" />
+    
+    {/* Camada suave apenas para garantir legibilidade perfeita sem escurecer a foto */}
+    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/15 pointer-events-none"></div>
+
+    {/* Ícone Top-Left: Educação */}
+    <div className="absolute top-4 left-4 p-2.5 bg-white/95 backdrop-blur-md rounded-2xl shadow-lg border border-white/80 transition-all hover:scale-110">
+      <GraduationCap className="w-5 h-5 text-[#2563EB]" />
+    </div>
+
+    {/* Ícone Top-Right: Equipamentos Públicos / Rede */}
+    <div className="absolute top-4 right-4 p-2.5 bg-white/95 backdrop-blur-md rounded-2xl shadow-lg border border-white/80 transition-all hover:scale-110">
+      <Building2 className="w-5 h-5 text-amber-500" />
+    </div>
+
+    {/* Ícone Bottom-Right: Cuidado / Saúde / Proteção */}
+    <div className="absolute bottom-5 right-4 p-2.5 bg-white/95 backdrop-blur-md rounded-2xl shadow-lg border border-white/80 transition-all hover:scale-110">
+      <Heart className="w-5 h-5 text-emerald-500" />
+    </div>
+
+    {/* Bloco Central com Tipografia Clara e Destaque */}
+    <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10 pointer-events-none">
+      <div className="space-y-2 max-w-sm flex flex-col items-center animate-in fade-in zoom-in-95 duration-500">
+        <div className="inline-flex items-center gap-1.5 px-3.5 py-1 bg-amber-500 text-white rounded-full shadow-md text-[10px] font-black uppercase tracking-widest border border-amber-400">
+          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+          SIMCT HORTOLÂNDIA
         </div>
-        <div className="absolute -bottom-8 -right-2 p-2.5 bg-white rounded-xl shadow-md border border-emerald-100 animate-bounce duration-[4000ms]">
-          <Heart className="w-5 h-5 text-emerald-500" />
-        </div>
-        <div className="absolute top-2 -right-8 p-2 bg-white rounded-xl shadow-md border border-amber-100 animate-pulse">
-          <Building2 className="w-4 h-4 text-amber-500" />
-        </div>
-        <div className="flex flex-col items-center text-center space-y-3 z-10">
-          <div className="p-4 bg-white/90 backdrop-blur-md rounded-[2rem] shadow-xl border border-blue-50 flex items-center justify-center">
-            <Users className="w-10 h-10 text-[#2563EB]" />
-          </div>
-          <div className="space-y-1">
-            <h3 className="text-[12px] font-black text-[#111827] uppercase tracking-[0.3em] opacity-80">SIMCT Hortolândia</h3>
-            <p className="text-[10px] font-bold text-[#4B5563] uppercase tracking-wider">Rede de Garantia de Direitos</p>
-          </div>
-        </div>
+        <h2 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-[0.2em] drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)] leading-tight">
+          SIMCT HORTOLÂNDIA
+        </h2>
+        <p className="text-[10px] sm:text-[11px] font-black text-white uppercase tracking-widest drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)] max-w-xs">
+          REDE DE GARANTIA DE DIREITOS — CONSELHO TUTELAR
+        </p>
       </div>
     </div>
-    <div className="absolute bottom-4 left-6 flex items-center gap-2 px-3 py-1.5 bg-white/50 backdrop-blur-sm rounded-full border border-blue-100/50">
-      <ShieldCheck className="w-3.5 h-3.5 text-[#2563EB]" />
-      <span className="text-[9px] font-black text-[#2563EB] uppercase tracking-widest">Acesso Seguro</span>
+
+    {/* Badge Inferior Central: Acesso Seguro */}
+    <div className="absolute bottom-3.5 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-1.5 bg-white rounded-full shadow-xl border border-slate-100 z-20 transition-all hover:bg-slate-50">
+      <ShieldCheck className="w-4 h-4 text-[#2563EB]" />
+      <span className="text-[10px] font-black text-[#2563EB] uppercase tracking-widest whitespace-nowrap">Acesso Seguro</span>
     </div>
   </div>
 );
@@ -81,6 +97,8 @@ const App: React.FC = () => {
     logs: false,
     agenda: false
   });
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'connecting' | 'offline'>('connecting');
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
 
   const hasCleanedUpUsers = useRef(false);
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -166,7 +184,14 @@ const App: React.FC = () => {
   const [myDocsExpandedFolders, setMyDocsExpandedFolders] = useState<Record<string, boolean>>({});
   const [myDocsFocusedFolderKey, setMyDocsFocusedFolderKey] = useState<string | null>(null);
   const [myDocsIsGroupedByFamily, setMyDocsIsGroupedByFamily] = useState<boolean>(true);
-  const [users, setUsers] = useState<UserWithPassword[]>(INITIAL_USERS);
+  const getSafeInitialUsers = (): User[] => {
+    return INITIAL_USERS.map(u => {
+      const { senha: _s, ...safeUser } = u;
+      return { ...safeUser, status: safeUser.status || 'ATIVO', tentativas_login: 0 };
+    });
+  };
+
+  const [users, setUsers] = useState<User[]>(getSafeInitialUsers);
 
   const [selectedDocId, setSelectedDocId] = useState<string | null>(() => {
     try {
@@ -407,24 +432,41 @@ const App: React.FC = () => {
     ensureAuthenticated();
 
     // Listeners for real-time synchronization
-    const unsubDocs = syncCollection<Documento>('documents', (docs) => {
+    const unsubDocs = syncCollection<Documento>('documents', (docs, meta?: SyncMetadata) => {
       setAllDocuments(docs);
       setInitialSyncsDone(prev => ({ ...prev, documents: true }));
+      if (meta) {
+        setSyncStatus(meta.fromCache ? 'offline' : 'synced');
+        setLastSyncTime(meta.timestamp.toLocaleTimeString('pt-BR'));
+      }
     });
-    const unsubLogs = syncCollection<Log>('logs', (logs) => {
+    const unsubLogs = syncCollection<Log>('logs', (logs, meta?: SyncMetadata) => {
       setAllLogs(logs);
       setInitialSyncsDone(prev => ({ ...prev, logs: true }));
+      if (meta) {
+        setSyncStatus(meta.fromCache ? 'offline' : 'synced');
+        setLastSyncTime(meta.timestamp.toLocaleTimeString('pt-BR'));
+      }
     }, {
       orderByField: 'data_hora',
       orderDirection: 'desc',
       limitCount: 150
     });
-    const unsubAgenda = syncCollection<AgendaEntry>('agenda', (agenda) => {
+    const unsubAgenda = syncCollection<AgendaEntry>('agenda', (agenda, meta?: SyncMetadata) => {
       setAllAgenda(agenda);
       setInitialSyncsDone(prev => ({ ...prev, agenda: true }));
+      if (meta) {
+        setSyncStatus(meta.fromCache ? 'offline' : 'synced');
+        setLastSyncTime(meta.timestamp.toLocaleTimeString('pt-BR'));
+      }
     });
-    const unsubScaleExceptions = syncCollection<ScaleException>('scale_exceptions', setScaleExceptions);
-    const unsubChat = syncCollection<ChatMessage>('chat_messages', (serverMsgs) => {
+    const unsubScaleExceptions = syncCollection<ScaleException>('scale_exceptions', (exceptions, meta?: SyncMetadata) => {
+      setScaleExceptions(exceptions);
+      if (meta) {
+        setSyncStatus(meta.fromCache ? 'offline' : 'synced');
+      }
+    });
+    const unsubChat = syncCollection<ChatMessage>('chat_messages', (serverMsgs, meta?: SyncMetadata) => {
       setAllChatMessages(prev => {
         const map = new Map<string, ChatMessage>();
         prev.forEach(m => map.set(m.id, m));
@@ -446,19 +488,25 @@ const App: React.FC = () => {
         }
         return merged;
       });
+      if (meta) {
+        setSyncStatus(meta.fromCache ? 'offline' : 'synced');
+      }
     }, { limitCount: 300, orderByField: 'created_at', orderDirection: 'desc' });
-    const unsubUsers = syncCollection<UserWithPassword>('users', (storedUsers) => {
+    const unsubUsers = syncCollection<User>('users', (storedUsers, meta?: SyncMetadata) => {
       setUsers(prev => {
-        const baseUsers = INITIAL_USERS.map(u => ({ ...u, status: u.status || 'ATIVO', tentativas_login: 0, senha: u.senha || '123456' }));
+        const baseUsers = getSafeInitialUsers();
         
-        // Mesclar: INITIAL_USERS (preservando senha padrão se Firestore não tiver) + novos usuários do Firestore
-        const merged = [
+        // Mesclar: INITIAL_USERS + novos usuários do Firestore (removendo senha do estado de interface)
+        const merged: User[] = [
           ...baseUsers.map(bu => {
             const found = storedUsers.find(s => s.id === bu.id || (s.nome && s.nome.trim().toUpperCase() === bu.nome.trim().toUpperCase()));
-            const mergedUser: UserWithPassword = found ? { 
+            const safeFound = found ? (() => {
+              const { senha: _s, ...rest } = found as any;
+              return rest;
+            })() : null;
+            const mergedUser: User = safeFound ? { 
               ...bu, 
-              ...found, 
-              senha: (found.senha && found.senha.trim().length > 0) ? found.senha : (bu.senha || '123456') 
+              ...safeFound 
             } : bu;
             // Preserva aceite de termo do localStorage se já aceito previamente neste dispositivo
             const localAccepted = localStorage.getItem(`simct_term_accepted_${mergedUser.id}`) || 
@@ -473,19 +521,19 @@ const App: React.FC = () => {
             return mergedUser;
           }),
           ...storedUsers.filter(s => !baseUsers.some(bu => bu.id === s.id || (s.nome && bu.nome && s.nome.trim().toUpperCase() === bu.nome.trim().toUpperCase()))).map(s => {
-            const localAccepted = localStorage.getItem(`simct_term_accepted_${s.id}`) || 
-                                  (s.nome ? localStorage.getItem(`simct_term_accepted_${s.nome.toUpperCase()}`) : null);
-            const userWithPass: UserWithPassword = {
-              ...s,
-              senha: (s.senha && s.senha.trim().length > 0) ? s.senha : '123456'
+            const { senha: _s, ...safeS } = s as any;
+            const localAccepted = localStorage.getItem(`simct_term_accepted_${safeS.id}`) || 
+                                  (safeS.nome ? localStorage.getItem(`simct_term_accepted_${safeS.nome.toUpperCase()}`) : null);
+            const safeUser: User = {
+              ...safeS
             };
-            if (!userWithPass.termo_aceito_em && localAccepted) {
-              userWithPass.termo_aceito_em = localAccepted;
+            if (!safeUser.termo_aceito_em && localAccepted) {
+              safeUser.termo_aceito_em = localAccepted;
             }
-            if (userWithPass.perfil === 'SUPLENTE' && !userWithPass.substituicao_ativa) {
-              userWithPass.unidade_id = undefined;
+            if (safeUser.perfil === 'SUPLENTE' && !safeUser.substituicao_ativa) {
+              safeUser.unidade_id = undefined;
             }
-            return userWithPass;
+            return safeUser;
           })
         ];
         
@@ -577,8 +625,8 @@ const App: React.FC = () => {
         freshUser.status !== currentUser.status || 
         freshUser.cargo !== currentUser.cargo ||
         (!currentUser.is_suplente_active && freshUser.nome !== currentUser.nome) ||
-        (currentUser as any).senha !== (freshUser as any).senha ||
-        (!currentUser.termo_aceito_em && freshUser.termo_aceito_em);
+        (!currentUser.termo_aceito_em && freshUser.termo_aceito_em) ||
+        freshUser.trocar_senha_proximo_acesso !== currentUser.trocar_senha_proximo_acesso;
 
       if (hasCriticalChanges) {
         // Bloqueio Real-Time
@@ -600,8 +648,8 @@ const App: React.FC = () => {
           if (prev.status === freshUser.status && 
               prev.nome === freshUser.nome && 
               prev.cargo === freshUser.cargo &&
-              (prev as any).senha === (freshUser as any).senha &&
-              prev.termo_aceito_em === freshUser.termo_aceito_em) {
+              prev.termo_aceito_em === freshUser.termo_aceito_em &&
+              prev.trocar_senha_proximo_acesso === freshUser.trocar_senha_proximo_acesso) {
             return prev;
           }
           return {
@@ -614,7 +662,7 @@ const App: React.FC = () => {
         });
       }
     }
-  }, [users, currentUser?.id, currentUser?.status, currentUser?.nome, currentUser?.cargo, (currentUser as any)?.senha, currentUser?.termo_aceito_em]);
+  }, [users, currentUser?.id, currentUser?.status, currentUser?.nome, currentUser?.cargo, currentUser?.termo_aceito_em, currentUser?.trocar_senha_proximo_acesso]);
 
   const addLog = useCallback(async (docId: string, acao: string, tipo: LogType = 'SISTEMA', customUser?: User) => {
     const user = customUser || currentUser;
@@ -815,7 +863,7 @@ const App: React.FC = () => {
       id: docId,
       ciência_registrada_por: updatedScience,
       alertas_status_referencia: updatedAlerts
-    });
+    }, currentUser);
 
     addLog(docId, `CIÊNCIA REGISTRADA: Conselheiro de Referência [${currentUser.nome}] registrou ciência sobre movimentação de situação no prontuário.`, 'DOCUMENTO');
   };
@@ -1005,7 +1053,7 @@ const App: React.FC = () => {
         const existingDoc = allDocuments.find(d => d.id === savedId);
         const updatedDoc = { ...existingDoc, ...data, id: savedId };
         setAllDocuments(prev => prev.map(d => d.id === savedId ? updatedDoc : d));
-        await saveDocument(updatedDoc);
+        await saveDocument(updatedDoc, currentUser);
         addLog(savedId, `EDIÇÃO: Registro de prontuário atualizado administrativamente sem alterar histórico de status ou registros anteriores.`, 'DOCUMENTO');
         setEditingDocId(null);
         setSelectedDocId(savedId);
@@ -1030,10 +1078,28 @@ const App: React.FC = () => {
       const provName = users.find(u => u.id === newDoc.conselheiro_providencia_id)?.nome || 'N/A';
       const persistenceNote = newDoc.is_family_persistence ? ' [PERSISTÊNCIA FAMILIAR]' : '';
 
-      setAllDocuments(prev => [newDoc, ...prev]);
-      await saveDocument(newDoc);
-      addLog(id, `CRIAÇÃO: Novo procedimento registrado.${persistenceNote} REF: [${refName}] | IMEDIATA: [${provName}].`, 'DOCUMENTO');
-      setSelectedDocId(id);
+      let finalDoc = newDoc;
+      if (!data.is_manual_override) {
+        const savedResult = await saveDocumentWithAtomicRotation(newDoc, currentUser!.unidade_id || 1, currentUser!, users, userNameMap, scaleExceptions);
+        finalDoc = {
+          ...newDoc,
+          id: savedResult.id || id,
+          conselheiro_referencia_id: savedResult.conselheiro_referencia_id || newDoc.conselheiro_referencia_id,
+          conselheiro_referencia_nome: savedResult.conselheiro_referencia_nome || newDoc.conselheiro_referencia_nome,
+          conselheiro_providencia_id: savedResult.conselheiro_providencia_id || newDoc.conselheiro_providencia_id,
+          conselheiro_providencia_nome: savedResult.conselheiro_providencia_nome || newDoc.conselheiro_providencia_nome,
+          conselheiros_providencia_nomes: savedResult.conselheiros_providencia_nomes || newDoc.conselheiros_providencia_nomes
+        };
+      } else {
+        await saveDocument(newDoc, currentUser);
+        const refName = users.find(u => u.id === newDoc.conselheiro_referencia_id)?.nome || 'N/A';
+        const provName = users.find(u => u.id === newDoc.conselheiro_providencia_id)?.nome || 'N/A';
+        const persistenceNote = newDoc.is_family_persistence ? ' [PERSISTÊNCIA FAMILIAR]' : '';
+        addLog(id, `CRIAÇÃO: Novo procedimento registrado.${persistenceNote} REF: [${refName}] | IMEDIATA: [${provName}].`, 'DOCUMENTO');
+      }
+
+      setAllDocuments(prev => [finalDoc, ...prev.filter(d => d.id !== finalDoc.id)]);
+      setSelectedDocId(finalDoc.id);
       setActiveTab('dashboard');
       // Remove telas temporárias de cadastro do histórico
       setNavHistory(prev => prev.filter(h => h.activeTab !== 'register' && h.activeTab !== 'plantao'));
@@ -1056,7 +1122,7 @@ const App: React.FC = () => {
     
     if (prevStatus === latestStatus) {
       setAllDocuments(prev => prev.map(d => d.id === id ? { ...d, status: newStatus } : d));
-      await saveDocument({ ...docObj, id, status: newStatus });
+      await saveDocument({ ...docObj, id, status: newStatus }, currentUser);
       return;
     }
 
@@ -1094,7 +1160,7 @@ const App: React.FC = () => {
       id, 
       status: newStatus,
       alertas_status_referencia: updatedAlerts
-    });
+    }, currentUser);
   };
 
   const handleDeleteDocument = useCallback(async (id: string, source: string = 'Painel Geral') => {
@@ -1127,6 +1193,7 @@ const App: React.FC = () => {
       <UserManagementPanel 
         users={filteredUsers} 
         documents={allDocuments}
+        currentUser={currentUser}
         onUpdateUser={async (id, upd) => {
           const target = users.find(u => u.id === id);
           if (!target) return;
@@ -1158,12 +1225,12 @@ const App: React.FC = () => {
                 notificacoes_trio: updatedNotificacaoTrio,
                 conselheiro_referencia_id: doc.conselheiro_referencia_id === id ? id : doc.conselheiro_referencia_id,
                 conselheiro_providencia_id: doc.conselheiro_providencia_id === id ? id : doc.conselheiro_providencia_id
-              });
+              }, currentUser);
             }
 
             const agendaToUpdate = allAgenda.filter(a => a.conselheiro_id === id);
             for (const evt of agendaToUpdate) {
-              await saveAgenda({ id: evt.id, conselheiro_id: id });
+              await saveAgenda({ id: evt.id, conselheiro_id: id }, currentUser);
             }
             
             addLog('SISTEMA', `RH: Nome do usuário alterado de ${oldName} para ${newName}.`, 'SEGURANÇA');
@@ -1242,7 +1309,7 @@ const App: React.FC = () => {
                     }
                   });
 
-                  await saveDocument(updatedDoc);
+                  await saveDocument(updatedDoc, currentUser);
                 }
 
                 // Agenda
@@ -1261,7 +1328,7 @@ const App: React.FC = () => {
                 console.log(`[RH] Encontrados ${agendaToMigrate.length} eventos de agenda criados pelo suplente.`);
 
                 for (const evt of agendaToMigrate) {
-                  await saveAgenda({ ...evt, conselheiro_id: conselheiroId });
+                  await saveAgenda({ ...evt, conselheiro_id: conselheiroId }, currentUser);
                 }
 
                 // Forçar atualização local dos estados dos documentos
@@ -1378,7 +1445,7 @@ const App: React.FC = () => {
                 );
               }
 
-              await saveDocument(updatedDoc);
+              await saveDocument(updatedDoc, currentUser);
             }
 
             const currentAgenda = await new Promise<any[]>(resolve => {
@@ -1392,7 +1459,7 @@ const App: React.FC = () => {
             console.log(`[RH] Encontrados ${agendaToMigrate.length} eventos de agenda.`);
 
             for (const evt of agendaToMigrate) {
-              await saveAgenda({ ...evt, conselheiro_id: successorId });
+              await saveAgenda({ ...evt, conselheiro_id: successorId }, currentUser);
               console.log(`[RH] Evento de agenda ${evt.id} migrado.`);
             }
 
@@ -1442,9 +1509,10 @@ const App: React.FC = () => {
         }}
         onAddUser={async (newUser) => {
           addLog('SISTEMA', `RH: NOVO USUÁRIO ADICIONADO: ${newUser.nome}.`, 'SEGURANÇA');
-          await saveUser(newUser);
+          await saveUser({ ...newUser, trocar_senha_proximo_acesso: true }, currentUser);
+          const { senha: _s, ...safeNewUser } = newUser as any;
           // Adiciona localmente para reconhecimento instantâneo
-          setUsers(prev => [...prev.filter(u => u.id !== newUser.id), newUser]);
+          setUsers(prev => [...prev.filter(u => u.id !== newUser.id), { ...safeNewUser, trocar_senha_proximo_acesso: true }]);
         }}
         onResetDocuments={async (unidadeId?: number) => {
           await deleteAllDocuments(unidadeId);
@@ -1455,7 +1523,7 @@ const App: React.FC = () => {
         }}
         onRestoreDocuments={async (restoredDocs: any[]) => {
           for (const doc of restoredDocs) {
-            await saveDocument(doc);
+            await saveDocument(doc, currentUser);
           }
           addLog('SISTEMA', `RH: RESTAURAÇÃO DE BACKUP - ${restoredDocs.length} procedimentos restaurados com sucesso.`, 'SEGURANÇA');
         }}
@@ -1494,7 +1562,7 @@ const App: React.FC = () => {
     const handleToggleGuardarPasta = async (docIds: string[], guardar: boolean) => {
       try {
         for (const id of docIds) {
-          await saveDocument({ id, is_pasta_guardada: guardar });
+          await saveDocument({ id, is_pasta_guardada: guardar }, currentUser);
         }
         setAllDocuments(prev => prev.map(d => docIds.includes(d.id) ? { ...d, is_pasta_guardada: guardar } : d));
         const logDesc = guardar 
@@ -1514,7 +1582,7 @@ const App: React.FC = () => {
       return <DocumentView document={doc} allDocuments={documents} users={users} agenda={agenda} files={[]} logs={logs.filter(l => l.documento_id === selectedDocId)} currentUser={currentUser} isReadOnly={isAdministrative} forceEdit={forceDirectEdit} onBack={goBack} onEdit={() => navigateTo('edit', { editId: doc.id })} onDelete={async (id) => { 
           await handleDeleteDocument(id, 'Visualizador de Documento');
           goBack();
-      }} onUpdateStatus={handleUpdateStatus} onUpdateDocument={async (id, fields) => { const existingDoc = allDocuments.find(d => d.id === id); setAllDocuments(prev => prev.map(d => d.id === id ? { ...d, ...fields } : d)); await saveDocument({ ...existingDoc, ...fields, id }); }} onAddLog={addLog} onScience={handleScience} nameMap={userNameMap} scaleExceptions={scaleExceptions} />;
+      }} onUpdateStatus={handleUpdateStatus} onUpdateDocument={async (id, fields) => { const existingDoc = allDocuments.find(d => d.id === id); setAllDocuments(prev => prev.map(d => d.id === id ? { ...d, ...fields } : d)); await saveDocument({ ...existingDoc, ...fields, id }, currentUser); }} onAddLog={addLog} onScience={handleScience} nameMap={userNameMap} scaleExceptions={scaleExceptions} />;
     }
 
     if (activeTab === 'logs' && !(isSuperAdmin || isAdministrative)) {
@@ -1692,11 +1760,11 @@ const App: React.FC = () => {
         );
       
       case 'monitoring': return <MonitoringDashboard documents={documents} currentUser={currentUser} effectiveUserId={currentUser.id} onSelectDoc={handleOpenDocument} onAddLog={addLog} onUpdateMonitoring={async (id, m) => { 
-          await saveDocument({ id, monitoramento: m }); 
+          await saveDocument({ id, monitoramento: m }, currentUser); 
       }} onRemoveMonitoring={async (id) => {
           await handleDeleteDocument(id, 'Monitoramento');
       }} isReadOnly={isAdministrative && currentUser?.nome !== 'LEANDRO'} onSaveDocument={async (docData) => {
-          await saveDocument(docData);
+          await saveDocument(docData, currentUser);
       }} />;
       case 'agenda': return <AgendaView agenda={agenda} users={filteredUsers} setAgenda={async (items) => {
           // Find the new entry if it's an array set call
@@ -1705,7 +1773,7 @@ const App: React.FC = () => {
             // Typically AgendaView should calling saveAgenda directly or items should be the whole list
             // If it's the whole list, we might need to diff, but for simplicity:
             const lastItem = items[items.length - 1];
-            if (lastItem) await saveAgenda(lastItem);
+            if (lastItem) await saveAgenda(lastItem, currentUser);
           }
       }} allDocuments={documents} currentUser={currentUser} effectiveUserId={currentUser.id} isReadOnly={currentUser.nome === 'LUDIMILA'} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} />;
       case 'search': return <AdvancedSearch documents={documents} users={filteredUsers} currentUser={currentUser} onSelectDoc={handleOpenDocument} />;
@@ -1777,33 +1845,17 @@ const App: React.FC = () => {
               return;
             }
 
-            const userList = (users && users.length > 0) ? users : INITIAL_USERS;
-            
-            // Busca flexível: nome exato, ID exato, início do nome, ou nome parcial
-            let user = userList.find(u => (u.nome || '').trim().toUpperCase() === userInput || (u.id || '').trim().toUpperCase() === userInput);
-            if (!user) {
-              user = userList.find(u => (u.nome || '').trim().toUpperCase().startsWith(userInput));
-            }
-            if (!user) {
-              user = userList.find(u => (u.nome || '').trim().toUpperCase().includes(userInput));
-            }
-            if (!user && (userInput === 'LEANDRO' || userInput === 'CONS1')) {
-              user = userList.find(u => (u.nome || '').toUpperCase().includes('LEANDRO') || u.id === 'cons1') || INITIAL_USERS.find(u => u.nome === 'LEANDRO');
-            }
-            
-            if (!user) {
-              setLoginError("Erro: Usuário não cadastrado.");
+            const authResult = await verifyUserCredentials(userInput, inputPass);
+
+            if (!authResult.success) {
+              setLoginError(authResult.error || "Erro: Senha incorreta.");
+              if (authResult.user) {
+                addLog('SISTEMA', `FALHA DE SEGURANÇA: Tentativa de login com senha incorreta para o usuário [${authResult.user.nome}].`, 'SEGURANÇA', authResult.user);
+              }
               return;
             }
-            
-            const expectedPass = (user.senha || '123456').trim();
-            const isMatch = (inputPass === expectedPass) || (inputPass === '123456') || (inputPass === '123');
 
-            if (!isMatch) { 
-              setLoginError("Erro: Senha incorreta."); 
-              addLog('SISTEMA', `FALHA DE SEGURANÇA: Tentativa de login com senha incorreta para o usuário [${user.nome}].`, 'SEGURANÇA', user);
-              return; 
-            } 
+            const user = authResult.user!;
             
             const isSuperAdminUser = (user.nome || '').toUpperCase().includes('LEANDRO') || 
                                      (user.nome || '').toUpperCase().includes('LUDIMILA') || 
@@ -1849,9 +1901,9 @@ const App: React.FC = () => {
             }
             
             // Se for um Suplente em substituição ativa, assume a identidade mas mantém rastro
-            let sessionUser = { ...user };
+            let sessionUser: User = { ...user };
             if (user.perfil === 'SUPLENTE' && user.substituicao_ativa && user.substituindo_id) {
-              const substituted = userList.find(u => u.id === user.substituindo_id);
+              const substituted = users.find(u => u.id === user.substituindo_id);
               if (substituted) {
                 // Força o acesso e assume a identidade de forma incondicional se a substituição estiver ativa
                 sessionUser = {
@@ -1968,6 +2020,20 @@ const App: React.FC = () => {
         </div>
       </aside>
       <main className={`flex-1 ${isSidebarOpen ? 'lg:ml-80' : 'lg:ml-24'} ml-0 transition-all min-h-screen print:ml-0 overflow-x-hidden w-full`}>
+        {currentUser.trocar_senha_proximo_acesso && (
+          <div className="bg-amber-500 text-white px-4 sm:px-8 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-black uppercase tracking-wider shadow-sm print:hidden">
+            <div className="flex items-center gap-2.5 text-center sm:text-left">
+              <TriangleAlert className="w-5 h-5 text-amber-100 shrink-0" />
+              <span>Sua senha foi redefinida administrativamente. Por segurança, cadastre uma nova senha pessoal agora.</span>
+            </div>
+            <button 
+              onClick={() => handleNavigate('settings')} 
+              className="px-4 py-2 bg-white text-amber-900 rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-amber-50 transition-all cursor-pointer shadow-sm shrink-0"
+            >
+              Alterar Senha Agora
+            </button>
+          </div>
+        )}
         <div className="p-3 sm:p-6 lg:p-8 print:p-0">
           <header className="flex items-center justify-between mb-6 lg:mb-12 print:hidden gap-4">
             <div className="flex items-center gap-4 flex-1 min-w-0">
@@ -2009,6 +2075,30 @@ const App: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              {/* Indicador Visual de Sincronização em Tempo Real */}
+              <div 
+                className={`hidden md:flex items-center gap-2 px-3 py-2 rounded-2xl border text-[11px] font-bold tracking-wider uppercase transition-all shadow-xs ${
+                  syncStatus === 'synced'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : syncStatus === 'offline'
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : 'bg-blue-50 text-blue-700 border-blue-200 animate-pulse'
+                }`}
+                title={lastSyncTime ? `Sincronização em tempo real ativa. Última atualização: ${lastSyncTime}` : 'Conectando ao Firestore em tempo real...'}
+              >
+                <span className="relative flex h-2 w-2">
+                  {syncStatus === 'synced' && (
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  )}
+                  <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                    syncStatus === 'synced' ? 'bg-emerald-500' : syncStatus === 'offline' ? 'bg-amber-500' : 'bg-blue-500'
+                  }`}></span>
+                </span>
+                <span className="whitespace-nowrap">
+                  {syncStatus === 'synced' ? 'Tempo Real' : syncStatus === 'offline' ? 'Cache Local' : 'Conectando...'}
+                </span>
+              </div>
+
               <button 
                 onClick={handleRefresh} 
                 className="flex items-center gap-2 p-3 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm hover:bg-slate-50 text-[#2563EB] font-bold text-[12px] uppercase shrink-0 transition-all hover:border-[#2563EB]/40 active:scale-95 cursor-pointer"

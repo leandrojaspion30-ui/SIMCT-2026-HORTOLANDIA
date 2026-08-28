@@ -195,11 +195,11 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, users, setAgenda, allDo
     }
 
     if (editingId) {
-      await saveAgenda({ ...newEntry, id: editingId, unidade_id: currentUser.unidade_id });
+      await saveAgenda({ ...newEntry, id: editingId, unidade_id: currentUser.unidade_id }, currentUser);
       onAddLog(`AGENDA: Compromisso atualizado: ${newEntry.descricao}.`);
     } else {
       const entry: AgendaEntry = { ...newEntry, id: `agenda-${Date.now()}`, unidade_id: currentUser.unidade_id } as AgendaEntry;
-      await saveAgenda(entry);
+      await saveAgenda(entry, currentUser);
       
       const assignedUser = users.find(u => u.id === entry.conselheiro_id);
       onAddLog(`AGENDA: Novo compromisso agendado para ${assignedUser?.nome}: ${entry.descricao} em ${entry.data} às ${entry.hora}.`);
@@ -267,8 +267,8 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, users, setAgenda, allDo
     
     setDeletingId(itemToDelete.id);
     try {
-      await deleteAgenda(itemToDelete.id);
-      onAddLog(`AGENDA: Compromisso removido: ${itemToDelete.desc}.`);
+      await deleteAgenda(itemToDelete.id, currentUser);
+      onAddLog(`AGENDA: Compromisso "${itemToDelete.desc}" removido da agenda ativa (registro preservado para fins estatísticos).`);
       setShowConfirmDelete(false);
     } catch (error) {
       console.error("Critical Delete Error:", error);
@@ -319,7 +319,7 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, users, setAgenda, allDo
         onAddLog(`AGENDA: Família não compareceu ao compromisso: ${entry.tipo} - ${entry.descricao}.`);
 
         if (choice) {
-          await saveAgenda({ ...entry, id, status: 'REAGENDADO' });
+          await saveAgenda({ ...entry, id, status: 'REAGENDADO' }, currentUser);
           setNewEntry({
             ...entry,
             tipo: (nextTipo || entry.tipo) as any,
@@ -331,7 +331,7 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, users, setAgenda, allDo
         }
       }
 
-      await saveAgenda({ ...entry, id, status: outcome });
+      await saveAgenda({ ...entry, id, status: outcome }, currentUser);
       onAddLog(`AGENDA: Status do compromisso "${entry.descricao}" alterado para ${outcome}.`);
       
     } catch (error) {
@@ -931,8 +931,11 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, users, setAgenda, allDo
             <div>
               <h3 className="text-lg font-black uppercase text-slate-800">Excluir Compromisso?</h3>
               <p className="text-xs font-bold text-slate-400 uppercase mt-1">
-                Remover permanentemente o compromisso:<br/> 
+                Remover da agenda ativa:<br/> 
                 <span className="text-rose-600">"{itemToDelete?.desc}"</span>?
+              </p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase mt-2 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                O evento sairá da grade visual, mas será contabilizado no relatório estatístico institucional.
               </p>
             </div>
             <div className="flex flex-col gap-2.5">
@@ -1090,12 +1093,29 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, users, setAgenda, allDo
                  />
                </div>
 
-               <button 
-                type="submit" 
-                className="w-full py-4 bg-blue-600 text-white rounded-xl font-black uppercase text-xs tracking-wider shadow-md hover:bg-blue-700 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-               >
-                  <Save className="w-5 h-5" /> Salvar Agendamento
-               </button>
+               <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+                 {editingId && (
+                   <button 
+                    type="button" 
+                    onClick={() => {
+                      const desc = newEntry.descricao || 'Compromisso';
+                      const targetId = editingId;
+                      setShowAddModal(false);
+                      setEditingId(null);
+                      handleDelete(targetId, desc);
+                    }}
+                    className="w-full sm:w-auto py-4 px-6 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl font-black uppercase text-xs tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shrink-0"
+                   >
+                     <Trash2 className="w-4 h-4" /> Excluir Compromisso
+                   </button>
+                 )}
+                 <button 
+                  type="submit" 
+                  className="flex-1 w-full py-4 bg-blue-600 text-white rounded-xl font-black uppercase text-xs tracking-wider shadow-md hover:bg-blue-700 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                 >
+                    <Save className="w-5 h-5" /> {editingId ? 'Salvar Alterações' : 'Salvar Agendamento'}
+                 </button>
+               </div>
             </form>
           </div>
         </div>

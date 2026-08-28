@@ -301,6 +301,205 @@ export const CANAIS_COMUNICADO_LIST = [
   'E-MAIL INSTITUCIONAL', 'RELATÓRIO', 'OFÍCIO', 'OFÍCIO MP', 'OFÍCIO JUDICIÁRIO', 'DISQUE 100', 'SIPIA'
 ].sort();
 
+/**
+ * Normaliza o nome do canal para fins de chave de rodízio e categorização institucional.
+ * Mantém 'OFÍCIO', 'OFÍCIO MP' e 'OFÍCIO JUDICIÁRIO' como 3 canais estritamente separados.
+ */
+export const normalizeCanalName = (canal: string | undefined | null): string => {
+  if (!canal) return 'OUTROS';
+  const c = canal.trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  
+  if (c.includes('JUDICIARIO') || c.includes('JUDICIÁRIO')) return 'OFÍCIO JUDICIÁRIO';
+  if (c.includes('MP') || c.includes('MINISTERIO PUBLICO') || c.includes('MINISTÉRIO PÚBLICO')) return 'OFÍCIO MP';
+  if (c.includes('OFICIO') || c.includes('OFÍCIO')) return 'OFÍCIO';
+  if (c.includes('PRESENCIAL')) return 'ATENDIMENTO PRESENCIAL';
+  if (c.includes('PLANTAO') || c.includes('PLANTÃO')) return 'TELEFONE DE PLANTÃO';
+  if (c.includes('TELEFONICO') || c.includes('TELEFÔNICO') || c.includes('TELEFONE')) return 'ATENDIMENTO TELEFÔNICO';
+  if (c.includes('EMAIL') || c.includes('E-MAIL')) return 'E-MAIL INSTITUCIONAL';
+  if (c.includes('RELATORIO') || c.includes('RELATÓRIO')) return 'RELATÓRIO';
+  if (c.includes('DISQUE 100')) return 'DISQUE 100';
+  if (c.includes('SIPIA')) return 'SIPIA';
+  return canal.trim().toUpperCase();
+};
+
+/**
+ * Identifica se um canal participa do rodízio sequencial de casos novos.
+ * REGRA SIMCT: Somente 'TELEFONE DE PLANTÃO' não deve ser contabilizado no rodízio.
+ */
+export const isRotationChannel = (canal: string | undefined | null): boolean => {
+  if (!canal) return true;
+  const norm = normalizeCanalName(canal);
+  return norm !== 'TELEFONE DE PLANTÃO';
+};
+
+/**
+ * Retorna os 5 conselheiros ativos para o ciclo de rodízio da unidade,
+ * respeitando a ordem oficial de cadeiras e substituindo os conselheiros titulares
+ * afastados pelos seus respectivos suplentes em substituição ativa.
+ */
+export const getActiveRotationCounselors = (
+  unidadeId: number,
+  allUsers: any[],
+  nameMap?: Record<string, string>
+): any[] => {
+  const baseOrder = CONSELHEIROS_ALFABETICO_POR_UNIDADE[unidadeId] || [];
+
+  // Encontra titulares ativos da unidade
+  const titulares = allUsers.filter(u => 
+    (u.unidade_id || 1) === unidadeId && 
+    u.status === 'ATIVO' && 
+    u.perfil === 'CONSELHEIRO'
+  );
+
+  // Encontra suplentes em substituição ativa vinculados a esta unidade ou a um titular desta unidade
+  const suplentesAtivos = allUsers.filter(u => 
+    u.status === 'ATIVO' && 
+    u.perfil === 'SUPLENTE' && 
+    (u.substituicao_ativa || u.is_suplente_active) && 
+    ((u.unidade_id || 1) === unidadeId || (u.substituindo_id && allUsers.some(t => t.id === u.substituindo_id && (t.unidade_id || 1) === unidadeId)))
+  );
+
+  const result: any[] = [];
+
+  // 1. Itera pela ordem das 5 cadeiras base da unidade
+  baseOrder.forEach(baseName => {
+    const baseUpper = baseName.toUpperCase();
+    
+    // Verifica se há titular com esse nome
+    const titular = titulares.find(t => isSameCounselorName(t.nome, baseUpper));
+    
+    // Verifica se há suplente substituindo esse titular
+    const suplente = suplentesAtivos.find(s => {
+      if (s.substituindo_id && titular && s.substituindo_id === titular.id) return true;
+      if (nameMap && titular && nameMap[titular.nome.toUpperCase()] === s.nome.toUpperCase()) return true;
+      if (nameMap && nameMap[baseUpper] === s.nome.toUpperCase()) return true;
+      return false;
+    });
+
+    if (suplente) {
+      // O suplente entra exatamente no lugar da cadeira do titular que ele está substituindo
+      result.push(suplente);
+    } else if (titular && !titular.substituicao_ativa) {
+      // O titular entra se não estiver sob substituição
+      result.push(titular);
+    }
+  });
+
+  // 2. Se houver algum titular ativo que não estava no baseOrder e não está sob substituição
+  titulares.forEach(t => {
+    if (!t.substituicao_ativa && !result.some(r => r.id === t.id)) {
+      result.push(t);
+    }
+  });
+
+  // 3. Se houver algum suplente ativo não alocado no loop base
+  suplentesAtivos.forEach(s => {
+    if (!result.some(r => r.id === s.id)) {
+      result.push(s);
+    }
+  });
+
+  // Fallback seguro se não encontrar ninguém pela ordem base
+  if (result.length === 0) {
+    return allUsers
+      .filter(u => (u.unidade_id || 1) === unidadeId && u.status === 'ATIVO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && (u.perfil !== 'CONSELHEIRO' || !u.substituicao_ativa))
+      .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+  }
+
+  return result;
+};
+
+/**
+ * Obtém o próximo conselheiro na fila alfabética para um canal específico,
+ * considerando apenas casos novos reais (sem histórico familiar prévio, sem notificação, sem override manual).
+ */
+export const getChannelNextCounselor = (
+  unidadeId: number,
+  canal: string | undefined | null,
+  documents: any[],
+  activeCounselors: any[],
+  nameMap?: Record<string, string>
+): {
+  nextCounselor: any;
+  lastAssignedName: string | null;
+  totalNewInChannel: number;
+  isRotation: boolean;
+  channelName: string;
+} => {
+  const normCanal = normalizeCanalName(canal);
+  const isRotation = isRotationChannel(canal);
+
+  // Obtém os conselheiros ativos no rodízio (com suplentes assumindo as cadeiras dos titulares substituídos)
+  const sortedCounselors = getActiveRotationCounselors(unidadeId, activeCounselors, nameMap);
+
+  if (sortedCounselors.length === 0) {
+    return {
+      nextCounselor: activeCounselors[0] || null,
+      lastAssignedName: null,
+      totalNewInChannel: 0,
+      isRotation,
+      channelName: normCanal
+    };
+  }
+
+  if (!isRotation) {
+    return {
+      nextCounselor: sortedCounselors[0],
+      lastAssignedName: null,
+      totalNewInChannel: 0,
+      isRotation: false,
+      channelName: 'TELEFONE DE PLANTÃO'
+    };
+  }
+
+  // Filtra casos novos do mesmo canal e unidade
+  // Exclui casos com vínculo de família prévio, notificação, manual override ou anulação de rodízio
+  const channelDocs = documents
+    .filter(d => {
+      if ((d.unidade_id || 1) !== unidadeId) return false;
+      if (normalizeCanalName(d.canal_comunicado) !== normCanal) return false;
+      if (d.is_family_persistence) return false;
+      if (d.is_manual_override || d.is_manual_reference) return false;
+      if (d.notificacao) return false;
+      if (d.anulado_rodizio) return false;
+      if (d.distribuicao_automatica === false) return false;
+      return Boolean(d.conselheiro_referencia_id);
+    })
+    .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
+
+  const totalNewInChannel = channelDocs.length;
+  const lastDoc = channelDocs[0];
+
+  let lastAssignedName: string | null = null;
+  if (lastDoc) {
+    const foundUser = activeCounselors.find(u => u.id === lastDoc.conselheiro_referencia_id);
+    const rawName = foundUser?.nome?.toUpperCase() || lastDoc.conselheiro_referencia_nome?.toUpperCase() || '';
+    lastAssignedName = (rawName && nameMap && nameMap[rawName]) ? nameMap[rawName] : rawName;
+  }
+
+  if (!lastAssignedName) {
+    return {
+      nextCounselor: sortedCounselors[0],
+      lastAssignedName: null,
+      totalNewInChannel,
+      isRotation: true,
+      channelName: normCanal
+    };
+  }
+
+  const lastIndex = sortedCounselors.findIndex(c => isSameCounselorName(c.nome, lastAssignedName));
+  const nextIndex = sortedCounselors.length > 0 ? (lastIndex + 1) % sortedCounselors.length : 0;
+  const nextCounselor = sortedCounselors[nextIndex];
+
+  return {
+    nextCounselor,
+    lastAssignedName,
+    totalNewInChannel,
+    isRotation: true,
+    channelName: normCanal
+  };
+};
+
 export const classifyTurno = (dateStr: string, timeStr: string): 'COMERCIAL' | 'PLANTAO' => {
   if (!dateStr || !timeStr) return 'COMERCIAL';
   const [hours] = timeStr.split(':').map(Number);

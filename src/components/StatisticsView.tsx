@@ -356,14 +356,14 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
     };
 
     filteredAgenda.forEach(item => {
-      // Se excluído, só conta para estatística se tiver sido confirmado (Compareceu)
-      if (item.excluido && item.status !== 'COMPARECEU') return;
-
-      stats.agendaPorTipo[item.tipo] = (stats.agendaPorTipo[item.tipo] || 0) + 1;
-      
-      // Categorização baseada no AGENDA_TIPOS
-      const category = AGENDA_TIPOS.find(cat => cat.options.includes(item.tipo))?.category || 'OUTROS';
-      stats.agendaPorCategoria[category] = (stats.agendaPorCategoria[category] || 0) + 1;
+      // Contabiliza integralmente todos os compromissos cadastrados no período (inclusive excluídos da agenda ativa)
+      if (item.tipo) {
+        stats.agendaPorTipo[item.tipo] = (stats.agendaPorTipo[item.tipo] || 0) + 1;
+        
+        // Categorização baseada no AGENDA_TIPOS
+        const category = AGENDA_TIPOS.find(cat => cat.options.includes(item.tipo))?.category || 'OUTROS';
+        stats.agendaPorCategoria[category] = (stats.agendaPorCategoria[category] || 0) + 1;
+      }
     });
 
     filteredDocuments.forEach(doc => {
@@ -976,7 +976,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       .filter(u => u.status !== 'EXCLUIDO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && (isGlobal ? (selectedUnidadeFilter === 'all' ? true : (u.unidade_id || 1) === selectedUnidadeFilter) : (u.unidade_id || 1) === (currentUser.unidade_id || 1)))
       .map(u => {
         const myDocs = filteredDocuments.filter(d => d.conselheiro_referencia_id === u.id || (u.is_suplente_active && d.conselheiro_referencia_id === u.real_user_id));
-        const myAgenda = filteredAgenda.filter(a => (a.conselheiro_id === u.id || (u.is_suplente_active && a.conselheiro_id === u.real_user_id)) && (!a.excluido || a.status === 'COMPARECEU'));
+        const myAgenda = filteredAgenda.filter(a => a.conselheiro_id === u.id || (u.is_suplente_active && a.conselheiro_id === u.real_user_id));
         
         return {
           id: u.id,
