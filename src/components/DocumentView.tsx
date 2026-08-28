@@ -105,6 +105,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const [origemInstituicao, setOrigemInstituicao] = useState<string>(initialOrigemParsed.inst);
   const [canalComunicado, setCanalComunicado] = useState<string>(doc.canal_comunicado || '');
   const [customOrigem, setCustomOrigem] = useState<string>('');
+  const [quemComunicouClassificado, setQuemComunicouClassificado] = useState<boolean>(Boolean(doc.quem_comunicou_classificado));
 
   const unitOrigensHierarquicas = useMemo(() => {
     return getOrigensHierarquicasByUnidade(doc.unidade_id || 1);
@@ -119,7 +120,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     return base;
   }, [unitOrigensHierarquicas, origemCategoria]);
 
-  const handleUpdateOrigem = (newCat: string, newInst: string, newCanal: string) => {
+  const handleUpdateOrigem = (newCat: string, newInst: string, newCanal: string, isManualAction: boolean = true) => {
     let fullOrigem = '';
     if (newCat === 'SOCIEDADE') {
       fullOrigem = 'SOCIEDADE';
@@ -128,10 +129,13 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     } else {
       fullOrigem = newInst || newCat || '';
     }
+    const isClassificado = Boolean(newCat || newInst) && isManualAction;
+    setQuemComunicouClassificado(isClassificado);
     onUpdateDocument(doc.id, {
       origem_categoria: newCat,
       origem: fullOrigem,
-      canal_comunicado: newCanal
+      canal_comunicado: newCanal,
+      quem_comunicou_classificado: isClassificado
     });
     onAddLog(doc.id, `IDENTIFICAÇÃO: "Quem Comunicou a Violação" atualizado para [${fullOrigem || 'N/A'}] via [${newCanal || 'N/A'}] por ${currentUser.nome}.`, 'DOCUMENTO');
   };
@@ -163,7 +167,8 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     setOrigemCategoria(parsed.cat);
     setOrigemInstituicao(parsed.inst);
     setCanalComunicado(doc.canal_comunicado || '');
-  }, [doc.id, doc.informacoes_documento, doc.numero_comunicado_violacao, doc.numero_sipia, doc.local_ocorrencia, doc.origem, doc.origem_categoria, doc.canal_comunicado]);
+    setQuemComunicouClassificado(Boolean(doc.quem_comunicou_classificado));
+  }, [doc.id, doc.informacoes_documento, doc.numero_comunicado_violacao, doc.numero_sipia, doc.local_ocorrencia, doc.origem, doc.origem_categoria, doc.canal_comunicado, doc.quem_comunicou_classificado]);
 
   const isUserInTrio = (nome: string) => {
     if (!nome) return false;
@@ -1137,7 +1142,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                   color="bg-sky-600" 
                   active={activeSection} 
                   onToggle={setActiveSection} 
-                  saved={Boolean(origemCategoria || (origemInstituicao && origemInstituicao !== 'NÃO INFORMADO'))}
+                  saved={Boolean(quemComunicouClassificado || doc.quem_comunicou_classificado)}
                 >
                   <div className="space-y-4">
                     <div className="flex items-center justify-between pb-1 border-b border-sky-100/60">
@@ -1154,7 +1159,8 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                             setOrigemInstituicao('');
                             setCanalComunicado('');
                             setCustomOrigem('');
-                            handleUpdateOrigem('', '', '');
+                            setQuemComunicouClassificado(false);
+                            handleUpdateOrigem('', '', '', false);
                           }}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-xs active:scale-95"
                           title="Resetar e limpar todos os campos"

@@ -222,6 +222,7 @@ export interface Documento {
   is_manual_providencia?: boolean;
   providencia_imediata_manual?: string;
   local_ocorrencia?: string;
+  quem_comunicou_classificado?: boolean;
   alertas_status_referencia?: AlertaStatusReferencia[];
   is_pasta_guardada?: boolean;
   createdAt?: any;
