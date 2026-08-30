@@ -1062,6 +1062,7 @@ const App: React.FC = () => {
         return;
       }
       const id = `doc-${Math.random().toString(36).substr(2, 9)}`;
+      const isAutoDistribution = !data.is_manual_override && !data.is_prontuario_fisico;
       const newDoc: Documento = { 
         ...data, 
         id, 
@@ -1070,16 +1071,17 @@ const App: React.FC = () => {
         status: data.status || ['AGUARDANDO_ANALISE'], 
         criado_por_id: currentUser!.id, 
         ciência_registrada_por: [], 
-        distribuicao_automatica: !data.is_manual_override 
+        distribuicao_automatica: isAutoDistribution 
       };
       
       // USAR LISTA VIVA DE USUÁRIOS PARA O LOG
       const refName = users.find(u => u.id === newDoc.conselheiro_referencia_id)?.nome || 'N/A';
       const provName = users.find(u => u.id === newDoc.conselheiro_providencia_id)?.nome || 'N/A';
       const persistenceNote = newDoc.is_family_persistence ? ' [PERSISTÊNCIA FAMILIAR]' : '';
+      const fisicoNote = newDoc.is_prontuario_fisico ? ' [PRONTUÁRIO FÍSICO]' : '';
 
       let finalDoc = newDoc;
-      if (!data.is_manual_override) {
+      if (isAutoDistribution) {
         const savedResult = await saveDocumentWithAtomicRotation(newDoc, currentUser!.unidade_id || 1, currentUser!, users, userNameMap, scaleExceptions);
         finalDoc = {
           ...newDoc,
@@ -1095,7 +1097,8 @@ const App: React.FC = () => {
         const refName = users.find(u => u.id === newDoc.conselheiro_referencia_id)?.nome || 'N/A';
         const provName = users.find(u => u.id === newDoc.conselheiro_providencia_id)?.nome || 'N/A';
         const persistenceNote = newDoc.is_family_persistence ? ' [PERSISTÊNCIA FAMILIAR]' : '';
-        addLog(id, `CRIAÇÃO: Novo procedimento registrado.${persistenceNote} REF: [${refName}] | IMEDIATA: [${provName}].`, 'DOCUMENTO');
+        const fisicoNote = newDoc.is_prontuario_fisico ? ' [PRONTUÁRIO FÍSICO]' : '';
+        addLog(id, `CRIAÇÃO: Novo procedimento registrado.${fisicoNote}${persistenceNote} REF: [${refName}] | IMEDIATA: [${provName}].`, 'DOCUMENTO');
       }
 
       setAllDocuments(prev => [finalDoc, ...prev.filter(d => d.id !== finalDoc.id)]);

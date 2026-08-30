@@ -225,6 +225,8 @@ export interface Documento {
   quem_comunicou_classificado?: boolean;
   alertas_status_referencia?: AlertaStatusReferencia[];
   is_pasta_guardada?: boolean;
+  is_prontuario_fisico?: boolean;
+  conselheiro_prontuario_fisico_id?: string;
   createdAt?: any;
   updatedAt?: any;
   createdBy?: string;

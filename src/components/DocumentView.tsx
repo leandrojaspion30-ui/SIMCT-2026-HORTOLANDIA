@@ -450,9 +450,11 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const showCollegiateValidation = hasEcaMeasuresInDoc || (canEditTechnicalFields && hasEcaMeasuresInEdit);
 
   const validationTracker = useMemo(() => {
+    const docDate = doc.data_aporte || doc.data_recebimento || (doc.criado_em ? doc.criado_em.split('T')[0] : '');
+    const docTime = doc.hora_aporte || doc.hora_rece_bimento || '12:00';
     const trioRaw = (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.length > 0)
       ? doc.conselheiros_providencia_nomes
-      : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap, scaleExceptions);
+      : getEffectiveEscala(docDate, docTime, doc.unidade_id, nameMap, scaleExceptions);
     const trio = trioRaw.map(n => (nameMap && nameMap[n.toUpperCase()]) ? nameMap[n.toUpperCase()] : n);
     
     const confirmacoes = (doc.medidas_detalhadas || []).flatMap(m => m.confirmacoes || []);
@@ -522,9 +524,11 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     let confirmacoes = doc.medidas_detalhadas?.[0]?.confirmacoes || [];
     let notificacoesTrio = doc.notificacoes_trio || [];
 
+    const docDate = doc.data_aporte || doc.data_recebimento || (doc.criado_em ? doc.criado_em.split('T')[0] : '');
+    const docTime = doc.hora_aporte || doc.hora_rece_bimento || '12:00';
     const preservedTrio = (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.length > 0)
       ? doc.conselheiros_providencia_nomes
-      : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap, scaleExceptions);
+      : getEffectiveEscala(docDate, docTime, doc.unidade_id, nameMap, scaleExceptions);
 
     if (isTechnicalChange && isActualProvidenciaImediata) {
       // REFORÇO: Se houver mudança técnica / edição da Medida Aplicada, invalidamos assinaturas anteriores dos outros e notificamos o trio original
@@ -695,9 +699,11 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     const now = new Date();
     const formattedDate = `${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`;
     
+    const docDate = doc.data_aporte || doc.data_recebimento || (doc.criado_em ? doc.criado_em.split('T')[0] : '');
+    const docTime = doc.hora_aporte || doc.hora_rece_bimento || '12:00';
     const trioRaw = (doc.conselheiros_providencia_nomes && doc.conselheiros_providencia_nomes.length > 0)
       ? doc.conselheiros_providencia_nomes
-      : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap, scaleExceptions);
+      : getEffectiveEscala(docDate, docTime, doc.unidade_id, nameMap, scaleExceptions);
     const trio = trioRaw.map(n => (nameMap && nameMap[n.toUpperCase()]) ? nameMap[n.toUpperCase()] : n);
 
     let slotsToValidate: string[] = [];

@@ -321,17 +321,25 @@ export const saveDocumentWithAtomicRotation = async (
   cleanPayload?: any;
 }> => {
   const docId = docData.id || `doc-${Math.random().toString(36).substr(2, 9)}`;
-  const isManual = docData.is_manual_override || Boolean(docData.conselheiro_referencia_id && docData.is_manual_override);
+  const isManual = docData.is_manual_override || docData.is_prontuario_fisico || Boolean(docData.conselheiro_referencia_id && (docData.is_manual_override || docData.is_prontuario_fisico));
 
-  // Se for atribuição manual ou já definida pelo usuário/edição, salva diretamente
+  // Se for atribuição manual, prontuário físico ou já definida pelo usuário/edição, salva diretamente sem rodízio
   if (isManual && docData.conselheiro_referencia_id) {
-    await saveDocument({ ...docData, id: docId }, currentUser);
+    const finalDocData = {
+      ...docData,
+      id: docId,
+      distribuicao_automatica: false,
+      conselheiro_providencia_id: docData.is_prontuario_fisico ? docData.conselheiro_referencia_id : (docData.conselheiro_providencia_id || docData.conselheiro_referencia_id),
+      conselheiro_providencia_nome: docData.is_prontuario_fisico ? docData.conselheiro_referencia_nome : (docData.conselheiro_providencia_nome || docData.conselheiro_referencia_nome)
+    };
+    await saveDocument(finalDocData, currentUser);
     return {
       id: docId,
-      conselheiro_referencia_id: docData.conselheiro_referencia_id,
-      conselheiro_referencia_nome: docData.conselheiro_referencia_nome || currentUser.nome,
-      conselheiro_providencia_id: docData.conselheiro_providencia_id,
-      conselheiro_providencia_nome: docData.conselheiro_providencia_nome
+      conselheiro_referencia_id: finalDocData.conselheiro_referencia_id,
+      conselheiro_referencia_nome: finalDocData.conselheiro_referencia_nome || currentUser.nome,
+      conselheiro_providencia_id: finalDocData.conselheiro_providencia_id,
+      conselheiro_providencia_nome: finalDocData.conselheiro_providencia_nome,
+      conselheiros_providencia_nomes: finalDocData.conselheiros_providencia_nomes
     };
   }
 

@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check, Repeat, Lock, ArrowLeft, Sparkles, Loader2, RotateCcw } from 'lucide-react';
+import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check, Repeat, Lock, ArrowLeft, Sparkles, Loader2, RotateCcw, FolderArchive, UserCheck } from 'lucide-react';
 import { Documento, User, ChildData, DocumentStatus, AgendaEntry, ScaleException } from '../types';
 import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, getOrigensHierarquicasByUnidade, CANAIS_COMUNICADO_LIST, getEffectiveEscala, isSameCounselorName, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade, getUnidadeByBairro, LOCAL_OCORRENCIA_OPTIONS, normalizeCanalName, isRotationChannel, getChannelNextCounselor, getActiveRotationCounselors } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
@@ -97,6 +97,8 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
       providencia_imediata_manual: initialData?.providencia_imediata_manual || '',
       local_ocorrencia: initialData?.local_ocorrencia || '',
       is_urgente: initialData?.is_urgente || false,
+      is_prontuario_fisico: initialData?.is_prontuario_fisico || false,
+      conselheiro_prontuario_fisico_id: initialData?.conselheiro_prontuario_fisico_id || (initialData?.is_prontuario_fisico ? initialData.conselheiro_referencia_id : '') || '',
       criancas: initialData?.criancas || [{ nome: '', nao_informado: false, data_nascimento: '', cpf: '', genero_identidade: '' }] as ChildData[]
     };
   });
@@ -565,15 +567,20 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     initialData
   ]);
 
-  // DIRETRIZ 48: Escala baseada na data e hora do aporte/hoje (troca de escala às 8h)
+  // DIRETRIZ: Escala baseada rigorosamente na data e hora do registro/aporte do documento
   const trioNames = useMemo(() => {
-    const d = initialData ? formData.data_aporte : todayDate;
-    const t = initialData ? formData.hora_aporte : (formData.hora_aporte || todayTime);
+    const d = formData.data_aporte || todayDate;
+    const t = formData.hora_aporte || todayTime;
     return getEffectiveEscala(d, t, formData.unidade_id, nameMap, scaleExceptions);
-  }, [initialData, formData.data_aporte, formData.hora_aporte, todayDate, todayTime, formData.unidade_id, nameMap, scaleExceptions]);
+  }, [formData.data_aporte, formData.hora_aporte, todayDate, todayTime, formData.unidade_id, nameMap, scaleExceptions]);
 
   // DIRETRIZ 51/52: Rodízio Alfabético Estável para Referência por Canal
   const assignedReference = useMemo(() => {
+    // 0. PRONTUÁRIO FÍSICO: Atribuição direta ao conselheiro do prontuário físico
+    if (formData.is_prontuario_fisico && (formData.conselheiro_prontuario_fisico_id || formData.conselheiro_referencia_id)) {
+      const targetId = formData.conselheiro_prontuario_fisico_id || formData.conselheiro_referencia_id;
+      return allUsers.find(u => u.id === targetId && (u.unidade_id || 1) === formData.unidade_id);
+    }
     if (isManualReference && formData.conselheiro_referencia_id) {
       return allUsers.find(u => u.id === formData.conselheiro_referencia_id && (u.unidade_id || 1) === formData.unidade_id);
     }
@@ -601,14 +608,18 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     );
 
     return nextCounselor || null;
-  }, [allUsers, documents, isReferenceLocked, formData.conselheiro_referencia_id, initialData, formData.unidade_id, isManualReference, nameMap, formData.canal_comunicado, trioNames]);
+  }, [allUsers, documents, isReferenceLocked, formData.conselheiro_referencia_id, formData.is_prontuario_fisico, formData.conselheiro_prontuario_fisico_id, initialData, formData.unidade_id, isManualReference, nameMap, formData.canal_comunicado, trioNames]);
 
   const currentRefUser = useMemo(() => {
+    if (formData.is_prontuario_fisico && (formData.conselheiro_prontuario_fisico_id || formData.conselheiro_referencia_id)) {
+      const targetId = formData.conselheiro_prontuario_fisico_id || formData.conselheiro_referencia_id;
+      return allUsers.find(u => u.id === targetId && (u.unidade_id || 1) === formData.unidade_id);
+    }
     if (formData.conselheiro_referencia_id) {
       return allUsers.find(u => u.id === formData.conselheiro_referencia_id && (u.unidade_id || 1) === formData.unidade_id);
     }
     return assignedReference;
-  }, [formData.conselheiro_referencia_id, assignedReference, allUsers, formData.unidade_id]);
+  }, [formData.is_prontuario_fisico, formData.conselheiro_prontuario_fisico_id, formData.conselheiro_referencia_id, assignedReference, allUsers, formData.unidade_id]);
 
   const isCurrentRefUserInTrio = useMemo(() => {
     if (!currentRefUser) return false;
@@ -618,6 +629,16 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
   }, [currentRefUser, nameMap, trioNames]);
 
   const assignedImediata = useMemo(() => {
+    // -1. PRONTUÁRIO FÍSICO: Imediata e Referência unificadas no mesmo conselheiro, sem roleta
+    if (formData.is_prontuario_fisico) {
+      const targetId = formData.conselheiro_prontuario_fisico_id || formData.conselheiro_referencia_id;
+      if (targetId) {
+        const targetUser = allUsers.find(u => u.id === targetId && (u.unidade_id || 1) === formData.unidade_id);
+        if (targetUser) return targetUser;
+      }
+      if (currentRefUser) return currentRefUser;
+    }
+
     // 0. SOBRESCRITA MANUAL: Se houver providência manual acionada
     if (formData.providencia_imediata_manual) {
       return allUsers.find(u => u.id === formData.providencia_imediata_manual && (u.unidade_id || 1) === formData.unidade_id);
@@ -856,9 +877,19 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     const sameFamilyTodayDiffProvRef = sameFamilyTodayDocs.find(d => d.conselheiro_providencia_id !== d.conselheiro_referencia_id);
     const sameFamilyTodayDirect = sameFamilyTodayDiffProvRef || sameFamilyTodayDocs[0];
 
-    const finalRefId = (isManualReference && formData.conselheiro_referencia_id)
-      ? formData.conselheiro_referencia_id
-      : (initialData ? (formData.conselheiro_referencia_id || initialData.conselheiro_referencia_id) : ((isManualReference || isReferenceLocked) ? formData.conselheiro_referencia_id : (assignedReference?.id || formData.conselheiro_referencia_id)));
+    const isFisico = Boolean(formData.is_prontuario_fisico);
+    const fisicoCounselorId = formData.conselheiro_prontuario_fisico_id || formData.conselheiro_referencia_id;
+
+    if (isFisico && !fisicoCounselorId) {
+      alert("Por favor, selecione o Conselheiro responsável pelo Prontuário Físico.");
+      return;
+    }
+
+    const finalRefId = isFisico
+      ? fisicoCounselorId
+      : (isManualReference && formData.conselheiro_referencia_id)
+        ? formData.conselheiro_referencia_id
+        : (initialData ? (formData.conselheiro_referencia_id || initialData.conselheiro_referencia_id) : ((isManualReference || isReferenceLocked) ? formData.conselheiro_referencia_id : (assignedReference?.id || formData.conselheiro_referencia_id)));
     const finalRefUser = allUsers.find(u => u.id === finalRefId && (u.unidade_id || 1) === formData.unidade_id);
     
     const finalRefName = finalRefUser?.nome?.toUpperCase();
@@ -898,9 +929,22 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
       ? 'SOCIEDADE'
       : (formData.origem ? `${formData.origem_categoria} - ${formData.origem}` : formData.origem_categoria || '');
 
+    const finalProvId = isFisico
+      ? finalRefId
+      : (canEditCouncillors && formData.providencia_imediata_manual)
+        ? formData.providencia_imediata_manual
+        : (initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || finalRefId || unitCounselors[0]?.id || currentUser.id));
+
+    const finalProvUser = allUsers.find(u => u.id === finalProvId && (u.unidade_id || 1) === formData.unidade_id);
+    const finalProvName = isFisico 
+      ? (finalRefUser?.nome || unitCounselors[0]?.nome || currentUser.nome || '') 
+      : ((finalProvUser?.nome) || initialData?.conselheiro_providencia_nome || assignedImediata?.nome || unitCounselors[0]?.nome || currentUser.nome || '');
+
     const finalData = {
       ...initialData,
       ...formData,
+      is_prontuario_fisico: isFisico,
+      conselheiro_prontuario_fisico_id: isFisico ? finalRefId : undefined,
       outro_membro_nome: formData.tem_outro_membro ? formData.outro_membro_nome : '',
       outro_membro_parentesco: formData.tem_outro_membro ? formData.outro_membro_parentesco : '',
       outro_membro_cpf: formData.tem_outro_membro ? formData.outro_membro_cpf : '',
@@ -909,32 +953,36 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
       numero_comunicado_violacao: formData.numero_comunicado_violacao,
       numero_sipia: formData.numero_sipia,
       notificacao: formData.notificacao,
-      providencia_imediata_manual: formData.providencia_imediata_manual,
+      providencia_imediata_manual: isFisico ? finalRefId : formData.providencia_imediata_manual,
       origem: finalOrigem,
       crianca_nome: formData.criancas[0].nome,
       observacoes_iniciais: formData.relato_inicial,
       data_recebimento: formData.data_aporte,
       hora_rece_bimento: formData.hora_aporte,
       periodo_rece_bimento: classifyTurno(formData.data_aporte, formData.hora_aporte),
-      conselheiro_referencia_id: (canEditCouncillors && (isManualReference || (initialData && formData.conselheiro_referencia_id))) 
-        ? (formData.conselheiro_referencia_id || (initialData ? initialData.conselheiro_referencia_id : finalRefId) || unitCounselors[0]?.id || currentUser.id) 
-        : (initialData ? initialData.conselheiro_referencia_id : (finalRefId || unitCounselors[0]?.id || currentUser.id)),
-      conselheiro_referencia_nome: (allUsers.find(u => u.id === ((canEditCouncillors && (isManualReference || (initialData && formData.conselheiro_referencia_id))) ? (formData.conselheiro_referencia_id || initialData?.conselheiro_referencia_id || finalRefId) : (initialData ? initialData.conselheiro_referencia_id : finalRefId)) && (u.unidade_id || 1) === formData.unidade_id)?.nome) || initialData?.conselheiro_referencia_nome || unitCounselors[0]?.nome || currentUser.nome || '',
-      is_manual_override: (canEditCouncillors && isManualReference) || (initialData ? initialData.is_manual_override : isReferenceLocked),
-      conselheiro_providencia_id: (canEditCouncillors && formData.providencia_imediata_manual)
-        ? formData.providencia_imediata_manual
-        : (initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || finalRefId || unitCounselors[0]?.id || currentUser.id)),
-      conselheiro_providencia_nome: (allUsers.find(u => u.id === ((canEditCouncillors && formData.providencia_imediata_manual) ? formData.providencia_imediata_manual : (initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || ''))) && (u.unidade_id || 1) === formData.unidade_id)?.nome) || initialData?.conselheiro_providencia_nome || assignedImediata?.nome || unitCounselors[0]?.nome || currentUser.nome || '',
-      conselheiros_providencia_nomes: (canEditCouncillors && formData.providencia_imediata_manual)
-        ? (() => {
-            const manualUser = allUsers.find(u => u.id === formData.providencia_imediata_manual && (u.unidade_id || 1) === formData.unidade_id);
-            const manualName = manualUser?.nome?.toUpperCase();
-            return manualName ? [manualName, ...trioNames.filter(n => n.toUpperCase() !== manualName)] : finalValidators;
-          })()
-        : (initialData ? initialData.conselheiros_providencia_nomes : (finalValidators && finalValidators.length > 0 ? finalValidators : [currentUser.nome])),
+      conselheiro_referencia_id: isFisico
+        ? finalRefId
+        : ((canEditCouncillors && (isManualReference || (initialData && formData.conselheiro_referencia_id))) 
+          ? (formData.conselheiro_referencia_id || (initialData ? initialData.conselheiro_referencia_id : finalRefId) || unitCounselors[0]?.id || currentUser.id) 
+          : (initialData ? initialData.conselheiro_referencia_id : (finalRefId || unitCounselors[0]?.id || currentUser.id))),
+      conselheiro_referencia_nome: isFisico
+        ? (finalRefUser?.nome || unitCounselors[0]?.nome || currentUser.nome || '')
+        : ((allUsers.find(u => u.id === ((canEditCouncillors && (isManualReference || (initialData && formData.conselheiro_referencia_id))) ? (formData.conselheiro_referencia_id || initialData?.conselheiro_referencia_id || finalRefId) : (initialData ? initialData.conselheiro_referencia_id : finalRefId)) && (u.unidade_id || 1) === formData.unidade_id)?.nome) || initialData?.conselheiro_referencia_nome || unitCounselors[0]?.nome || currentUser.nome || ''),
+      is_manual_override: isFisico || (canEditCouncillors && isManualReference) || (initialData ? initialData.is_manual_override : isReferenceLocked),
+      conselheiro_providencia_id: finalProvId,
+      conselheiro_providencia_nome: finalProvName,
+      conselheiros_providencia_nomes: isFisico
+        ? [finalRefUser?.nome || currentUser.nome, ...trioNames.filter(n => !isSameCounselorName(n, finalRefUser?.nome || ''))]
+        : (canEditCouncillors && formData.providencia_imediata_manual)
+          ? (() => {
+              const manualUser = allUsers.find(u => u.id === formData.providencia_imediata_manual && (u.unidade_id || 1) === formData.unidade_id);
+              const manualName = manualUser?.nome?.toUpperCase();
+              return manualName ? [manualName, ...trioNames.filter(n => n.toUpperCase() !== manualName)] : finalValidators;
+            })()
+          : (initialData ? initialData.conselheiros_providencia_nomes : (finalValidators && finalValidators.length > 0 ? finalValidators : [currentUser.nome])),
       is_family_persistence: false,
-      is_manual_providencia: !!formData.providencia_imediata_manual,
-      is_reference_in_trio: isRefUserInTrio && !!finalRefUser && !formData.notificacao && !formData.providencia_imediata_manual,
+      is_manual_providencia: isFisico || !!formData.providencia_imediata_manual,
+      is_reference_in_trio: isFisico ? false : (isRefUserInTrio && !!finalRefUser && !formData.notificacao && !formData.providencia_imediata_manual),
       is_plantao: (() => {
         const parts = (formData.hora_aporte || '00:00').split(':');
         const h = parseInt(parts[0]);
@@ -947,15 +995,17 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
       status: initialData ? initialData.status : (formData.notificacao ? [`NOTIFICACAO_${formData.notificacao.toUpperCase()}` as DocumentStatus] : ['AGUARDANDO_ANALISE']),
       justificativa_distribuicao: initialData 
         ? initialData.justificativa_distribuicao 
-        : (formData.providencia_imediata_manual
-            ? `✍️ Imediata atribuída MANUALMENTE: [${assignedImediata?.nome}].`
-            : (formData.notificacao 
-                ? `🔔 Imediata vinculada à Notificação: ${formData.notificacao} (Distribuição Bloqueada).` 
-                : (isRefUserInTrio && finalRefUser
-                    ? `🎯 Imediata vinculada ao Conselheiro de Referência [${finalRefUser.nome}] de plantão no dia (Distribuição Bloqueada).`
-                    : (isReferenceLocked 
-                        ? `✅ Providência Imediata distribuída por Rodízio do Trio do Dia (Conselheiro de Referência [${finalRefUser?.nome || 'Histórico'}] fora do trio de hoje).` 
-                        : `✅ Providência Imediata distribuída por Rodízio do Trio do Dia (Referência: [${finalRefUser?.nome || 'N/A'}]).`)))) + (formData.is_urgente ? ' (🚨 Alerta de Documento Urgente Ativado)' : '')
+        : (isFisico 
+            ? `📁 PRONTUÁRIO FÍSICO: Atribuição direta ao Conselheiro [${finalRefUser?.nome || 'Selecionado'}] como Referência e Providência Imediata simultâneas (Roleta/Rodízio desativados).`
+            : (formData.providencia_imediata_manual
+                ? `✍️ Imediata atribuída MANUALMENTE: [${assignedImediata?.nome}].`
+                : (formData.notificacao 
+                    ? `🔔 Imediata vinculada à Notificação: ${formData.notificacao} (Distribuição Bloqueada).` 
+                    : (isRefUserInTrio && finalRefUser
+                        ? `🎯 Imediata vinculada ao Conselheiro de Referência [${finalRefUser.nome}] de plantão no dia (Distribuição Bloqueada).`
+                        : (isReferenceLocked 
+                            ? `✅ Providência Imediata distribuída por Rodízio do Trio do Dia (Conselheiro de Referência [${finalRefUser?.nome || 'Histórico'}] fora do trio de hoje).` 
+                            : `✅ Providência Imediata distribuída por Rodízio do Trio do Dia (Referência: [${finalRefUser?.nome || 'N/A'}]).`))))) + (formData.is_urgente ? ' (🚨 Alerta de Documento Urgente Ativado)' : '')
     };
 
     if (!finalData.conselheiro_referencia_id) {
@@ -1033,10 +1083,102 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
           <fieldset disabled={isReadOnly} className="contents">
             {/* BLOCO 1: NOVO DOCUMENTO (DATA E HORA) */}
           <section className="space-y-4 sm:space-y-6">
-            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-              <Calendar className="w-5 h-5 text-blue-600" />
-              <h3 className="text-[11px] sm:text-[12px] font-black uppercase text-slate-800 tracking-widest">1. Novo Documento</h3>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <Calendar className="w-5 h-5 text-blue-600" />
+                <h3 className="text-[11px] sm:text-[12px] font-black uppercase text-slate-800 tracking-widest">1. Novo Documento</h3>
+              </div>
+
+              {/* OPÇÃO AO LADO DE "NOVO DOCUMENTO": PRONTUÁRIO FÍSICO */}
+              <label 
+                className={`flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl border-2 cursor-pointer transition-all duration-200 select-none shadow-xs ${
+                  formData.is_prontuario_fisico 
+                    ? 'bg-amber-600 border-amber-700 text-white shadow-md shadow-amber-600/20 ring-2 ring-amber-400/40' 
+                    : 'bg-white border-slate-200 text-slate-700 hover:border-amber-400 hover:bg-amber-50/60'
+                }`}
+                title="Prontuário Físico: seleciona o conselheiro responsável como Referência e Imediata fixos, sem acionar a roleta de distribuição"
+              >
+                <input 
+                  type="checkbox"
+                  className="hidden"
+                  disabled={!!initialData && !canEditCase}
+                  checked={!!formData.is_prontuario_fisico}
+                  onChange={e => {
+                    const checked = e.target.checked;
+                    setFormData(prev => {
+                      const defaultCounselorId = checked 
+                        ? (prev.conselheiro_prontuario_fisico_id || prev.conselheiro_referencia_id || unitCounselors[0]?.id || '') 
+                        : '';
+                      return {
+                        ...prev,
+                        is_prontuario_fisico: checked,
+                        conselheiro_prontuario_fisico_id: defaultCounselorId,
+                        conselheiro_referencia_id: checked ? defaultCounselorId : prev.conselheiro_referencia_id,
+                        providencia_imediata_manual: checked ? defaultCounselorId : prev.providencia_imediata_manual
+                      };
+                    });
+                    if (checked) {
+                      setIsManualReference(false);
+                    }
+                  }}
+                />
+                <FolderArchive className={`w-4 h-4 ${formData.is_prontuario_fisico ? 'text-white' : 'text-amber-600'}`} />
+                <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider">
+                  Prontuário Físico
+                </span>
+                {formData.is_prontuario_fisico ? (
+                  <span className="px-1.5 py-0.5 bg-amber-800 text-white rounded text-[8px] font-black uppercase tracking-tight">
+                    Ativo
+                  </span>
+                ) : (
+                  <span className="text-[8px] font-bold text-slate-400 uppercase">
+                    (Sem Roleta)
+                  </span>
+                )}
+              </label>
             </div>
+
+            {/* PAINEL DE SELEÇÃO DO CONSELHEIRO DO PRONTUÁRIO FÍSICO */}
+            {formData.is_prontuario_fisico && (
+              <div className="p-4 bg-amber-50/90 border-2 border-amber-300 rounded-2xl space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black text-amber-900 uppercase tracking-widest flex items-center gap-2">
+                    <UserCheck className="w-4 h-4 text-amber-700" />
+                    Conselheiro do Prontuário Físico *
+                  </label>
+                  <span className="text-[9px] font-black px-2 py-0.5 bg-amber-200/80 text-amber-900 rounded-md uppercase flex items-center gap-1">
+                    <Lock className="w-3 h-3 text-amber-700" />
+                    Roleta Desativada
+                  </span>
+                </div>
+                <select
+                  required
+                  disabled={!!initialData && !canEditCase}
+                  className="w-full p-3.5 bg-white border-2 border-amber-400 rounded-xl font-bold uppercase text-[12px] text-amber-950 outline-none focus:ring-2 focus:ring-amber-500 shadow-sm cursor-pointer"
+                  value={formData.conselheiro_prontuario_fisico_id || formData.conselheiro_referencia_id || ''}
+                  onChange={e => {
+                    const selectedId = e.target.value;
+                    setFormData(prev => ({
+                      ...prev,
+                      conselheiro_prontuario_fisico_id: selectedId,
+                      conselheiro_referencia_id: selectedId,
+                      providencia_imediata_manual: selectedId
+                    }));
+                  }}
+                >
+                  <option value="">SELECIONE O CONSELHEIRO RESPONSÁVEL...</option>
+                  {getActiveRotationCounselors(formData.unidade_id, allUsers, nameMap).map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.nome.toUpperCase()} ({u.cargo || 'CONSELHEIRO(A)'})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[9px] font-bold text-amber-800 uppercase tracking-tight flex items-center gap-1.5">
+                  <Lock className="w-3 h-3 text-amber-700 shrink-0" />
+                  O conselheiro selecionado será definido simultaneamente como <strong>Referência</strong> e <strong>Providência Imediata</strong>.
+                </p>
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Data do Documento *</label>
@@ -1548,7 +1690,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-indigo-600" /> Conselheiro de Referência
                 </div>
-                {canEditCouncillors && (
+                {canEditCouncillors && !formData.is_prontuario_fisico && (
                   <button 
                     type="button" 
                     onClick={() => {
@@ -1564,7 +1706,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                 )}
               </label>
               
-              {canEditCouncillors && isManualReference ? (
+              {canEditCouncillors && !formData.is_prontuario_fisico && isManualReference ? (
                 <select 
                   required
                   className="w-full p-4 bg-white border border-indigo-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-indigo-500 shadow-sm"
@@ -1578,25 +1720,31 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                     ))}
                 </select>
               ) : (
-                <div className="p-4 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 flex items-center justify-between">
+                <div className={`p-4 rounded-xl font-bold flex items-center justify-between ${formData.is_prontuario_fisico ? 'bg-amber-50/60 border-2 border-amber-300 text-amber-950 shadow-xs' : 'bg-white border border-slate-200 text-slate-700'}`}>
                   <span>
                     {allUsers.find(u => u.id === (formData.conselheiro_referencia_id || assignedReference?.id) && (u.unidade_id || 1) === formData.unidade_id)?.nome || assignedReference?.nome || 'Aguardando...'}
                   </span>
-                  <span className={`text-[9px] px-2 py-1 flex items-center gap-1 rounded-md uppercase font-black ${initialData && !isManualReference ? 'bg-slate-200 text-slate-700 border border-slate-300' : (isReferenceLocked ? 'bg-amber-50 text-amber-600' : (formData.notificacao ? 'bg-blue-50 text-blue-600' : 'bg-indigo-50 text-indigo-600'))}`}>
-                    {(!canEditCouncillors || !isManualReference) && <Lock className="w-3 h-3 text-slate-500" />}
-                    {initialData 
-                      ? (isManualReference ? (isFabio ? 'Ajuste Manual (Fábio)' : (isADM ? 'Ajuste Manual (ADM)' : 'Ajuste Manual (Leandro)')) : 'Cadastrado') 
-                      : (isReferenceLocked 
-                          ? (isManualReference ? (isFabio ? 'Ajuste Manual (Fábio)' : 'Ajuste Manual (ADM)') : 'Vínculo Histórico') 
-                          : (formData.notificacao 
-                              ? 'Notificação (Isento do Rodízio)' 
-                              : (!isRotationChannel(formData.canal_comunicado)
-                                  ? 'Canal Plantão (Escala do Dia)'
-                                  : (isManualReference ? (isFabio ? 'Ajuste Manual (Fábio)' : 'Ajuste Manual (ADM)') : `Rodízio (${normalizeCanalName(formData.canal_comunicado)})`))))}
+                  <span className={`text-[9px] px-2 py-1 flex items-center gap-1 rounded-md uppercase font-black ${
+                    formData.is_prontuario_fisico
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : (initialData && !isManualReference ? 'bg-slate-200 text-slate-700 border border-slate-300' : (isReferenceLocked ? 'bg-amber-50 text-amber-600' : (formData.notificacao ? 'bg-blue-50 text-blue-600' : 'bg-indigo-50 text-indigo-600')))
+                  }`}>
+                    {(!canEditCouncillors || !isManualReference || formData.is_prontuario_fisico) && <Lock className="w-3 h-3 text-current" />}
+                    {formData.is_prontuario_fisico
+                      ? 'PRONTUÁRIO FÍSICO (FIXO)'
+                      : (initialData 
+                          ? (isManualReference ? (isFabio ? 'Ajuste Manual (Fábio)' : (isADM ? 'Ajuste Manual (ADM)' : 'Ajuste Manual (Leandro)')) : 'Cadastrado') 
+                          : (isReferenceLocked 
+                              ? (isManualReference ? (isFabio ? 'Ajuste Manual (Fábio)' : 'Ajuste Manual (ADM)') : 'Vínculo Histórico') 
+                              : (formData.notificacao 
+                                  ? 'Notificação (Isento do Rodízio)' 
+                                  : (!isRotationChannel(formData.canal_comunicado)
+                                      ? 'Canal Plantão (Escala do Dia)'
+                                      : (isManualReference ? (isFabio ? 'Ajuste Manual (Fábio)' : 'Ajuste Manual (ADM)') : `Rodízio (${normalizeCanalName(formData.canal_comunicado)})`)))))}
                   </span>
                 </div>
               )}
-              {isReferenceLocked && (
+              {isReferenceLocked && !formData.is_prontuario_fisico && (
                 <div className="flex items-center gap-2 mt-1 px-2 py-1 bg-amber-50 rounded-lg border border-amber-100">
                   <AlertCircle className="w-3 h-3 text-amber-600" />
                   <span className="text-[9px] font-bold text-amber-700 uppercase tracking-tighter">Referência Identificada: Atribuição vinculada por histórico familiar.</span>
@@ -1615,7 +1763,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-amber-600" /> Providência Imediata
                 </div>
-                {canEditCouncillors && (
+                {canEditCouncillors && !formData.is_prontuario_fisico && (
                   <button 
                     type="button" 
                     onClick={() => {
@@ -1631,7 +1779,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                   </button>
                 )}
               </label>
-              {canEditCouncillors && formData.providencia_imediata_manual ? (
+              {canEditCouncillors && !formData.is_prontuario_fisico && formData.providencia_imediata_manual ? (
                 <select 
                   required
                   className="w-full p-4 bg-white border border-amber-200 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-amber-500 shadow-sm"
@@ -1653,16 +1801,18 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                 </select>
               ) : (
                 <div className={`p-4 rounded-xl font-bold flex items-center justify-between relative overflow-hidden transition-all ${
-                  formData.is_urgente
-                    ? 'bg-rose-50 border-2 border-rose-500 text-rose-950 shadow-md ring-2 ring-rose-200'
-                    : 'bg-white border border-slate-200 text-slate-700'
+                  formData.is_prontuario_fisico
+                    ? 'bg-amber-50/60 border-2 border-amber-300 text-amber-950 shadow-xs'
+                    : (formData.is_urgente
+                        ? 'bg-rose-50 border-2 border-rose-500 text-rose-950 shadow-md ring-2 ring-rose-200'
+                        : 'bg-white border border-slate-200 text-slate-700')
                 }`}>
                   {/* BADGE DE PLANTÃO / URGÊNCIA */}
-                  {formData.is_urgente ? (
+                  {formData.is_urgente && !formData.is_prontuario_fisico ? (
                     <div className="absolute top-0 right-0 px-2.5 py-1 bg-rose-600 text-white rounded-bl-lg z-10 font-black text-[9px] uppercase tracking-wider flex items-center gap-1 shadow-sm animate-pulse">
                       <AlertCircle className="w-3 h-3 text-white" /> DESTAQUE ESPECIAL: PROVIDÊNCIA IMEDIATA URGENTE
                     </div>
-                  ) : (() => {
+                  ) : !formData.is_prontuario_fisico && (() => {
                     const parts = (formData.hora_aporte || '00:00').split(':');
                     const h = parseInt(parts[0]);
                     const dateObj = new Date(formData.data_aporte + 'T12:00:00');
@@ -1678,34 +1828,43 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                       </div>
                     </div>
                   ) : null}
-                  <span className={formData.is_urgente ? 'font-black text-rose-950 text-sm flex items-center gap-1.5 pt-1' : ''}>
-                    {formData.is_urgente && <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />}
+                  <span className={formData.is_urgente && !formData.is_prontuario_fisico ? 'font-black text-rose-950 text-sm flex items-center gap-1.5 pt-1' : ''}>
+                    {formData.is_urgente && !formData.is_prontuario_fisico && <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />}
                     {allUsers.find(u => u.id === (formData.providencia_imediata_manual || (initialData?.conselheiro_providencia_id) || assignedImediata?.id) && (u.unidade_id || 1) === formData.unidade_id)?.nome || assignedImediata?.nome || 'Aguardando...'}
                   </span>
                   <span className={`text-[9px] px-2 py-1 flex items-center gap-1 rounded-md uppercase font-black ${
-                    formData.is_urgente 
-                      ? 'bg-rose-600 text-white shadow-xs' 
-                      : (initialData && !formData.providencia_imediata_manual ? 'bg-slate-200 text-slate-700 border border-slate-300' : (formData.notificacao || isCurrentRefUserInTrio ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'))
+                    formData.is_prontuario_fisico
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : (formData.is_urgente 
+                          ? 'bg-rose-600 text-white shadow-xs' 
+                          : (initialData && !formData.providencia_imediata_manual ? 'bg-slate-200 text-slate-700 border border-slate-300' : (formData.notificacao || isCurrentRefUserInTrio ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200')))
                   }`}>
-                    {(!canEditCouncillors || !formData.providencia_imediata_manual) && <Lock className={`w-3 h-3 ${formData.is_urgente ? 'text-white' : 'text-slate-500'}`} />}
-                    {formData.is_urgente
-                      ? '🚨 URGENTE'
-                      : (initialData && !formData.providencia_imediata_manual
-                          ? 'Cadastrado' 
-                          : (formData.providencia_imediata_manual 
-                              ? (isFabio ? 'Sobrescrita Manual (Fábio)' : 'Sobrescrita Manual (ADM)') 
-                              : (formData.notificacao 
-                                  ? '🔔 Notificação (Bloqueada)' 
-                                  : (isCurrentRefUserInTrio 
-                                      ? '🎯 Referência no Trio (Bloqueada)' 
-                                      : '🔄 Rodízio do Trio (Ref. Fora)'))))}
+                    {(!canEditCouncillors || !formData.providencia_imediata_manual || formData.is_prontuario_fisico) && <Lock className={`w-3 h-3 ${formData.is_urgente || formData.is_prontuario_fisico ? 'text-white' : 'text-slate-500'}`} />}
+                    {formData.is_prontuario_fisico
+                      ? 'PRONTUÁRIO FÍSICO (FIXO)'
+                      : (formData.is_urgente
+                          ? '🚨 URGENTE'
+                          : (initialData && !formData.providencia_imediata_manual
+                              ? 'Cadastrado' 
+                              : (formData.providencia_imediata_manual 
+                                  ? (isFabio ? 'Sobrescrita Manual (Fábio)' : 'Sobrescrita Manual (ADM)') 
+                                  : (formData.notificacao 
+                                      ? '🔔 Notificação (Bloqueada)' 
+                                      : (isCurrentRefUserInTrio 
+                                          ? '🎯 Referência no Trio (Bloqueada)' 
+                                          : '🔄 Rodízio do Trio (Ref. Fora)')))))}
                   </span>
                 </div>
               )}
               {/* Informativo de Regra de Distribuição */}
               {!initialData && (
                 <div className="text-[10px] px-3 py-1.5 rounded-lg border font-medium">
-                  {formData.notificacao ? (
+                  {formData.is_prontuario_fisico ? (
+                    <div className="flex items-center gap-1.5 text-amber-900 bg-amber-50/70">
+                      <Lock className="w-3 h-3 text-amber-700 shrink-0" />
+                      <span><strong>Roleta Desativada (Prontuário Físico):</strong> Referência e Providência Imediata fixadas em <strong>{currentRefUser?.nome || 'Conselheiro Selecionado'}</strong> sem rodízio.</span>
+                    </div>
+                  ) : formData.notificacao ? (
                     <div className="flex items-center gap-1.5 text-indigo-700 bg-indigo-50/50">
                       <Lock className="w-3 h-3 text-indigo-600 shrink-0" />
                       <span><strong>Distribuição Bloqueada:</strong> Providência imediata vinculada à notificação de {formData.notificacao}.</span>
@@ -1723,7 +1882,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                   )}
                 </div>
               )}
-              {!isReadOnly && (
+              {!isReadOnly && !formData.is_prontuario_fisico && (
                 <div className="pt-1">
                   <button
                     type="button"
