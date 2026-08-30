@@ -37,11 +37,13 @@ const SPHERES = ["FEDERAL", "ESTADUAL", "MUNICIPAL", "OUTRO"];
 const STATUSES = ["VIGENTE", "ALTERADA", "REVOGADA", "NÃO VERIFICADA"];
 
 import * as pdfjsLib from 'pdfjs-dist';
+// @ts-ignore
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import mammoth from 'mammoth';
 
 // Set worker src for pdfjs
 // @ts-ignore
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 export function LegalLibrary() {
   const [searchQuery, setSearchQuery] = useState("");

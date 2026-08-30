@@ -4,18 +4,21 @@ import {
   RotateCcw, Scale, ShieldCheck, BookOpen, FileCheck2, BarChart2, 
   GraduationCap, Building2, AlertTriangle, Mic, MicOff, X, HelpCircle, 
   ChevronRight, ArrowRight, FileSpreadsheet, Eye, Download, FilePlus, 
-  Search, Brain, TrendingUp, History, UserCheck, Calendar
+  Search, Brain, TrendingUp, History, UserCheck, Calendar, Upload,
+  Trash2, Loader2, FileUp
 } from 'lucide-react';
 import { Documento, User, AgendaEntry } from '../types';
 import { LegalLibraryService, LegalDocument } from '../services/legalLibrary';
 import { SIMCTDataService, SIMCTStats } from '../services/SIMCTDataService';
 import { DocumentGeneratorService, DocumentMetadata } from '../services/DocumentGeneratorService';
 import * as pdfjsLib from 'pdfjs-dist';
+// @ts-ignore
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import mammoth from 'mammoth';
 
 // Set worker for pdfjs
 // @ts-ignore
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 export interface ItemComPagina {
   conteudo: string;
@@ -373,7 +376,7 @@ Como posso auxiliar seu trabalho hoje? Escolha um das **Ações Rápidas** abaix
   };
 
   /** Execução direta do fluxo de correção */
-  const handleExecutarCorrecao = async (textoDigitado: string) => {
+  const handleExecutarCorrecao = async (textoDigitado: string, attachName?: string) => {
     const texto = textoDigitado.trim();
     if (!texto) return;
 
@@ -382,7 +385,8 @@ Como posso auxiliar seu trabalho hoje? Escolha um das **Ações Rápidas** abaix
       id: Date.now().toString(),
       role: 'user',
       text: texto,
-      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      attachmentName: attachName || undefined
     };
     setMessages(prev => [...prev, userMessage]);
     setInputPrompt('');
@@ -404,6 +408,73 @@ Como posso auxiliar seu trabalho hoje? Escolha um das **Ações Rápidas** abaix
   // Correction modal form
   const [textToCorrect, setTextToCorrect] = useState('');
   const [correctionType, setCorrectionType] = useState('CORREÇÃO ORTOGRÁFICA');
+  const [corretorPdfName, setCorretorPdfName] = useState<string | null>(null);
+  const [corretorPdfSize, setCorretorPdfSize] = useState<number | null>(null);
+  const [corretorPdfPages, setCorretorPdfPages] = useState<number | null>(null);
+  const [isReadingCorretorPdf, setIsReadingCorretorPdf] = useState(false);
+  const [corretorPdfError, setCorretorPdfError] = useState<string | null>(null);
+  const corretorPdfInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCorretorPdfUpload = async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent<HTMLDivElement>) => {
+    let file: File | undefined;
+    if ('dataTransfer' in e) {
+      e.preventDefault();
+      file = e.dataTransfer.files?.[0];
+    } else if (e.target.files) {
+      file = e.target.files[0];
+    }
+    if (!file) return;
+
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      setCorretorPdfError("Por favor, selecione um arquivo no formato PDF (.pdf).");
+      return;
+    }
+
+    setIsReadingCorretorPdf(true);
+    setCorretorPdfError(null);
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let fullText = "";
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const strings = content.items.map((item: any) => item.str);
+        const pageText = strings.join(" ").replace(/\s+/g, " ").trim();
+        if (pageText) {
+          fullText += (fullText ? "\n\n" : "") + pageText;
+        }
+      }
+
+      if (!fullText.trim()) {
+        setCorretorPdfError("Não foi possível extrair texto legível do PDF. Se for um documento digitalizado/escaneado como imagem, converta com OCR ou digite o texto.");
+      } else {
+        setTextToCorrect(fullText.trim());
+        setCorretorPdfName(file.name);
+        setCorretorPdfSize(file.size);
+        setCorretorPdfPages(pdf.numPages);
+      }
+    } catch (err: any) {
+      console.error("Erro ao ler PDF no corretor:", err);
+      setCorretorPdfError("Erro ao processar o arquivo PDF. Verifique se o arquivo não está protegido ou corrompido.");
+    } finally {
+      setIsReadingCorretorPdf(false);
+      if (corretorPdfInputRef.current) {
+        corretorPdfInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleClearCorretorPdf = () => {
+    setCorretorPdfName(null);
+    setCorretorPdfSize(null);
+    setCorretorPdfPages(null);
+    setCorretorPdfError(null);
+    if (corretorPdfInputRef.current) {
+      corretorPdfInputRef.current.value = "";
+    }
+  };
 
   // Ofício modal form
   const [oficioDestinatario, setOficioDestinatario] = useState('');
@@ -3071,7 +3142,13 @@ const handlePrintMessage = (msg: JarvisMessage) => {
               <h3 className="text-base font-black uppercase text-slate-900 flex items-center gap-2">
                 ✍️ CORRETOR E REVISOR TÉCNICO
               </h3>
-              <button onClick={() => setActiveModal('NONE')} className="p-1 text-slate-400 hover:text-slate-700">
+              <button 
+                onClick={() => {
+                  setActiveModal('NONE');
+                  handleClearCorretorPdf();
+                }} 
+                className="p-1 text-slate-400 hover:text-slate-700"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -3080,21 +3157,143 @@ const handlePrintMessage = (msg: JarvisMessage) => {
               Revisão ortográfica, gramatical, acentuação, crase e concordância segundo a norma-padrão da língua portuguesa.
             </p>
 
+            {/* INPUT DE ARQUIVO PDF (OCULTO) */}
+            <input
+              type="file"
+              ref={corretorPdfInputRef}
+              accept=".pdf,application/pdf"
+              className="hidden"
+              onChange={handleCorretorPdfUpload}
+            />
+
+            {/* ÁREA DE ANEXAR PDF */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-slate-700 uppercase flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-blue-600" />
+                  Documento PDF para Correção:
+                </label>
+                {!corretorPdfName && (
+                  <span className="text-[10px] text-slate-400 font-medium">Opcional</span>
+                )}
+              </div>
+
+              {isReadingCorretorPdf ? (
+                <div className="flex items-center justify-center gap-3 p-4 bg-blue-50/70 border border-blue-200 rounded-2xl text-blue-700 text-xs font-semibold animate-pulse">
+                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                  <span>Extraindo texto do documento PDF...</span>
+                </div>
+              ) : corretorPdfName ? (
+                <div className="p-3 bg-indigo-50/80 border border-indigo-200/80 rounded-2xl flex items-center justify-between gap-3 shadow-xs">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-9 h-9 bg-indigo-600 text-white rounded-xl flex items-center justify-center shrink-0 shadow-xs">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs font-bold text-slate-800 truncate" title={corretorPdfName}>
+                          {corretorPdfName}
+                        </p>
+                        <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded text-[9px] font-extrabold uppercase shrink-0">
+                          Texto Extraído
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 font-medium">
+                        {corretorPdfPages ? `${corretorPdfPages} pág${corretorPdfPages > 1 ? 's' : ''}` : ''}
+                        {corretorPdfPages && corretorPdfSize ? ' • ' : ''}
+                        {corretorPdfSize ? `${(corretorPdfSize / 1024).toFixed(1)} KB` : ''}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => corretorPdfInputRef.current?.click()}
+                      className="px-2.5 py-1.5 bg-white text-indigo-700 hover:bg-indigo-100 border border-indigo-200 rounded-xl text-[10px] font-bold uppercase transition-all shadow-xs"
+                      title="Substituir por outro arquivo PDF"
+                    >
+                      Trocar PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClearCorretorPdf}
+                      className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-100/60 rounded-xl transition-all"
+                      title="Remover anexo do PDF"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleCorretorPdfUpload}
+                  onClick={() => corretorPdfInputRef.current?.click()}
+                  className="group p-3.5 border-2 border-dashed border-slate-200 hover:border-blue-500 bg-slate-50/70 hover:bg-blue-50/40 rounded-2xl flex items-center justify-between gap-3 cursor-pointer transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-blue-100 group-hover:bg-blue-600 text-blue-600 group-hover:text-white rounded-xl flex items-center justify-center transition-colors">
+                      <FileUp className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-700 group-hover:text-blue-700">
+                        Anexar arquivo PDF para extrair o texto
+                      </p>
+                      <p className="text-[10px] text-slate-500">
+                        Clique ou arraste um PDF aqui para carregar no revisor
+                      </p>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 bg-white group-hover:bg-blue-600 text-slate-700 group-hover:text-white border border-slate-200 group-hover:border-blue-600 rounded-xl text-[10px] font-bold uppercase transition-all shrink-0">
+                    Selecionar PDF
+                  </span>
+                </div>
+              )}
+
+              {corretorPdfError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-medium flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <span>{corretorPdfError}</span>
+                  </div>
+                  <button 
+                    onClick={() => setCorretorPdfError(null)}
+                    className="text-rose-500 hover:text-rose-700 p-0.5"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div>
-              <label className="text-xs font-bold text-slate-600 uppercase">Digite ou Cole o Texto a Ser Corrigido:</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-slate-600 uppercase">
+                  {corretorPdfName ? "Texto Extraído do PDF (Editável):" : "Digite ou Cole o Texto a Ser Corrigido:"}
+                </label>
+                {textToCorrect.trim() && (
+                  <span className="text-[10px] text-slate-400 font-semibold">
+                    {textToCorrect.trim().split(/\s+/).filter(Boolean).length} palavras • {textToCorrect.length} caracteres
+                  </span>
+                )}
+              </div>
               <textarea
                 value={textToCorrect}
                 onChange={(e) => setTextToCorrect(e.target.value)}
-                placeholder="Cole aqui o texto que deseja revisar e corrigir..."
+                placeholder="Cole aqui o texto que deseja revisar e corrigir ou anexe um arquivo PDF acima..."
                 rows={6}
-                className="w-full mt-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 font-sans"
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-600 font-sans"
               />
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
               <button
-                onClick={() => setActiveModal('NONE')}
-                className="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-bold text-xs uppercase hover:bg-slate-200"
+                onClick={() => {
+                  setActiveModal('NONE');
+                  handleClearCorretorPdf();
+                }}
+                className="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-bold text-xs uppercase hover:bg-slate-200 transition-all"
               >
                 Cancelar
               </button>
@@ -3103,12 +3302,14 @@ const handlePrintMessage = (msg: JarvisMessage) => {
                 onClick={async () => {
                   const texto = textToCorrect.trim();
                   if (!texto) return;
+                  const anexoNome = corretorPdfName;
                   setActiveModal('NONE');
                   setAcaoAtiva("CORRIGIR_TEXTO");
                   setTextToCorrect('');
-                  await handleExecutarCorrecao(texto);
+                  handleClearCorretorPdf();
+                  await handleExecutarCorrecao(texto, anexoNome || undefined);
                 }}
-                disabled={!textToCorrect.trim()}
+                disabled={!textToCorrect.trim() || isReadingCorretorPdf}
                 className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-xs uppercase hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 shadow-md transition-all active:scale-95"
               >
                 <FileCheck2 className="w-4 h-4" /> CORRIGIR TEXTO
