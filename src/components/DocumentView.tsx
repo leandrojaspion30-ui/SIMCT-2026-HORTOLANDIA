@@ -147,28 +147,108 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const [extendingReq, setExtendingReq] = useState<any | null>(null);
   const [extForm, setExtForm] = useState({ nova_data: '' });
 
-  // Sincronização de estado local com as props do documento para garantir que as atualizações sejam sempre exibidas
+  const draftKey = `simct_draft_docview_${doc.id}_${currentUser.id}`;
+
+  // Sincronização de estado local com as props do documento ou rascunho salvo localmente
   React.useEffect(() => {
-    setTempViolacoes(doc.violacoesSipia || []);
-    setTempAgentes(doc.agentesVioladores || []);
-    setSelectedMedidas101((doc.medidas_detalhadas || []).filter(m => m.artigo_inciso.startsWith('Art. 101')).map(m => m.artigo_inciso.replace('Art. 101, ', '')));
-    setSelectedMedidas129((doc.medidas_detalhadas || []).filter(m => m.artigo_inciso.startsWith('Art. 129')).map(m => m.artigo_inciso.replace('Art. 129, ', '')));
-    setSelectedAtribuicoes(doc.atribuicoes_136 || []);
-    setAtribuicoesDetalhadas(doc.atribuicoes_136_detalhadas || []);
-    setRelatoProvidencias(doc.relato_providencias || '');
-    setDespachoSituacao(doc.despacho_situacao || '');
-    setIsImprocedente(doc.is_improcedente || false);
-    setInformacoesDocumento(doc.informacoes_documento || '');
-    setNumeroComunicadoViolacao(doc.numero_comunicado_violacao || '');
-    setNumeroSipia(doc.numero_sipia || '');
-    setLocalOcorrencia(doc.local_ocorrencia || '');
-    setCustomLocalText(parseCustomLocalText(doc.local_ocorrencia));
-    const parsed = parseOrigem(doc.origem, doc.origem_categoria);
-    setOrigemCategoria(parsed.cat);
-    setOrigemInstituicao(parsed.inst);
-    setCanalComunicado(doc.canal_comunicado || '');
-    setQuemComunicouClassificado(Boolean(doc.quem_comunicou_classificado));
-  }, [doc.id, doc.informacoes_documento, doc.numero_comunicado_violacao, doc.numero_sipia, doc.local_ocorrencia, doc.origem, doc.origem_categoria, doc.canal_comunicado, doc.quem_comunicou_classificado]);
+    let draft: any = null;
+    try {
+      const saved = localStorage.getItem(draftKey);
+      if (saved) {
+        draft = JSON.parse(saved);
+      }
+    } catch {}
+
+    if (draft) {
+      setTempViolacoes(draft.tempViolacoes !== undefined ? draft.tempViolacoes : (doc.violacoesSipia || []));
+      setTempAgentes(draft.tempAgentes !== undefined ? draft.tempAgentes : (doc.agentesVioladores || []));
+      setSelectedMedidas101(draft.selectedMedidas101 !== undefined ? draft.selectedMedidas101 : ((doc.medidas_detalhadas || []).filter(m => m.artigo_inciso.startsWith('Art. 101')).map(m => m.artigo_inciso.replace('Art. 101, ', ''))));
+      setSelectedMedidas129(draft.selectedMedidas129 !== undefined ? draft.selectedMedidas129 : ((doc.medidas_detalhadas || []).filter(m => m.artigo_inciso.startsWith('Art. 129')).map(m => m.artigo_inciso.replace('Art. 129, ', ''))));
+      setSelectedAtribuicoes(draft.selectedAtribuicoes !== undefined ? draft.selectedAtribuicoes : (doc.atribuicoes_136 || []));
+      setAtribuicoesDetalhadas(draft.atribuicoesDetalhadas !== undefined ? draft.atribuicoesDetalhadas : (doc.atribuicoes_136_detalhadas || []));
+      setRelatoProvidencias(draft.relatoProvidencias !== undefined ? draft.relatoProvidencias : (doc.relato_providencias || ''));
+      setDespachoSituacao(draft.despachoSituacao !== undefined ? draft.despachoSituacao : (doc.despacho_situacao || ''));
+      setIsImprocedente(draft.isImprocedente !== undefined ? draft.isImprocedente : (doc.is_improcedente || false));
+      setInformacoesDocumento(draft.informacoesDocumento !== undefined ? draft.informacoesDocumento : (doc.informacoes_documento || ''));
+      setNumeroComunicadoViolacao(draft.numeroComunicadoViolacao !== undefined ? draft.numeroComunicadoViolacao : (doc.numero_comunicado_violacao || ''));
+      setNumeroSipia(draft.numeroSipia !== undefined ? draft.numeroSipia : (doc.numero_sipia || ''));
+      setLocalOcorrencia(draft.localOcorrencia !== undefined ? draft.localOcorrencia : (doc.local_ocorrencia || ''));
+      setCustomLocalText(draft.customLocalText !== undefined ? draft.customLocalText : parseCustomLocalText(doc.local_ocorrencia));
+      
+      if (draft.origemCategoria !== undefined) {
+        setOrigemCategoria(draft.origemCategoria);
+        setOrigemInstituicao(draft.origemInstituicao || '');
+      } else {
+        const parsed = parseOrigem(doc.origem, doc.origem_categoria);
+        setOrigemCategoria(parsed.cat);
+        setOrigemInstituicao(parsed.inst);
+      }
+      setCanalComunicado(draft.canalComunicado !== undefined ? draft.canalComunicado : (doc.canal_comunicado || ''));
+      setQuemComunicouClassificado(draft.quemComunicouClassificado !== undefined ? draft.quemComunicouClassificado : Boolean(doc.quem_comunicou_classificado));
+    } else {
+      setTempViolacoes(doc.violacoesSipia || []);
+      setTempAgentes(doc.agentesVioladores || []);
+      setSelectedMedidas101((doc.medidas_detalhadas || []).filter(m => m.artigo_inciso.startsWith('Art. 101')).map(m => m.artigo_inciso.replace('Art. 101, ', '')));
+      setSelectedMedidas129((doc.medidas_detalhadas || []).filter(m => m.artigo_inciso.startsWith('Art. 129')).map(m => m.artigo_inciso.replace('Art. 129, ', '')));
+      setSelectedAtribuicoes(doc.atribuicoes_136 || []);
+      setAtribuicoesDetalhadas(doc.atribuicoes_136_detalhadas || []);
+      setRelatoProvidencias(doc.relato_providencias || '');
+      setDespachoSituacao(doc.despacho_situacao || '');
+      setIsImprocedente(doc.is_improcedente || false);
+      setInformacoesDocumento(doc.informacoes_documento || '');
+      setNumeroComunicadoViolacao(doc.numero_comunicado_violacao || '');
+      setNumeroSipia(doc.numero_sipia || '');
+      setLocalOcorrencia(doc.local_ocorrencia || '');
+      setCustomLocalText(parseCustomLocalText(doc.local_ocorrencia));
+      const parsed = parseOrigem(doc.origem, doc.origem_categoria);
+      setOrigemCategoria(parsed.cat);
+      setOrigemInstituicao(parsed.inst);
+      setCanalComunicado(doc.canal_comunicado || '');
+      setQuemComunicouClassificado(Boolean(doc.quem_comunicou_classificado));
+    }
+  }, [doc.id, doc.informacoes_documento, doc.numero_comunicado_violacao, doc.numero_sipia, doc.local_ocorrencia, doc.origem, doc.origem_categoria, doc.canal_comunicado, doc.quem_comunicou_classificado, draftKey]);
+
+  // Salva alterações em rascunho local enquanto o usuário preenche/edita
+  React.useEffect(() => {
+    try {
+      const isModified = 
+        despachoSituacao !== (doc.despacho_situacao || '') ||
+        relatoProvidencias !== (doc.relato_providencias || '') ||
+        informacoesDocumento !== (doc.informacoes_documento || '') ||
+        numeroComunicadoViolacao !== (doc.numero_comunicado_violacao || '') ||
+        numeroSipia !== (doc.numero_sipia || '') ||
+        localOcorrencia !== (doc.local_ocorrencia || '') ||
+        isImprocedente !== (doc.is_improcedente || false) ||
+        JSON.stringify(tempViolacoes) !== JSON.stringify(doc.violacoesSipia || []) ||
+        JSON.stringify(tempAgentes) !== JSON.stringify(doc.agentesVioladores || []) ||
+        JSON.stringify(selectedAtribuicoes) !== JSON.stringify(doc.atribuicoes_136 || []);
+
+      if (isModified) {
+        const draftData = {
+          despachoSituacao,
+          relatoProvidencias,
+          tempViolacoes,
+          tempAgentes,
+          selectedMedidas101,
+          selectedMedidas129,
+          selectedAtribuicoes,
+          atribuicoesDetalhadas,
+          isImprocedente,
+          informacoesDocumento,
+          numeroComunicadoViolacao,
+          numeroSipia,
+          localOcorrencia,
+          customLocalText,
+          origemCategoria,
+          origemInstituicao,
+          canalComunicado,
+          quemComunicouClassificado,
+          savedAt: new Date().toISOString()
+        };
+        localStorage.setItem(draftKey, JSON.stringify(draftData));
+      }
+    } catch (e) {}
+  }, [despachoSituacao, relatoProvidencias, tempViolacoes, tempAgentes, selectedMedidas101, selectedMedidas129, selectedAtribuicoes, atribuicoesDetalhadas, isImprocedente, informacoesDocumento, numeroComunicadoViolacao, numeroSipia, localOcorrencia, customLocalText, origemCategoria, origemInstituicao, canalComunicado, quemComunicouClassificado, draftKey, doc]);
 
   const isUserInTrio = (nome: string) => {
     if (!nome) return false;
@@ -603,6 +683,10 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       informacoes_documento: informacoesDocumento
     });
     
+    try {
+      localStorage.removeItem(draftKey);
+    } catch {}
+
     onAddLog(doc.id, finalize ? `EDIÇÃO TÉCNICA: Medidas/Atribuições alteradas. REVALIDAÇÃO COLEGIADA OBRIGATÓRIA.` : `RASCUNHO TÉCNICO: Prontuário atualizado.`, 'DOCUMENTO');
     onBack();
   };

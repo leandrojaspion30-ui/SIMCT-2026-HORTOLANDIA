@@ -30,31 +30,75 @@ const DocumentRegistration: React.FC<DocumentRegistrationProps> = ({ documents, 
   const todayDate = `${year}-${month}-${day}`;
   const todayTime = systemNow.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-  const [formData, setFormData] = useState({
-    unidade_id: initialData?.unidade_id || currentUser.unidade_id || 1,
-    origem_categoria: initialData?.origem?.split(' - ')[0] || '',
-    origem: initialData?.origem?.split(' - ')[1] || '',
-    canal_comunicado: initialData?.canal_comunicado || '',
-    notificacao: initialData?.notificacao || '',
-    tipo_documento: initialData?.informacoes_documento || '',
-    numero_comunicado_violacao: initialData?.numero_comunicado_violacao || '',
-    numero_sipia: initialData?.numero_sipia || '',
-    data_aporte: initialData?.data_aporte || todayDate,
-    hora_aporte: initialData?.hora_aporte || todayTime,
-    genitora_nome: initialData?.genitora_nome || '',
-    genitora_nao_informado: initialData?.genitora_nao_informado || false,
-    cpf_genitora: initialData?.cpf_genitora || '',
-    outro_membro_nome: initialData?.outro_membro_nome || '',
-    outro_membro_parentesco: initialData?.outro_membro_parentesco || '',
-    outro_membro_cpf: initialData?.outro_membro_cpf || '',
-    tem_outro_membro: !!(initialData?.outro_membro_nome || initialData?.outro_membro_parentesco),
-    bairro: initialData?.bairro || '',
-    relato_inicial: initialData?.observacoes_iniciais || '',
-    conselheiro_referencia_id: initialData?.conselheiro_referencia_id || '',
-    providencia_imediata_manual: initialData?.providencia_imediata_manual || '',
-    local_ocorrencia: initialData?.local_ocorrencia || '',
-    is_urgente: initialData?.is_urgente || false,
-    criancas: initialData?.criancas || [{ nome: '', nao_informado: false, data_nascimento: '', cpf: '', genero_identidade: '' }] as ChildData[]
+  const draftStorageKey = useMemo(() => {
+    if (initialData?.id) {
+      return `simct_draft_reg_edit_${initialData.id}_${currentUser?.id || 'default'}`;
+    }
+    return `simct_draft_reg_new_${currentUser?.unidade_id || 1}_${currentUser?.id || 'default'}`;
+  }, [initialData?.id, currentUser?.id, currentUser?.unidade_id]);
+
+  const [hasDraftRestored, setHasDraftRestored] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(draftStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return Boolean(
+          parsed?.formData?.relato_inicial ||
+          parsed?.formData?.genitora_nome ||
+          parsed?.formData?.bairro ||
+          parsed?.formData?.origem ||
+          parsed?.formData?.origem_categoria ||
+          parsed?.formData?.canal_comunicado ||
+          parsed?.formData?.notificacao ||
+          parsed?.formData?.numero_sipia ||
+          parsed?.formData?.numero_comunicado_violacao ||
+          parsed?.customOrigem ||
+          (parsed?.formData?.criancas && parsed.formData.criancas.some((c: any) => c.nome || c.cpf))
+        );
+      }
+    } catch {}
+    return false;
+  });
+
+  const [formData, setFormData] = useState(() => {
+    try {
+      const saved = localStorage.getItem(draftStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.formData) {
+          return parsed.formData;
+        }
+      }
+    } catch (e) {
+      console.warn("Erro ao restaurar rascunho do formulário:", e);
+    }
+
+    return {
+      unidade_id: initialData?.unidade_id || currentUser.unidade_id || 1,
+      origem_categoria: initialData?.origem?.split(' - ')[0] || '',
+      origem: initialData?.origem?.split(' - ')[1] || '',
+      canal_comunicado: initialData?.canal_comunicado || '',
+      notificacao: initialData?.notificacao || '',
+      tipo_documento: initialData?.informacoes_documento || '',
+      numero_comunicado_violacao: initialData?.numero_comunicado_violacao || '',
+      numero_sipia: initialData?.numero_sipia || '',
+      data_aporte: initialData?.data_aporte || todayDate,
+      hora_aporte: initialData?.hora_aporte || todayTime,
+      genitora_nome: initialData?.genitora_nome || '',
+      genitora_nao_informado: initialData?.genitora_nao_informado || false,
+      cpf_genitora: initialData?.cpf_genitora || '',
+      outro_membro_nome: initialData?.outro_membro_nome || '',
+      outro_membro_parentesco: initialData?.outro_membro_parentesco || '',
+      outro_membro_cpf: initialData?.outro_membro_cpf || '',
+      tem_outro_membro: !!(initialData?.outro_membro_nome || initialData?.outro_membro_parentesco),
+      bairro: initialData?.bairro || '',
+      relato_inicial: initialData?.observacoes_iniciais || '',
+      conselheiro_referencia_id: initialData?.conselheiro_referencia_id || '',
+      providencia_imediata_manual: initialData?.providencia_imediata_manual || '',
+      local_ocorrencia: initialData?.local_ocorrencia || '',
+      is_urgente: initialData?.is_urgente || false,
+      criancas: initialData?.criancas || [{ nome: '', nao_informado: false, data_nascimento: '', cpf: '', genero_identidade: '' }] as ChildData[]
+    };
   });
 
   const [isAnalyzingViolations, setIsAnalyzingViolations] = useState(false);
@@ -108,13 +152,40 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     }
   };
 
-  const [isReferenceLocked, setIsReferenceLocked] = useState(false);
-  const [isManualReference, setIsManualReference] = useState(false);
+  const [isReferenceLocked, setIsReferenceLocked] = useState(() => {
+    try {
+      const saved = localStorage.getItem(draftStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.isReferenceLocked !== undefined) return Boolean(parsed.isReferenceLocked);
+      }
+    } catch {}
+    return false;
+  });
+
+  const [isManualReference, setIsManualReference] = useState(() => {
+    try {
+      const saved = localStorage.getItem(draftStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.isManualReference !== undefined) return Boolean(parsed.isManualReference);
+      }
+    } catch {}
+    return false;
+  });
+
   const [showRelatoError, setShowRelatoError] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [familyHistory, setFamilyHistory] = useState<Documento[]>([]);
 
   const [customOrigem, setCustomOrigem] = useState(() => {
+    try {
+      const saved = localStorage.getItem(draftStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.customOrigem !== undefined) return parsed.customOrigem;
+      }
+    } catch {}
     const val = initialData?.origem?.split(' - ')[1] || '';
     if (!val) return '';
     const cat = initialData?.origem?.split(' - ')[0] || '';
@@ -126,6 +197,13 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
   });
 
   const [selectedOrigemDropdown, setSelectedOrigemDropdown] = useState(() => {
+    try {
+      const saved = localStorage.getItem(draftStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.selectedOrigemDropdown !== undefined) return parsed.selectedOrigemDropdown;
+      }
+    } catch {}
     const val = initialData?.origem?.split(' - ')[1] || '';
     if (!val) return '';
     const cat = initialData?.origem?.split(' - ')[0] || '';
@@ -135,6 +213,80 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     }
     return baseOptions.includes('OUTROS') ? 'OUTROS' : 'OUTRO';
   });
+
+  // Auto-salvamento contínuo das informações preenchidas no rascunho local
+  useEffect(() => {
+    try {
+      const isTouched = 
+        Boolean(formData.relato_inicial?.trim()) ||
+        Boolean(formData.genitora_nome?.trim()) ||
+        Boolean(formData.cpf_genitora?.trim()) ||
+        Boolean(formData.bairro?.trim()) ||
+        Boolean(formData.origem?.trim()) ||
+        Boolean(formData.origem_categoria?.trim()) ||
+        Boolean(formData.canal_comunicado?.trim()) ||
+        Boolean(formData.notificacao?.trim()) ||
+        Boolean(formData.numero_sipia?.trim()) ||
+        Boolean(formData.numero_comunicado_violacao?.trim()) ||
+        Boolean(customOrigem?.trim()) ||
+        Boolean(selectedOrigemDropdown?.trim()) ||
+        formData.criancas.some(c => c.nome?.trim() || c.cpf?.trim() || c.data_nascimento?.trim());
+
+      if (isTouched) {
+        const draftPayload = {
+          formData,
+          customOrigem,
+          selectedOrigemDropdown,
+          isReferenceLocked,
+          isManualReference,
+          savedAt: new Date().toISOString()
+        };
+        localStorage.setItem(draftStorageKey, JSON.stringify(draftPayload));
+        setHasDraftRestored(true);
+      }
+    } catch (err) {
+      console.warn("Erro ao salvar rascunho local:", err);
+    }
+  }, [formData, customOrigem, selectedOrigemDropdown, isReferenceLocked, isManualReference, draftStorageKey]);
+
+  const handleClearDraft = () => {
+    if (window.confirm("Deseja realmente limpar todos os campos preenchidos e reiniciar este formulário?")) {
+      try {
+        localStorage.removeItem(draftStorageKey);
+      } catch {}
+      setHasDraftRestored(false);
+      setFormData({
+        unidade_id: initialData?.unidade_id || currentUser.unidade_id || 1,
+        origem_categoria: initialData?.origem?.split(' - ')[0] || '',
+        origem: initialData?.origem?.split(' - ')[1] || '',
+        canal_comunicado: initialData?.canal_comunicado || '',
+        notificacao: initialData?.notificacao || '',
+        tipo_documento: initialData?.informacoes_documento || '',
+        numero_comunicado_violacao: initialData?.numero_comunicado_violacao || '',
+        numero_sipia: initialData?.numero_sipia || '',
+        data_aporte: initialData?.data_aporte || todayDate,
+        hora_aporte: initialData?.hora_aporte || todayTime,
+        genitora_nome: initialData?.genitora_nome || '',
+        genitora_nao_informado: initialData?.genitora_nao_informado || false,
+        cpf_genitora: initialData?.cpf_genitora || '',
+        outro_membro_nome: initialData?.outro_membro_nome || '',
+        outro_membro_parentesco: initialData?.outro_membro_parentesco || '',
+        outro_membro_cpf: initialData?.outro_membro_cpf || '',
+        tem_outro_membro: !!(initialData?.outro_membro_nome || initialData?.outro_membro_parentesco),
+        bairro: initialData?.bairro || '',
+        relato_inicial: initialData?.observacoes_iniciais || '',
+        conselheiro_referencia_id: initialData?.conselheiro_referencia_id || '',
+        providencia_imediata_manual: initialData?.providencia_imediata_manual || '',
+        local_ocorrencia: initialData?.local_ocorrencia || '',
+        is_urgente: initialData?.is_urgente || false,
+        criancas: initialData?.criancas || [{ nome: '', nao_informado: false, data_nascimento: '', cpf: '', genero_identidade: '' }] as ChildData[]
+      });
+      setCustomOrigem('');
+      setSelectedOrigemDropdown('');
+      setIsReferenceLocked(false);
+      setIsManualReference(false);
+    }
+  };
 
   const isADM = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || (currentUser.nome || '').trim().toUpperCase().includes('LEANDRO') || currentUser.id === 'cons1';
   const isLeandro = (currentUser.nome || '').trim().toUpperCase().includes('LEANDRO') || currentUser.id === 'cons1';
@@ -816,6 +968,10 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
       finalData.conselheiro_providencia_nome = finalData.conselheiro_referencia_nome;
     }
 
+    try {
+      localStorage.removeItem(draftStorageKey);
+    } catch {}
+
     onSubmit(finalData, []);
   };
 
@@ -849,6 +1005,29 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
             <span className="hidden sm:inline">Voltar</span>
           </button>
         </header>
+
+        {/* BANNER DE PRESERVAÇÃO DE DADOS AO NAVEGAR ENTRE TELAS */}
+        <div className="bg-slate-50 border-b border-slate-200/80 px-4 sm:px-8 py-3 flex flex-wrap items-center justify-between gap-3 text-[11px] font-bold text-slate-600">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-slate-700">
+              {hasDraftRestored 
+                ? '📝 Informações preservadas automaticamente ao trocar de telas. Para gravar no banco de dados, clique em Salvar ao final.'
+                : '💾 Preenchimento seguro: Você pode alternar entre as abas sem perder os dados digitados.'}
+            </span>
+          </div>
+          {hasDraftRestored && !isReadOnly && (
+            <button
+              type="button"
+              onClick={handleClearDraft}
+              className="inline-flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 hover:border-rose-200 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all shadow-xs cursor-pointer active:scale-95"
+              title="Limpar todos os campos digitados e reiniciar o formulário"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Limpar Rascunho
+            </button>
+          )}
+        </div>
 
         <form onSubmit={handleSubmit} className="p-4 sm:p-8 space-y-6 sm:space-y-8 overflow-x-hidden">
           <fieldset disabled={isReadOnly} className="contents">
