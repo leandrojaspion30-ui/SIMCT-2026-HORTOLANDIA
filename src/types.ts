@@ -179,6 +179,7 @@ export interface Documento {
   outro_membro_nome?: string;
   outro_membro_parentesco?: string;
   outro_membro_cpf?: string;
+  tem_outro_membro?: boolean;
   cpf_crianca?: string;
   bairro: string; 
   endereco?: string;

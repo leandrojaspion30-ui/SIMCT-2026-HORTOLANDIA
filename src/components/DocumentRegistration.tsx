@@ -179,6 +179,19 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
   const [showRelatoError, setShowRelatoError] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [familyHistory, setFamilyHistory] = useState<Documento[]>([]);
+  const [cpfAutofillBanner, setCpfAutofillBanner] = useState<{
+    matchedDoc: Documento;
+    matchedBy: string;
+  } | null>(null);
+  const lastAutofilledDocIdRef = useRef<string | null>(null);
+
+  const formatCPF = (val: string) => {
+    const digits = val.replace(/\D/g, '').slice(0, 11);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+  };
 
   const [customOrigem, setCustomOrigem] = useState(() => {
     try {
@@ -223,6 +236,8 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
         Boolean(formData.relato_inicial?.trim()) ||
         Boolean(formData.genitora_nome?.trim()) ||
         Boolean(formData.cpf_genitora?.trim()) ||
+        Boolean(formData.outro_membro_nome?.trim()) ||
+        Boolean(formData.outro_membro_cpf?.trim()) ||
         Boolean(formData.bairro?.trim()) ||
         Boolean(formData.origem?.trim()) ||
         Boolean(formData.origem_categoria?.trim()) ||
@@ -230,9 +245,12 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
         Boolean(formData.notificacao?.trim()) ||
         Boolean(formData.numero_sipia?.trim()) ||
         Boolean(formData.numero_comunicado_violacao?.trim()) ||
+        Boolean(formData.tipo_documento?.trim()) ||
+        Boolean(formData.local_ocorrencia?.trim()) ||
         Boolean(customOrigem?.trim()) ||
         Boolean(selectedOrigemDropdown?.trim()) ||
-        formData.criancas.some(c => c.nome?.trim() || c.cpf?.trim() || c.data_nascimento?.trim());
+        Boolean(formData.is_prontuario_fisico) ||
+        formData.criancas.some(c => (c.nome?.trim() && c.nome !== 'NÃO INFORMADO') || c.cpf?.trim() || c.data_nascimento?.trim());
 
       if (isTouched) {
         const draftPayload = {
@@ -245,6 +263,9 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
         };
         localStorage.setItem(draftStorageKey, JSON.stringify(draftPayload));
         setHasDraftRestored(true);
+      } else {
+        localStorage.removeItem(draftStorageKey);
+        setHasDraftRestored(false);
       }
     } catch (err) {
       console.warn("Erro ao salvar rascunho local:", err);
@@ -258,35 +279,41 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
       } catch {}
       setHasDraftRestored(false);
       setFormData({
-        unidade_id: initialData?.unidade_id || currentUser.unidade_id || 1,
-        origem_categoria: initialData?.origem?.split(' - ')[0] || '',
-        origem: initialData?.origem?.split(' - ')[1] || '',
-        canal_comunicado: initialData?.canal_comunicado || '',
-        notificacao: initialData?.notificacao || '',
-        tipo_documento: initialData?.informacoes_documento || '',
-        numero_comunicado_violacao: initialData?.numero_comunicado_violacao || '',
-        numero_sipia: initialData?.numero_sipia || '',
-        data_aporte: initialData?.data_aporte || todayDate,
-        hora_aporte: initialData?.hora_aporte || todayTime,
-        genitora_nome: initialData?.genitora_nome || '',
-        genitora_nao_informado: initialData?.genitora_nao_informado || false,
-        cpf_genitora: initialData?.cpf_genitora || '',
-        outro_membro_nome: initialData?.outro_membro_nome || '',
-        outro_membro_parentesco: initialData?.outro_membro_parentesco || '',
-        outro_membro_cpf: initialData?.outro_membro_cpf || '',
-        tem_outro_membro: !!(initialData?.outro_membro_nome || initialData?.outro_membro_parentesco),
-        bairro: initialData?.bairro || '',
-        relato_inicial: initialData?.observacoes_iniciais || '',
-        conselheiro_referencia_id: initialData?.conselheiro_referencia_id || '',
-        providencia_imediata_manual: initialData?.providencia_imediata_manual || '',
-        local_ocorrencia: initialData?.local_ocorrencia || '',
-        is_urgente: initialData?.is_urgente || false,
-        criancas: initialData?.criancas || [{ nome: '', nao_informado: false, data_nascimento: '', cpf: '', genero_identidade: '' }] as ChildData[]
+        unidade_id: currentUser.unidade_id || 1,
+        origem_categoria: '',
+        origem: '',
+        canal_comunicado: '',
+        notificacao: '',
+        tipo_documento: '',
+        numero_comunicado_violacao: '',
+        numero_sipia: '',
+        data_aporte: todayDate,
+        hora_aporte: todayTime,
+        genitora_nome: '',
+        genitora_nao_informado: false,
+        cpf_genitora: '',
+        outro_membro_nome: '',
+        outro_membro_parentesco: '',
+        outro_membro_cpf: '',
+        tem_outro_membro: false,
+        bairro: '',
+        relato_inicial: '',
+        conselheiro_referencia_id: '',
+        providencia_imediata_manual: '',
+        local_ocorrencia: '',
+        is_urgente: false,
+        is_prontuario_fisico: false,
+        conselheiro_prontuario_fisico_id: '',
+        criancas: [{ nome: '', nao_informado: false, data_nascimento: '', cpf: '', genero_identidade: '' }] as ChildData[]
       });
       setCustomOrigem('');
       setSelectedOrigemDropdown('');
       setIsReferenceLocked(false);
       setIsManualReference(false);
+      setFamilyHistory([]);
+      setCpfAutofillBanner(null);
+      lastAutofilledDocIdRef.current = null;
+      setShowRelatoError(false);
     }
   };
 
@@ -444,7 +471,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     }
   };
 
-  // DIRETRIZ 41/50/53: Reconhecimento por CPF, Nome, Documento e Pasta Familiar
+  // DIRETRIZ: Reconhecimento por CPF (Genitora, Criança, Familiar), Nome e Pasta Familiar com Preenchimento Automático
   useEffect(() => {
     // Lista de documentos excluindo o próprio documento caso esteja em edição
     const availableDocs = initialData ? documents.filter(d => d.id !== initialData.id) : documents;
@@ -462,32 +489,41 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     const numCom = (formData.numero_comunicado_violacao || '').trim().toUpperCase();
     const numSipia = (formData.numero_sipia || '').trim().toUpperCase();
 
-    const findExisting = (): Documento[] => {
+    const findExistingWithReason = (): { docs: Documento[]; reason: string; matchedChildCpf?: string } | null => {
       // 1. Busca por CPF da Genitora
       if (cpfGen.length === 11) {
-        const found = availableDocs.filter(d => (d.cpf_genitora || '').replace(/\D/g, '') === cpfGen);
-        if (found.length > 0) return found;
+        const found = availableDocs.filter(d => 
+          (d.cpf_genitora || '').replace(/\D/g, '') === cpfGen ||
+          (d.outro_membro_cpf || '').replace(/\D/g, '') === cpfGen ||
+          d.criancas?.some(c => (c.cpf || '').replace(/\D/g, '') === cpfGen)
+        );
+        if (found.length > 0) return { docs: found, reason: 'CPF da Genitora/Responsável' };
       }
 
-      // 2. Busca por CPF do Membro da Família
+      // 2. Busca por CPF das Crianças
+      for (const cpf of cpfsCriancas) {
+        const found = availableDocs.filter(d => 
+          d.criancas?.some(c => (c.cpf || '').replace(/\D/g, '') === cpf) ||
+          (d.cpf_genitora || '').replace(/\D/g, '') === cpf ||
+          (d.outro_membro_cpf || '').replace(/\D/g, '') === cpf
+        );
+        if (found.length > 0) return { docs: found, reason: 'CPF da Criança/Adolescente', matchedChildCpf: cpf };
+      }
+
+      // 3. Busca por CPF do Outro Membro da Família
       if (cpfMembro.length === 11) {
         const found = availableDocs.filter(d => 
           (d.outro_membro_cpf || '').replace(/\D/g, '') === cpfMembro ||
-          (d.cpf_genitora || '').replace(/\D/g, '') === cpfMembro
+          (d.cpf_genitora || '').replace(/\D/g, '') === cpfMembro ||
+          d.criancas?.some(c => (c.cpf || '').replace(/\D/g, '') === cpfMembro)
         );
-        if (found.length > 0) return found;
-      }
-
-      // 3. Busca por CPF das Crianças
-      for (const cpf of cpfsCriancas) {
-        const found = availableDocs.filter(d => d.criancas?.some(c => (c.cpf || '').replace(/\D/g, '') === cpf));
-        if (found.length > 0) return found;
+        if (found.length > 0) return { docs: found, reason: 'CPF de Membro Familiar' };
       }
 
       // 4. Busca por Nome da Genitora / Responsável
       if (genNomeClean && genNomeClean !== 'NÃO INFORMADO' && genNomeClean !== 'NAO INFORMADO' && genNomeClean.length >= 3) {
         const found = availableDocs.filter(d => (d.genitora_nome || '').trim().toUpperCase() === genNomeClean);
-        if (found.length > 0) return found;
+        if (found.length > 0) return { docs: found, reason: 'Nome da Genitora' };
       }
 
       // 5. Busca por Nome do Outro Membro da Família
@@ -496,63 +532,96 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
           (d.outro_membro_nome || '').trim().toUpperCase() === membroNomeClean ||
           (d.genitora_nome || '').trim().toUpperCase() === membroNomeClean
         );
-        if (found.length > 0) return found;
+        if (found.length > 0) return { docs: found, reason: 'Nome do Membro Familiar' };
       }
 
       // 6. Busca por Nome das Crianças
       for (const cNome of criancasNomesClean) {
         const found = availableDocs.filter(d => d.criancas?.some(c => (c.nome || '').trim().toUpperCase() === cNome));
-        if (found.length > 0) return found;
+        if (found.length > 0) return { docs: found, reason: 'Nome da Criança' };
       }
 
       // 7. Busca por Nº do Comunicado / SIPIA
       if (numCom && numCom.length >= 2) {
         const found = availableDocs.filter(d => (d.numero_comunicado_violacao || '').trim().toUpperCase() === numCom);
-        if (found.length > 0) return found;
+        if (found.length > 0) return { docs: found, reason: 'Nº Com. Violação' };
       }
 
       if (numSipia && numSipia.length >= 2) {
         const found = availableDocs.filter(d => (d.numero_sipia || '').trim().toUpperCase() === numSipia);
-        if (found.length > 0) return found;
+        if (found.length > 0) return { docs: found, reason: 'Nº SIPIA' };
       }
 
-      return [];
+      return null;
     };
 
-    const history = findExisting();
-    if (history.length > 0) {
+    const matchResult = findExistingWithReason();
+    if (matchResult && matchResult.docs.length > 0) {
+      const history = matchResult.docs;
       const existingDoc = history[0];
       
-      // Armazena o histórico para exibir o aviso
-      if (familyHistory.length === 0) {
-        // Se ainda não mostramos o aviso para este conjunto de resultados
-        setFamilyHistory(history);
-        
-        // Exibe o alerta conforme Instruções do Sistema
-        if (!initialData && (formData.genitora_nome || '').length > 3) {
-          setTimeout(() => {
-            if (window.confirm("Atenção: Histórico familiar localizado. Vincular a este prontuário?")) {
-              setFormData(prev => ({
-                ...prev,
-                genitora_nome: prev.genitora_nome || existingDoc.genitora_nome,
-                bairro: prev.bairro || existingDoc.bairro,
-                conselheiro_referencia_id: existingDoc.conselheiro_referencia_id,
-                unidade_id: existingDoc.unidade_id || prev.unidade_id
+      setFamilyHistory(history);
+      setIsReferenceLocked(true);
+      if (!initialData) {
+        setIsManualReference(isADM);
+      }
+
+      // Preenchimento automático inteligente caso seja novo cadastro e ainda não tenhamos auto-preenchido este prontuário
+      if (!initialData && lastAutofilledDocIdRef.current !== existingDoc.id) {
+        lastAutofilledDocIdRef.current = existingDoc.id;
+
+        setFormData(prev => {
+          // Preenchimento de Crianças / Adolescentes
+          let updatedCriancas = [...prev.criancas];
+          if (existingDoc.criancas && existingDoc.criancas.length > 0) {
+            const hasExistingChildData = prev.criancas.some(c => c.nome && c.nome !== 'NÃO INFORMADO' && c.nome.length > 1);
+            if (!hasExistingChildData || matchResult.matchedChildCpf) {
+              // Carrega a lista completa de crianças do histórico com formatação
+              updatedCriancas = existingDoc.criancas.map(c => ({
+                nome: c.nome || '',
+                data_nascimento: c.data_nascimento || '',
+                cpf: c.cpf ? formatCPF(c.cpf) : '',
+                genero_identidade: c.genero_identidade || '',
+                nao_informado: Boolean(c.nao_informado)
               }));
-              setIsReferenceLocked(true);
-              setIsManualReference(isADM);
             }
-          }, 100);
-        } else {
-          setIsReferenceLocked(true);
-          if (!initialData) {
-            setIsManualReference(isADM);
           }
-        }
+
+          const hasMembro = Boolean(existingDoc.tem_outro_membro || existingDoc.outro_membro_nome);
+
+          return {
+            ...prev,
+            // 1. Bairro da Criança
+            bairro: existingDoc.bairro || prev.bairro,
+            // 2. Identificação Familiar
+            genitora_nome: existingDoc.genitora_nome || prev.genitora_nome,
+            cpf_genitora: existingDoc.cpf_genitora ? formatCPF(existingDoc.cpf_genitora) : prev.cpf_genitora,
+            genitora_nao_informado: false,
+            // Outro Membro
+            tem_outro_membro: hasMembro ? true : prev.tem_outro_membro,
+            outro_membro_nome: hasMembro ? (existingDoc.outro_membro_nome || prev.outro_membro_nome) : prev.outro_membro_nome,
+            outro_membro_parentesco: hasMembro ? (existingDoc.outro_membro_parentesco || prev.outro_membro_parentesco || 'GENITOR / GENITORA') : prev.outro_membro_parentesco,
+            outro_membro_cpf: hasMembro && existingDoc.outro_membro_cpf ? formatCPF(existingDoc.outro_membro_cpf) : prev.outro_membro_cpf,
+            // 3. Dados das Crianças
+            criancas: updatedCriancas,
+            // 4. Conselheiro de Referência e Unidade
+            conselheiro_referencia_id: existingDoc.conselheiro_referencia_id || prev.conselheiro_referencia_id,
+            unidade_id: existingDoc.unidade_id || prev.unidade_id
+          };
+        });
+
+        setCpfAutofillBanner({
+          matchedDoc: existingDoc,
+          matchedBy: matchResult.reason
+        });
       }
     } else {
-      setIsReferenceLocked(false);
-      setFamilyHistory([]);
+      if (!initialData) {
+        setIsReferenceLocked(false);
+        setFamilyHistory([]);
+        setCpfAutofillBanner(null);
+        lastAutofilledDocIdRef.current = null;
+      }
     }
   }, [
     formData.cpf_genitora, 
@@ -747,6 +816,8 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
         nao_informado: isChecked,
         nome: isChecked ? 'NÃO INFORMADO' : (newChildren[index].nome === 'NÃO INFORMADO' ? '' : newChildren[index].nome)
       };
+    } else if (field === 'cpf') {
+      newChildren[index] = { ...newChildren[index], cpf: formatCPF(value) };
     } else {
       newChildren[index] = { ...newChildren[index], [field]: value };
     }
@@ -1401,6 +1472,51 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
 
           {/* BLOCO 3: IDENTIFICAÇÃO FAMILIAR */}
           <section className="space-y-6">
+            {cpfAutofillBanner && (
+              <div className="p-4 sm:p-5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300/80 rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="flex items-start sm:items-center gap-3.5">
+                  <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-xs shrink-0">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-md flex items-center gap-1">
+                        <FolderArchive className="w-3 h-3" /> Histórico Familiar Reconhecido ({cpfAutofillBanner.matchedBy})
+                      </span>
+                      {cpfAutofillBanner.matchedDoc.conselheiro_referencia_id && (
+                        <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 bg-blue-100/90 px-2 py-0.5 rounded-md flex items-center gap-1">
+                          <UserCheck className="w-3 h-3" /> Conselheiro de Referência: {allUsers.find(u => u.id === cpfAutofillBanner.matchedDoc.conselheiro_referencia_id)?.nome || 'Vinculado'}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs font-bold text-emerald-950 mt-1.5 leading-snug">
+                      Bairro da Criança, Dados Familiares, Crianças/Adolescentes e Conselheiro de Referência foram preenchidos e vinculados automaticamente do prontuário existente.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                  <button
+                    type="button"
+                    onClick={() => setShowHistoryModal(true)}
+                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                  >
+                    <FolderArchive className="w-3.5 h-3.5" /> Ver Prontuário
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCpfAutofillBanner(null);
+                      setIsReferenceLocked(false);
+                    }}
+                    title="Ocultar aviso de preenchimento automático"
+                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-emerald-100/50 rounded-xl transition-all"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
               <UserRound className="w-5 h-5 text-blue-600" />
               <h3 className="text-[12px] font-black uppercase text-slate-800 tracking-widest">3. Identificação Familiar</h3>
@@ -1434,7 +1550,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                   type="text" 
                   className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-blue-500"
                   value={formData.cpf_genitora}
-                  onChange={e => setFormData({...formData, cpf_genitora: e.target.value})}
+                  onChange={e => setFormData({...formData, cpf_genitora: formatCPF(e.target.value)})}
                   placeholder="000.000.000-00"
                 />
               </div>
@@ -1527,7 +1643,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                       placeholder="000.000.000-00"
                       className="w-full p-3.5 bg-white border border-slate-200 rounded-xl font-bold text-[11px] outline-none focus:border-blue-500"
                       value={formData.outro_membro_cpf}
-                      onChange={e => setFormData({ ...formData, outro_membro_cpf: e.target.value })}
+                      onChange={e => setFormData({ ...formData, outro_membro_cpf: formatCPF(e.target.value) })}
                     />
                   </div>
                 </div>
