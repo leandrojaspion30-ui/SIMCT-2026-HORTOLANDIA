@@ -1581,9 +1581,14 @@ const DocumentView: React.FC<DocumentViewProps> = ({
           </div>
 
           {(isActualProvidenciaImediata || isADM) ? (
-            <div className="grid grid-cols-2 gap-6 pt-6">
-              <button id="btn-save-draft" onClick={() => handleSave(false)} className="py-6 bg-slate-600 text-white rounded-3xl font-black uppercase text-[12px] shadow-xl hover:bg-slate-700 transition-all flex items-center justify-center gap-3"><Save className="w-5 h-5" /> [Salvar Rascunho]</button>
-              <button id="btn-finalize-doc" onClick={() => handleSave(true)} className="py-6 bg-emerald-600 text-white rounded-3xl font-black uppercase text-[12px] shadow-xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-3"><CheckCircle2 className="w-5 h-5" /> [Concluir Prontuário]</button>
+            <div className="pt-6">
+              <button 
+                id="btn-finalize-doc" 
+                onClick={() => handleSave(true)} 
+                className="w-full py-6 bg-emerald-600 text-white rounded-3xl font-black uppercase text-[13px] tracking-widest shadow-xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-3 active:scale-[0.99]"
+              >
+                <Save className="w-5 h-5" /> [Salvar]
+              </button>
             </div>
           ) : (
             isImediata && (
