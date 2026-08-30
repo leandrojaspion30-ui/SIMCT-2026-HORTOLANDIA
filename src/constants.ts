@@ -324,12 +324,10 @@ export const normalizeCanalName = (canal: string | undefined | null): string => 
 
 /**
  * Identifica se um canal participa do rodízio sequencial de casos novos.
- * REGRA SIMCT: Somente 'TELEFONE DE PLANTÃO' não deve ser contabilizado no rodízio.
+ * REGRA SIMCT: Todos os canais oficiais, incluindo 'TELEFONE DE PLANTÃO', participam dos ciclos de rodízio.
  */
 export const isRotationChannel = (canal: string | undefined | null): boolean => {
-  if (!canal) return true;
-  const norm = normalizeCanalName(canal);
-  return norm !== 'TELEFONE DE PLANTÃO';
+  return true;
 };
 
 /**
@@ -448,7 +446,7 @@ export const getChannelNextCounselor = (
       lastAssignedName: null,
       totalNewInChannel: 0,
       isRotation: false,
-      channelName: 'TELEFONE DE PLANTÃO'
+      channelName: normCanal
     };
   }
 

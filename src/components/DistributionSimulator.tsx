@@ -789,7 +789,9 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
                         ? 'bg-emerald-50/30 border-emerald-200' 
                         : chan.normalizedName === 'OFÍCIO' 
                           ? 'bg-blue-50/30 border-blue-200' 
-                          : 'bg-slate-50/60 border-slate-200'
+                          : chan.normalizedName === 'TELEFONE DE PLANTÃO'
+                            ? 'bg-rose-50/30 border-rose-200'
+                            : 'bg-slate-50/60 border-slate-200'
                 }`}
               >
                 <div className="space-y-2">
