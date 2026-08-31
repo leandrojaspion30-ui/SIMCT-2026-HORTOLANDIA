@@ -145,6 +145,8 @@ const getStatusStyle = (status: DocumentStatus, isImprocedente?: boolean, valida
     case 'AVALIAR_EM_COLEGIADO': return { color: 'bg-amber-600', border: 'border-l-amber-600', icon: <Users className="w-4 h-4" /> };
     case 'SOLICITAR_REUNIAO_REDE':
     case 'SOLICITAR_REUNIAO_DE_REDE': return { color: 'bg-purple-600', border: 'border-l-purple-600', icon: <Building2 className="w-4 h-4" /> };
+    case 'REUNIAO_REDE_AGENDADA':
+    case 'AGENDAR_REUNIAO_REDE': return { color: 'bg-blue-600', border: 'border-l-blue-600', icon: <Calendar className="w-4 h-4" /> };
     case 'RESPONDER_OFICIO_JUDICIARIO_MP': return { color: 'bg-blue-700', border: 'border-l-blue-700', icon: <FileText className="w-4 h-4" /> };
     case 'CONCLUIDO': return { color: 'bg-emerald-600', border: 'border-l-emerald-600', icon: <CheckCircle2 className="w-4 h-4" /> };
     case 'ENCERRADO': return { color: 'bg-slate-700', border: 'border-l-slate-700', icon: <FileCheck2 className="w-4 h-4" /> };
@@ -339,6 +341,8 @@ const DocumentList: React.FC<DocumentListProps> = ({
         const matchStatus = !filters.status || (
           filters.status === 'SOLICITAR_REUNIAO_REDE'
             ? (doc.status.includes('SOLICITAR_REUNIAO_REDE') || doc.status.includes('SOLICITAR_REUNIAO_DE_REDE'))
+            : (filters.status === 'REUNIAO_REDE_AGENDADA' || filters.status === 'AGENDAR_REUNIAO_REDE')
+            ? (doc.status.includes('REUNIAO_REDE_AGENDADA') || doc.status.includes('AGENDAR_REUNIAO_REDE'))
             : doc.status.includes(filters.status as DocumentStatus)
         );
         const matchRef = !filters.conselheiro_ref_id || doc.conselheiro_referencia_id === filters.conselheiro_ref_id;
@@ -522,7 +526,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
 
     const isAdminDespacho = [
       'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
-      'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
+      'REUNIAO_REDE_AGENDADA', 'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
       'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
       'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE',
       'RESPONDER_OFICIO_JUDICIARIO_MP'
@@ -556,7 +560,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
     const isMedidaAplicadaConcluded = doc.status.includes('MEDIDA_APLICADA') && (iValidated || !isInTrio);
     const lastDispatch = [...doc.status].reverse().find(s => [
       'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
-      'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
+      'REUNIAO_REDE_AGENDADA', 'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
       'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
       'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE',
       'RESPONDER_OFICIO_JUDICIARIO_MP',
@@ -756,7 +760,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                     <option value="NOTIFICAR">🔔 NOTIFICAR</option>
                     <option value="RESPONDER_OFICIO_JUDICIARIO_MP">⚖️ RESPONDER OFÍCIO DO JUDICIÁRIO/MP</option>
                     <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
-                    <option value="AGENDAR_REUNIAO_REDE">📅 AGENDAR REUNIÃO DE REDE</option>
+                    <option value="REUNIAO_REDE_AGENDADA">📅 REUNIÃO DE REDE AGENDADA</option>
                     <option value="AGUARDAR_RESPOSTA_EMAIL">📧 AGUARDAR RESPOSTA E-MAIL</option>
                     <option value="EMAIL_RESPONDIDO">✉️ E-MAIL RESPONDIDO</option>
                     <option value="ENCAMINHAR_NOTICIA_FATO">📂 ENCAMINHAR NOTÍCIA DE FATO</option>
@@ -764,7 +768,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                     <option value="RESPONDER_EMAIL">📨 RESPONDER E-MAIL</option>
                     <option value="DIREITO_NAO_VIOLADO">🚫 DIREITO NÃO VIOLADO</option>
                     <option value="TODAS_MEDIDAS_APLICADAS">🏆 TODAS MEDIDAS APLICADAS</option>
-                    {!['AGUARDANDO_ANALISE', 'AGUARDANDO_DOCUMENTO', 'AGUARDANDO_VALIDACAO', 'MEDIDA_APLICADA', 'AVALIAR_EM_COLEGIADO', 'CONCLUIDO', 'MONITORAMENTO', 'MEDIDA_PENDENTE', 'NOTIFICADO', 'NOTIFICAR', 'RESPONDER_OFICIO_JUDICIARIO_MP', 'SOLICITAR_REUNIAO_REDE', 'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'EMAIL_RESPONDIDO', 'ENCAMINHAR_NOTICIA_FATO', 'OFICIO_RESPONDIDO', 'RESPONDER_EMAIL', 'DIREITO_NAO_VIOLADO', 'TODAS_MEDIDAS_APLICADAS'].includes(mainStatus) && (
+                    {!['AGUARDANDO_ANALISE', 'AGUARDANDO_DOCUMENTO', 'AGUARDANDO_VALIDACAO', 'MEDIDA_APLICADA', 'AVALIAR_EM_COLEGIADO', 'CONCLUIDO', 'MONITORAMENTO', 'MEDIDA_PENDENTE', 'NOTIFICADO', 'NOTIFICAR', 'RESPONDER_OFICIO_JUDICIARIO_MP', 'SOLICITAR_REUNIAO_REDE', 'REUNIAO_REDE_AGENDADA', 'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'EMAIL_RESPONDIDO', 'ENCAMINHAR_NOTICIA_FATO', 'OFICIO_RESPONDIDO', 'RESPONDER_EMAIL', 'DIREITO_NAO_VIOLADO', 'TODAS_MEDIDAS_APLICADAS'].includes(mainStatus) && (
                       <option value={mainStatus}>📌 {(STATUS_LABELS[mainStatus] || mainStatus).toUpperCase()}</option>
                     )}
                   </select>
@@ -896,6 +900,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
               <option value="NOTIFICAR">🔔 NOTIFICAR</option>
               <option value="RESPONDER_OFICIO_JUDICIARIO_MP">⚖️ RESPONDER OFÍCIO DO JUDICIÁRIO/MP</option>
               <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
+              <option value="REUNIAO_REDE_AGENDADA">📅 REUNIÃO DE REDE AGENDADA</option>
             </select>
             <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none group-focus-within:text-blue-500 transition-colors" />
           </div>
@@ -1124,7 +1129,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
 
               const lastDispatch = [...doc.status].reverse().find(s => [
                 'CONCLUIDO', 'EMAIL_RESPONDIDO', 'OFICIO_RESPONDIDO', 'NOTIFICAR',
-                'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
+                'REUNIAO_REDE_AGENDADA', 'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'ENCAMINHAR_NOTICIA_FATO',
                 'RESPONDER_EMAIL', 'SOLICITAR_REUNIAO_REDE', 'DIREITO_NAO_VIOLADO',
                 'TODAS_MEDIDAS_APLICADAS', 'MARCAR_REUNIAO_REDE',
                 'RESPONDER_OFICIO_JUDICIARIO_MP', 'PROMOVER_REUNIAO_REDE',
