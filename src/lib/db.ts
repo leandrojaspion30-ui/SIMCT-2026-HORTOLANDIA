@@ -20,7 +20,7 @@ import {
 } from 'firebase/firestore';
 import { db, ensureAuthenticated, auth } from './firebase';
 import { Documento, Log, AgendaEntry, User, ScaleException, ChatMessage, DocumentStatus } from '../types';
-import { isSameCounselorName, getEffectiveEscala, INITIAL_USERS, normalizeCanalName, isRotationChannel, getActiveRotationCounselors } from '../constants';
+import { isSameCounselorName, getEffectiveEscala, INITIAL_USERS, normalizeCanalName, isRotationChannel, getActiveRotationCounselors, isCounselorInTrioOrSubstitution, getActiveSubstituteInTrio } from '../constants';
 
 export enum OperationType {
   CREATE = 'create',
@@ -453,14 +453,37 @@ export const saveDocumentWithAtomicRotation = async (
       const targetTime = docData.hora_aporte || '12:00';
       const trioOfDate = getEffectiveEscala(targetDate, targetTime, unidadeId, nameMap, scaleExceptions || []);
 
-      const mappedRefName = (finalRefName && nameMap && nameMap[finalRefName.toUpperCase()]) ? nameMap[finalRefName.toUpperCase()] : finalRefName;
-      const isRefUserInTrio = Boolean(mappedRefName && trioOfDate.some(n => isSameCounselorName(n, mappedRefName)));
+      const refUserObj = activeCounselors.find(u => u.id === finalRefId) || { id: finalRefId, nome: finalRefName };
+      const isRefUserInTrio = isCounselorInTrioOrSubstitution(
+        refUserObj,
+        trioOfDate,
+        scaleExceptions || [],
+        targetDate,
+        targetTime,
+        unidadeId,
+        nameMap
+      );
 
       if (!docData.notificacao && !docData.providencia_imediata_manual) {
         if (isRefUserInTrio) {
-          // Se o conselheiro de referência sorteado está no trio do dia, a imediata é atribuída a ele
-          finalProvId = finalRefId;
-          finalProvName = finalRefName;
+          // Se o conselheiro de referência está no trio do dia ou em substituição/troca, a imediata é atribuída a ele (ou ao substituto ativo no trio)
+          const activeSubUser = getActiveSubstituteInTrio(
+            refUserObj,
+            trioOfDate,
+            activeCounselors,
+            scaleExceptions || [],
+            targetDate,
+            targetTime,
+            unidadeId,
+            nameMap
+          );
+          if (activeSubUser) {
+            finalProvId = activeSubUser.id;
+            finalProvName = activeSubUser.nome;
+          } else {
+            finalProvId = finalRefId;
+            finalProvName = finalRefName;
+          }
         } else if (!finalProvId) {
           // Se não havia providência imediata definida, seleciona o primeiro plantonista do trio
           const firstTrioName = trioOfDate[0];

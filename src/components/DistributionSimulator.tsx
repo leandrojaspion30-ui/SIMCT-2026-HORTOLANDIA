@@ -38,7 +38,9 @@ import {
   normalizeCanalName,
   isRotationChannel,
   getChannelNextCounselor,
-  getActiveRotationCounselors
+  getActiveRotationCounselors,
+  isCounselorInTrioOrSubstitution,
+  getActiveSubstituteInTrio
 } from '../constants';
 import { saveDocumentWithAtomicRotation, deleteDocument, deleteScaleException, saveLog } from '../lib/db';
 
@@ -385,13 +387,30 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
 
       for (let i = 0; i < simulationSize; i++) {
         const refUser = expectedRefs[i];
-        const refUserName = refUser?.nome?.toUpperCase();
-        const mappedRefName = (refUserName && nameMap && nameMap[refUserName]) ? nameMap[refUserName] : refUserName;
-        const isRefUserInTrio = mappedRefName && virtualTrio.some(n => isSameCounselorName(n, mappedRefName));
+        const isRefUserInTrio = isCounselorInTrioOrSubstitution(
+          refUser,
+          virtualTrio,
+          scaleExceptions,
+          todayDateReal,
+          currentTimeReal,
+          selectedUnidade,
+          nameMap
+        );
 
         if (isRefUserInTrio && refUser) {
-          expectedSequenceImediata.push(mappedRefName?.toUpperCase() || refUserName || 'N/A');
-          currentProvName = mappedRefName?.toUpperCase();
+          const activeSubUser = getActiveSubstituteInTrio(
+            refUser,
+            virtualTrio,
+            users,
+            scaleExceptions,
+            todayDateReal,
+            currentTimeReal,
+            selectedUnidade,
+            nameMap
+          );
+          const assignedName = activeSubUser?.nome?.toUpperCase() || refUser.nome?.toUpperCase() || 'N/A';
+          expectedSequenceImediata.push(assignedName);
+          currentProvName = assignedName;
         } else {
           const lastIdx = virtualTrio.findIndex(name => isSameCounselorName(name, currentProvName));
           const nextIdx = virtualTrio.length > 0 ? (lastIdx + 1) % virtualTrio.length : 0;

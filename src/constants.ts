@@ -526,6 +526,19 @@ export const isSameCounselorName = (nameA: string | undefined | null, nameB: str
   return false;
 };
 
+export const parseSafeDateTime = (d?: string, t?: string): Date | null => {
+  if (!d) return null;
+  const cleanD = d.trim().split('T')[0];
+  const cleanT = (t || '00:00').trim();
+  const parts = cleanT.split(':');
+  const h = parseInt(parts[0] || '0', 10);
+  const m = parseInt(parts[1] || '0', 10);
+  const padH = String(isNaN(h) ? 0 : h).padStart(2, '0');
+  const padM = String(isNaN(m) ? 0 : m).padStart(2, '0');
+  const dt = new Date(`${cleanD}T${padH}:${padM}:00`);
+  return isNaN(dt.getTime()) ? null : dt;
+};
+
 export const getEffectiveEscala = (
   dateStr: string, 
   timeStr: string = "08:00", 
@@ -617,19 +630,17 @@ export const getEffectiveEscala = (
 
   // Se houver exceções/trocas excepcionais cadastradas
   if (scaleExceptions && scaleExceptions.length > 0) {
-    const [qH, qM] = safeTime.split(':').map(Number);
-    const queryDateTime = new Date(`${dateStr}T${String(qH || 0).padStart(2, '0')}:${String(qM || 0).padStart(2, '0')}:00`);
+    const queryDateTime = parseSafeDateTime(dateStr, safeTime);
 
     const activeExceptions = scaleExceptions.filter(ex => {
       if (ex.unidade_id !== unidade_id) return false;
 
       // Se houver campos de início e fim personalizados
       if (ex.inicio_data && ex.inicio_hora && ex.fim_data && ex.fim_hora) {
-        const startDateTime = new Date(`${ex.inicio_data}T${ex.inicio_hora}:00`);
-        const endDateTime = new Date(`${ex.fim_data}T${ex.fim_hora}:00`);
-        if (!isNaN(startDateTime.getTime()) && !isNaN(endDateTime.getTime())) {
-          const isInRange = queryDateTime >= startDateTime && queryDateTime < endDateTime;
-          if (isInRange) return true;
+        const startDateTime = parseSafeDateTime(ex.inicio_data, ex.inicio_hora);
+        const endDateTime = parseSafeDateTime(ex.fim_data, ex.fim_hora);
+        if (startDateTime && endDateTime && queryDateTime) {
+          return queryDateTime >= startDateTime && queryDateTime <= endDateTime;
         }
       }
 
@@ -652,6 +663,120 @@ export const getEffectiveEscala = (
   }
 
   return rawTrio;
+};
+
+/**
+ * Verifica de forma definitiva se o conselheiro de referência está no trio do dia ou ativo por substituição/troca.
+ */
+export const isCounselorInTrioOrSubstitution = (
+  counselorNameOrObj: string | User | { id?: string; nome?: string } | null | undefined,
+  trioNames: string[],
+  scaleExceptions?: ScaleException[],
+  dateStr?: string,
+  timeStr?: string,
+  unidade_id?: number,
+  nameMap?: Record<string, string>
+): boolean => {
+  if (!counselorNameOrObj) return false;
+  const rawName = typeof counselorNameOrObj === 'string' 
+    ? counselorNameOrObj 
+    : (counselorNameOrObj.nome || '');
+  if (!rawName) return false;
+
+  const counselorId = typeof counselorNameOrObj === 'object' ? counselorNameOrObj.id : undefined;
+  const mappedName = (nameMap && nameMap[rawName.toUpperCase()]) ? nameMap[rawName.toUpperCase()] : rawName;
+
+  // 1. Está diretamente no trio efetivo (que já incorpora trocas/substituições da escala)
+  if (trioNames && trioNames.length > 0) {
+    const inTrio = trioNames.some(n => isSameCounselorName(n, mappedName) || isSameCounselorName(n, rawName));
+    if (inTrio) return true;
+  }
+
+  // 2. Está presente e ativo como conselheiro substituto em alguma troca na data/horário
+  if (scaleExceptions && scaleExceptions.length > 0 && dateStr) {
+    const queryDateTime = parseSafeDateTime(dateStr, timeStr || "08:00");
+
+    const isSubActive = scaleExceptions.some(ex => {
+      if (unidade_id && ex.unidade_id !== unidade_id) return false;
+      const matchesSub = (counselorId && ex.conselheiro_substituto_id === counselorId) ||
+                         isSameCounselorName(ex.conselheiro_substituto_nome, mappedName) ||
+                         isSameCounselorName(ex.conselheiro_substituto_nome, rawName);
+      if (!matchesSub) return false;
+
+      if (ex.inicio_data && ex.inicio_hora && ex.fim_data && ex.fim_hora) {
+        const start = parseSafeDateTime(ex.inicio_data, ex.inicio_hora);
+        const end = parseSafeDateTime(ex.fim_data, ex.fim_hora);
+        if (start && end && queryDateTime) {
+          return queryDateTime >= start && queryDateTime <= end;
+        }
+      }
+      return ex.data === dateStr || ex.inicio_data === dateStr;
+    });
+
+    if (isSubActive) return true;
+  }
+
+  return false;
+};
+
+/**
+ * Retorna o conselheiro ativo na escala de hoje para o lugar de um determinado conselheiro de referência
+ * (Ex: Se Sandra for referência mas Milena estiver substituindo Sandra no plantão de hoje, retorna Milena).
+ */
+export const getActiveSubstituteInTrio = (
+  counselorNameOrObj: string | User | { id?: string; nome?: string } | null | undefined,
+  trioNames: string[],
+  allUsers: User[],
+  scaleExceptions?: ScaleException[],
+  dateStr?: string,
+  timeStr?: string,
+  unidade_id?: number,
+  nameMap?: Record<string, string>
+): User | null => {
+  if (!counselorNameOrObj) return null;
+  const rawName = typeof counselorNameOrObj === 'string' ? counselorNameOrObj : (counselorNameOrObj.nome || '');
+  if (!rawName) return null;
+  const counselorId = typeof counselorNameOrObj === 'object' ? counselorNameOrObj.id : undefined;
+  const mappedName = (nameMap && nameMap[rawName.toUpperCase()]) ? nameMap[rawName.toUpperCase()] : rawName;
+
+  // Se o próprio conselheiro (ou seu nome mapeado) já está no trio
+  const directUser = allUsers.find(u => 
+    u.status === 'ATIVO' && 
+    (!unidade_id || (u.unidade_id || 1) === unidade_id) && 
+    (isSameCounselorName(u.nome, mappedName) || isSameCounselorName(u.nome, rawName) || (counselorId && u.id === counselorId))
+  );
+
+  // Se houver uma troca ativa onde este conselheiro é o original (sendo substituído por outro no plantão de hoje)
+  if (scaleExceptions && scaleExceptions.length > 0 && dateStr) {
+    const queryDateTime = parseSafeDateTime(dateStr, timeStr || "08:00");
+    const activeException = scaleExceptions.find(ex => {
+      if (unidade_id && ex.unidade_id !== unidade_id) return false;
+      const isOriginal = (counselorId && ex.conselheiro_original_id === counselorId) ||
+                         isSameCounselorName(ex.conselheiro_original_nome, mappedName) ||
+                         isSameCounselorName(ex.conselheiro_original_nome, rawName);
+      if (!isOriginal) return false;
+
+      if (ex.inicio_data && ex.inicio_hora && ex.fim_data && ex.fim_hora) {
+        const start = parseSafeDateTime(ex.inicio_data, ex.inicio_hora);
+        const end = parseSafeDateTime(ex.fim_data, ex.fim_hora);
+        if (start && end && queryDateTime) {
+          return queryDateTime >= start && queryDateTime <= end;
+        }
+      }
+      return ex.data === dateStr || ex.inicio_data === dateStr;
+    });
+
+    if (activeException) {
+      const subUser = allUsers.find(u => 
+        u.status === 'ATIVO' && 
+        (!unidade_id || (u.unidade_id || 1) === unidade_id) && 
+        (u.id === activeException.conselheiro_substituto_id || isSameCounselorName(u.nome, activeException.conselheiro_substituto_nome))
+      );
+      if (subUser) return subUser;
+    }
+  }
+
+  return directUser || null;
 };
 
 export const BAIRROS = [

@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check, Repeat, Lock, ArrowLeft, Sparkles, Loader2, RotateCcw, FolderArchive, UserCheck } from 'lucide-react';
 import { Documento, User, ChildData, DocumentStatus, AgendaEntry, ScaleException } from '../types';
-import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, getOrigensHierarquicasByUnidade, CANAIS_COMUNICADO_LIST, getEffectiveEscala, isSameCounselorName, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade, getUnidadeByBairro, LOCAL_OCORRENCIA_OPTIONS, normalizeCanalName, isRotationChannel, getChannelNextCounselor, getActiveRotationCounselors } from '../constants';
+import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, getOrigensHierarquicasByUnidade, CANAIS_COMUNICADO_LIST, getEffectiveEscala, isSameCounselorName, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade, getUnidadeByBairro, LOCAL_OCORRENCIA_OPTIONS, normalizeCanalName, isRotationChannel, getChannelNextCounselor, getActiveRotationCounselors, isCounselorInTrioOrSubstitution, getActiveSubstituteInTrio } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
 import { saveScaleException, deleteScaleException, saveLog } from '../lib/db';
 import { SearchableSelect } from './SearchableSelect';
@@ -686,10 +686,16 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
 
   const isCurrentRefUserInTrio = useMemo(() => {
     if (!currentRefUser) return false;
-    const refUserName = currentRefUser.nome?.toUpperCase();
-    const mappedRefName = (refUserName && nameMap && nameMap[refUserName]) ? nameMap[refUserName] : refUserName;
-    return Boolean(mappedRefName && trioNames.some(n => isSameCounselorName(n, mappedRefName)));
-  }, [currentRefUser, nameMap, trioNames]);
+    return isCounselorInTrioOrSubstitution(
+      currentRefUser,
+      trioNames,
+      scaleExceptions,
+      formData.data_aporte || todayDate,
+      formData.hora_aporte || todayTime,
+      formData.unidade_id,
+      nameMap
+    );
+  }, [currentRefUser, nameMap, trioNames, scaleExceptions, formData.data_aporte, formData.hora_aporte, todayDate, todayTime, formData.unidade_id]);
 
   const assignedImediata = useMemo(() => {
     // -1. PRONTUÁRIO FÍSICO: Imediata e Referência unificadas no mesmo conselheiro, sem roleta
@@ -716,35 +722,6 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
       );
     }
 
-    // 2. TRABALHO NA SEDE / URGENTE / PLANTÃO (FORA DE EXPEDIENTE): 
-    // Documentos urgentes ou recebidos durante trabalho na sede (Expediente)
-    // O primeiro do trio (trioNames[0]) é o Conselheiro de Sede (Trabalho na Sede) ou o Primeiro Plantonista
-    const timeInfo = (() => {
-      const parts = (formData.hora_aporte || '00:00').split(':');
-      const h = parseInt(parts[0]);
-      const m = parseInt(parts[1] || '0');
-      const timeVal = h * 60 + m; // minutos totais desde 00:00
-      
-      const isDayShift = h >= 8 && h < 17; // 08:00 às 16:59
-      const isNightShift = h >= 17 || h < 8; // 17:00 às 07:59
-      
-      const dateObj = new Date(formData.data_aporte + 'T12:00:00');
-      const dayOfWeek = dateObj.getDay(); // 0: Dom, 5: Sex, 6: Sab
-      
-      const isWeekend = (dayOfWeek === 5 && h >= 17) || (dayOfWeek === 6) || (dayOfWeek === 0) || (dayOfWeek === 1 && h < 8);
-      
-      return { isDayShift, isNightShift, isWeekend };
-    })();
-
-    const isPlantao = timeInfo.isNightShift || timeInfo.isWeekend;
-
-    if (isPlantao && trioNames.length > 0) {
-      // Se for noite ou final de semana, o "Primeiro Plantonista" (trioNames[0]) assume tudo.
-      const targetName = trioNames[0];
-      const targetUser = allUsers.find(u => u.status === 'ATIVO' && u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, targetName));
-      if (targetUser) return targetUser;
-    }
-
     if (initialData) {
       const origUser = allUsers.find(u => u.id === initialData.conselheiro_providencia_id && (u.unidade_id || 1) === formData.unidade_id);
       const origName = origUser?.nome || initialData.conselheiro_providencia_nome;
@@ -755,27 +732,55 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
       }
       return origUser;
     }
-    
-    // Para novos documentos, a imediata é sempre baseada no dia real de hoje (todayDate) e usa a escala/trio de hoje
-    const dateToUse = todayDate;
 
-    // 3. BLOQUEIO DE DISTRIBUIÇÃO - REFERÊNCIA NO TRIO DO DIA:
-    // Se o Conselheiro de Referência ESTÁ no trio do dia de providência imediata,
+    // 2. BLOQUEIO DE DISTRIBUIÇÃO - REFERÊNCIA NO TRIO DO DIA OU EM SUBSTITUIÇÃO:
+    // Se o Conselheiro de Referência ESTÁ no trio do dia (ou ativo em substituição por troca),
     // o sistema BLOQUEIA a distribuição e atribui a imediata diretamente a ele (ou para seu substituto de plantão).
-    const refUser = currentRefUser;
-    const refUserName = refUser?.nome?.toUpperCase();
-    const mappedRefName = (refUserName && nameMap && nameMap[refUserName]) ? nameMap[refUserName] : refUserName;
-    const isRefUserInTrio = Boolean(mappedRefName && trioNames.some(n => isSameCounselorName(n, mappedRefName)));
-
-    if (isRefUserInTrio && refUser) {
-      const activeSubstituteUser = mappedRefName ? allUsers.find(u => u.status === 'ATIVO' && (u.unidade_id || 1) === formData.unidade_id && isSameCounselorName(u.nome, mappedRefName)) : undefined;
-      return activeSubstituteUser || refUser;
+    if (isCurrentRefUserInTrio && currentRefUser) {
+      const activeSubstituteUser = getActiveSubstituteInTrio(
+        currentRefUser,
+        trioNames,
+        allUsers,
+        scaleExceptions,
+        formData.data_aporte || todayDate,
+        formData.hora_aporte || todayTime,
+        formData.unidade_id,
+        nameMap
+      );
+      return activeSubstituteUser || currentRefUser;
     }
 
+    // 3. TRABALHO NA SEDE / URGENTE / PLANTÃO (FORA DE EXPEDIENTE): 
+    // Quando a referência NÃO está no trio/plantão:
+    // O primeiro do trio (trioNames[0]) é o Conselheiro de Sede (Trabalho na Sede) ou o Primeiro Plantonista
+    const timeInfo = (() => {
+      const parts = (formData.hora_aporte || '00:00').split(':');
+      const h = parseInt(parts[0]);
+      const m = parseInt(parts[1] || '0');
+      const isNightShift = h >= 17 || h < 8; // 17:00 às 07:59
+      
+      const dateObj = new Date(formData.data_aporte + 'T12:00:00');
+      const dayOfWeek = dateObj.getDay(); // 0: Dom, 5: Sex, 6: Sab
+      
+      const isWeekend = (dayOfWeek === 5 && h >= 17) || (dayOfWeek === 6) || (dayOfWeek === 0) || (dayOfWeek === 1 && h < 8);
+      
+      return { isNightShift, isWeekend };
+    })();
+
+    const isPlantao = timeInfo.isNightShift || timeInfo.isWeekend;
+
+    if (isPlantao && trioNames.length > 0) {
+      // Se for noite ou final de semana, o "Primeiro Plantonista" (trioNames[0]) assume tudo.
+      const targetName = trioNames[0];
+      const targetUser = allUsers.find(u => u.status === 'ATIVO' && u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, targetName));
+      if (targetUser) return targetUser;
+    }
+    
+    // Para novos documentos em expediente normal onde a referência NÃO está no trio:
     // 4. DISTRIBUIÇÃO DO TRIO DO DIA (REFERÊNCIA NÃO ESTÁ NO TRIO):
     // Quando o documento possui conselheiro de referência e ele NÃO ESTÁ no trio do dia de providência imediata,
     // o sistema DEVE SEGUIR A DISTRIBUIÇÃO SEQUENCIAL (rodízio) entre os conselheiros do trio de hoje.
-    // Filtramos para ignorar documentos que tiveram distribuição bloqueada (notificações, referência no trio, manual ou plantão)
+    const dateToUse = todayDate;
     const todayDocs = documents
       .filter(d => {
         const isDocOfToday = d.data_aporte === dateToUse || (d.criado_em && new Date(d.criado_em).toISOString().split('T')[0] === dateToUse);
@@ -798,7 +803,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     const nextName = trioNames[nextIndex];
     
     return allUsers.find(u => u.status === 'ATIVO' && u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, nextName));
-  }, [trioNames, documents, todayDate, formData.notificacao, formData.providencia_imediata_manual, initialData, formData.unidade_id, allUsers, nameMap, currentRefUser]);
+  }, [trioNames, documents, todayDate, todayTime, formData.notificacao, formData.providencia_imediata_manual, initialData, formData.unidade_id, formData.data_aporte, formData.hora_aporte, allUsers, nameMap, currentRefUser, isCurrentRefUserInTrio, scaleExceptions]);
 
   const handleChildChange = (index: number, field: keyof ChildData, value: any) => {
     const newChildren = [...formData.criancas];
