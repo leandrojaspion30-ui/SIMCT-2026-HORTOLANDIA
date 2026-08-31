@@ -659,7 +659,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     // Se for 'TELEFONE DE PLANTÃO' (excluído de rodízio):
     if (!isRotationChannel(formData.canal_comunicado)) {
       const firstTrioName = trioNames[0];
-      const plantonista = allUsers.find(u => (u.unidade_id || 1) === formData.unidade_id && u.status === 'ATIVO' && isSameCounselorName(u.nome, firstTrioName));
+      const plantonista = allUsers.find(u => (u.unidade_id || 1) === formData.unidade_id && u.status === 'ATIVO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && isSameCounselorName(u.nome, firstTrioName));
       if (plantonista) return plantonista;
     }
 
@@ -718,18 +718,15 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     // 1. BLOQUEIO DE DISTRIBUIÇÃO - NOTIFICAÇÃO: Notificação bloqueia o rodízio e direciona diretamente ao conselheiro notificado
     if (formData.notificacao) {
       const notifTargetName = (nameMap && nameMap[formData.notificacao.toUpperCase()]) || formData.notificacao;
-      return (
-        allUsers.find(u => u.unidade_id === formData.unidade_id && u.status === 'ATIVO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && isSameCounselorName(u.nome, notifTargetName)) ||
-        allUsers.find(u => u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, notifTargetName))
-      );
+      return allUsers.find(u => u.unidade_id === formData.unidade_id && u.status === 'ATIVO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && isSameCounselorName(u.nome, notifTargetName));
     }
 
     if (initialData) {
-      const origUser = allUsers.find(u => u.id === initialData.conselheiro_providencia_id && (u.unidade_id || 1) === formData.unidade_id);
+      const origUser = allUsers.find(u => u.id === initialData.conselheiro_providencia_id && (u.unidade_id || 1) === formData.unidade_id && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE'));
       const origName = origUser?.nome || initialData.conselheiro_providencia_nome;
       const mappedName = (origName && nameMap && nameMap[origName.toUpperCase()]) ? nameMap[origName.toUpperCase()] : origName;
       if (mappedName) {
-        const substituteUser = allUsers.find(u => u.status === 'ATIVO' && (u.unidade_id || 1) === formData.unidade_id && isSameCounselorName(u.nome, mappedName));
+        const substituteUser = allUsers.find(u => u.status === 'ATIVO' && (u.unidade_id || 1) === formData.unidade_id && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && isSameCounselorName(u.nome, mappedName));
         if (substituteUser) return substituteUser;
       }
       return origUser;
@@ -774,7 +771,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     if (isPlantao && trioNames.length > 0) {
       // Se for noite ou final de semana, o "Primeiro Plantonista" (trioNames[0]) assume tudo.
       const targetName = trioNames[0];
-      const targetUser = allUsers.find(u => u.status === 'ATIVO' && u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, targetName));
+      const targetUser = allUsers.find(u => u.status === 'ATIVO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, targetName));
       if (targetUser) return targetUser;
     }
     
@@ -796,7 +793,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     const lastAutoDoc = todayDocs[0];
     
     const lastImediataId = lastAutoDoc?.conselheiro_providencia_id;
-    const lastImediataUser = allUsers.find(u => u.id === lastImediataId && (u.unidade_id || 1) === formData.unidade_id);
+    const lastImediataUser = allUsers.find(u => u.id === lastImediataId && (u.unidade_id || 1) === formData.unidade_id && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE'));
     const lastImediataNameRaw = lastImediataUser?.nome.toUpperCase();
     const lastImediataName = (lastImediataNameRaw && nameMap && nameMap[lastImediataNameRaw]) ? nameMap[lastImediataNameRaw] : lastImediataNameRaw;
     
@@ -804,7 +801,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     const nextIndex = trioNames.length > 0 ? (currentIndex + 1) % trioNames.length : 0;
     const nextName = trioNames[nextIndex];
     
-    return allUsers.find(u => u.status === 'ATIVO' && u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, nextName));
+    return allUsers.find(u => u.status === 'ATIVO' && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE') && u.unidade_id === formData.unidade_id && isSameCounselorName(u.nome, nextName));
   }, [trioNames, documents, todayDate, todayTime, formData.notificacao, formData.providencia_imediata_manual, initialData, formData.unidade_id, formData.data_aporte, formData.hora_aporte, allUsers, nameMap, currentRefUser, isCurrentRefUserInTrio, scaleExceptions]);
 
   const handleChildChange = (index: number, field: keyof ChildData, value: any) => {
@@ -1001,16 +998,20 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
       ? 'SOCIEDADE'
       : (formData.origem ? `${formData.origem_categoria} - ${formData.origem}` : formData.origem_categoria || '');
 
+    const fallbackCounselorUser = (currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE') ? currentUser : unitCounselors[0];
+    const fallbackCounselorId = fallbackCounselorUser?.id || unitCounselors[0]?.id || '';
+    const fallbackCounselorName = fallbackCounselorUser?.nome || unitCounselors[0]?.nome || '';
+
     const finalProvId = isFisico
       ? finalRefId
       : (canEditCouncillors && formData.providencia_imediata_manual)
         ? formData.providencia_imediata_manual
-        : (initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || finalRefId || unitCounselors[0]?.id || currentUser.id));
+        : (initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || finalRefId || fallbackCounselorId));
 
-    const finalProvUser = allUsers.find(u => u.id === finalProvId && (u.unidade_id || 1) === formData.unidade_id);
+    const finalProvUser = allUsers.find(u => u.id === finalProvId && (u.unidade_id || 1) === formData.unidade_id && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE'));
     const finalProvName = isFisico 
-      ? (finalRefUser?.nome || unitCounselors[0]?.nome || currentUser.nome || '') 
-      : ((finalProvUser?.nome) || initialData?.conselheiro_providencia_nome || assignedImediata?.nome || unitCounselors[0]?.nome || currentUser.nome || '');
+      ? (finalRefUser?.nome || fallbackCounselorName) 
+      : ((finalProvUser?.nome) || initialData?.conselheiro_providencia_nome || assignedImediata?.nome || fallbackCounselorName);
 
     const finalData = {
       ...initialData,
@@ -1035,23 +1036,23 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
       conselheiro_referencia_id: isFisico
         ? finalRefId
         : ((canEditCouncillors && (isManualReference || (initialData && formData.conselheiro_referencia_id))) 
-          ? (formData.conselheiro_referencia_id || (initialData ? initialData.conselheiro_referencia_id : finalRefId) || unitCounselors[0]?.id || currentUser.id) 
-          : (initialData ? initialData.conselheiro_referencia_id : (finalRefId || unitCounselors[0]?.id || currentUser.id))),
+          ? (formData.conselheiro_referencia_id || (initialData ? initialData.conselheiro_referencia_id : finalRefId) || fallbackCounselorId) 
+          : (initialData ? initialData.conselheiro_referencia_id : (finalRefId || fallbackCounselorId))),
       conselheiro_referencia_nome: isFisico
-        ? (finalRefUser?.nome || unitCounselors[0]?.nome || currentUser.nome || '')
-        : ((allUsers.find(u => u.id === ((canEditCouncillors && (isManualReference || (initialData && formData.conselheiro_referencia_id))) ? (formData.conselheiro_referencia_id || initialData?.conselheiro_referencia_id || finalRefId) : (initialData ? initialData.conselheiro_referencia_id : finalRefId)) && (u.unidade_id || 1) === formData.unidade_id)?.nome) || initialData?.conselheiro_referencia_nome || unitCounselors[0]?.nome || currentUser.nome || ''),
+        ? (finalRefUser?.nome || fallbackCounselorName)
+        : ((allUsers.find(u => u.id === ((canEditCouncillors && (isManualReference || (initialData && formData.conselheiro_referencia_id))) ? (formData.conselheiro_referencia_id || initialData?.conselheiro_referencia_id || finalRefId) : (initialData ? initialData.conselheiro_referencia_id : finalRefId)) && (u.unidade_id || 1) === formData.unidade_id && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE'))?.nome) || initialData?.conselheiro_referencia_nome || fallbackCounselorName),
       is_manual_override: isFisico || (canEditCouncillors && isManualReference) || (initialData ? initialData.is_manual_override : isReferenceLocked),
       conselheiro_providencia_id: finalProvId,
       conselheiro_providencia_nome: finalProvName,
       conselheiros_providencia_nomes: isFisico
-        ? [finalRefUser?.nome || currentUser.nome, ...trioNames.filter(n => !isSameCounselorName(n, finalRefUser?.nome || ''))]
+        ? [finalRefUser?.nome || fallbackCounselorName, ...trioNames.filter(n => !isSameCounselorName(n, finalRefUser?.nome || ''))]
         : (canEditCouncillors && formData.providencia_imediata_manual)
           ? (() => {
-              const manualUser = allUsers.find(u => u.id === formData.providencia_imediata_manual && (u.unidade_id || 1) === formData.unidade_id);
+              const manualUser = allUsers.find(u => u.id === formData.providencia_imediata_manual && (u.unidade_id || 1) === formData.unidade_id && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE'));
               const manualName = manualUser?.nome?.toUpperCase();
               return manualName ? [manualName, ...trioNames.filter(n => n.toUpperCase() !== manualName)] : finalValidators;
             })()
-          : (initialData ? initialData.conselheiros_providencia_nomes : (finalValidators && finalValidators.length > 0 ? finalValidators : [currentUser.nome])),
+          : (initialData ? initialData.conselheiros_providencia_nomes : (finalValidators && finalValidators.length > 0 ? finalValidators : [fallbackCounselorName])),
       is_family_persistence: false,
       is_manual_providencia: isFisico || !!formData.providencia_imediata_manual,
       is_reference_in_trio: isFisico ? false : (isRefUserInTrio && !!finalRefUser && !formData.notificacao && !formData.providencia_imediata_manual),

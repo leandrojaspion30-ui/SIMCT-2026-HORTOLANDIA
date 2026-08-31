@@ -508,11 +508,93 @@ export const classifyTurno = (dateStr: string, timeStr: string): 'COMERCIAL' | '
   return (isWeekend || !isBusinessHours) ? 'PLANTAO' : 'COMERCIAL';
 };
 
+export const sanitizeUserRoleAndIdentity = <T extends Partial<User>>(user: T): T => {
+  if (!user) return user;
+  const result = { ...user } as any;
+  const cleanId = (result.id || '').trim();
+  const cleanName = (result.nome || '').trim().toUpperCase();
+
+  // UNIDADE 1 - Administrativos estritos (NUNCA conselheiros)
+  if (cleanId === 'admin_lud' || cleanName === 'LUDIMILA') {
+    result.id = 'admin_lud';
+    result.nome = 'LUDIMILA';
+    result.perfil = 'ADMIN';
+    result.cargo = 'ADM GERAL';
+    result.unidade_id = 1;
+  } else if (cleanId === 'admin1' || (cleanName === 'EDSON' && (result.unidade_id === 1 || !result.unidade_id))) {
+    result.id = 'admin1';
+    result.nome = 'EDSON';
+    result.perfil = 'ADMIN';
+    result.cargo = 'ADM';
+    result.unidade_id = 1;
+  } else if (cleanId === 'admin2' || (cleanName === 'LUIZ' && (result.unidade_id === 1 || !result.unidade_id))) {
+    result.id = 'admin2';
+    result.nome = 'LUIZ';
+    result.perfil = 'ADMIN';
+    result.cargo = 'ADM';
+    result.unidade_id = 1;
+  } else if (cleanId === 'admin3' || (cleanName === 'FATIMA' && (result.unidade_id === 1 || !result.unidade_id))) {
+    result.id = 'admin3';
+    result.nome = 'FATIMA';
+    result.perfil = 'ADMIN';
+    result.cargo = 'ADM';
+    result.unidade_id = 1;
+  } 
+  // UNIDADE 2 - Administrativos estritos (NUNCA conselheiros)
+  else if (cleanId === 'ct2_admin1' || cleanName === 'ISRAEL') {
+    result.id = 'ct2_admin1';
+    result.nome = 'ISRAEL';
+    result.perfil = 'ADMINISTRATIVO';
+    result.cargo = 'ADM';
+    result.unidade_id = 2;
+  } else if (cleanId === 'ct2_admin2' || cleanName === 'RAISSA') {
+    result.id = 'ct2_admin2';
+    result.nome = 'RAISSA';
+    result.perfil = 'ADMINISTRATIVO';
+    result.cargo = 'ADM';
+    result.unidade_id = 2;
+  } else if (cleanId === 'ct2_admin3' || cleanName === 'THAINA') {
+    result.id = 'ct2_admin3';
+    result.nome = 'THAINA';
+    result.perfil = 'ADMINISTRATIVO';
+    result.cargo = 'ADM';
+    result.unidade_id = 2;
+  }
+  // UNIDADE 1 - Conselheiros Titulares
+  else if (cleanId === 'cons2' || (cleanName === 'LUIZA' && result.unidade_id === 1)) {
+    result.id = 'cons2';
+    result.nome = 'LUIZA';
+    result.perfil = 'CONSELHEIRO';
+    result.cargo = 'Conselheira';
+    result.unidade_id = 1;
+  }
+  // UNIDADE 2 - Conselheiro Titular Edson Lopes
+  else if (cleanId === 'ct2_cons2' || (cleanName === 'EDSON LOPES' && result.unidade_id === 2)) {
+    result.id = 'ct2_cons2';
+    result.nome = 'EDSON LOPES';
+    result.perfil = 'CONSELHEIRO';
+    result.cargo = 'Conselheiro';
+    result.unidade_id = 2;
+  }
+
+  return result as T;
+};
+
 export const isSameCounselorName = (nameA: string | undefined | null, nameB: string | undefined | null): boolean => {
   if (!nameA || !nameB) return false;
   const cleanA = nameA.trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const cleanB = nameB.trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   if (cleanA === cleanB) return true;
+
+  // Proteção explícita contra falso-positivo entre LUIZ (ADM) e LUIZA (Conselheira)
+  if ((cleanA === 'LUIZ' && cleanB === 'LUIZA') || (cleanA === 'LUIZA' && cleanB === 'LUIZ')) {
+    return false;
+  }
+
+  // Proteção explícita contra falso-positivo entre EDSON (ADM CT1) e EDSON LOPES (Conselheiro CT2)
+  if ((cleanA === 'EDSON' && cleanB.includes('LOPES')) || (cleanB === 'EDSON' && cleanA.includes('LOPES'))) {
+    return false;
+  }
 
   const partsA = cleanA.split(' ').filter(p => p.length > 0);
   const partsB = cleanB.split(' ').filter(p => p.length > 0);
@@ -520,7 +602,12 @@ export const isSameCounselorName = (nameA: string | undefined | null, nameB: str
   const firstA = partsA[0] || '';
   const firstB = partsB[0] || '';
 
-  if (firstA === firstB && firstA.length >= 3) return true;
+  if (firstA === firstB && firstA.length >= 3) {
+    if (partsA.length > 1 && partsB.length > 1) {
+      return partsA.slice(1).join(' ') === partsB.slice(1).join(' ');
+    }
+    return true;
+  }
   if (cleanA.startsWith(cleanB + ' ') || cleanB.startsWith(cleanA + ' ')) return true;
 
   return false;

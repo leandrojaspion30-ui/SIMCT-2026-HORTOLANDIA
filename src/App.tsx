@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, ArrowLeft, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart, Timer, Save, Eye, EyeOff, RefreshCw, MessageSquare, Bot, Scale } from 'lucide-react';
 import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada, ScaleException, ChatMessage } from './types';
-import { INITIAL_USERS, INITIAL_AGENDA, getUnidadeByBairro, STATUS_LABELS, getEffectiveEscala, isSameCounselorName } from './constants';
+import { INITIAL_USERS, INITIAL_AGENDA, getUnidadeByBairro, STATUS_LABELS, getEffectiveEscala, isSameCounselorName, sanitizeUserRoleAndIdentity } from './constants';
 import { db, ensureAuthenticated } from './lib/firebase';
 import { syncCollection, saveDocument, saveDocumentWithAtomicRotation, saveLog, saveAgenda, deleteDocument, deleteAgenda, saveUser, deleteUser, deleteAllDocuments, saveScaleException, deleteScaleException, verifyUserCredentials, SyncMetadata } from './lib/db';
 import ConfidentialityTermModal from './components/ConfidentialityTermModal';
@@ -188,7 +188,7 @@ const App: React.FC = () => {
   const getSafeInitialUsers = (): User[] => {
     return INITIAL_USERS.map(u => {
       const { senha: _s, ...safeUser } = u;
-      return { ...safeUser, status: safeUser.status || 'ATIVO', tentativas_login: 0 };
+      return sanitizeUserRoleAndIdentity({ ...safeUser, status: safeUser.status || 'ATIVO', tentativas_login: 0 });
     });
   };
 
@@ -359,11 +359,32 @@ const App: React.FC = () => {
 
   const normalizedDocuments = useMemo(() => {
     return allDocuments.map(d => {
+      let updated = d;
       const realUnit = d.unidade_id || (d.bairro ? getUnidadeByBairro(d.bairro) : 1);
       if (d.unidade_id !== realUnit) {
-        return { ...d, unidade_id: realUnit };
+        updated = { ...updated, unidade_id: realUnit };
       }
-      return d;
+
+      // Correção de integridade para Unidade 1: LUIZ (ADM) vs LUIZA (Conselheira)
+      if (updated.unidade_id === 1) {
+        if (updated.conselheiro_referencia_id === 'admin2' || updated.conselheiro_referencia_nome?.trim().toUpperCase() === 'LUIZ') {
+          updated = { ...updated, conselheiro_referencia_id: 'cons2', conselheiro_referencia_nome: 'LUIZA' };
+        }
+        if (updated.conselheiro_providencia_id === 'admin2' || updated.conselheiro_providencia_nome?.trim().toUpperCase() === 'LUIZ') {
+          updated = { ...updated, conselheiro_providencia_id: 'cons2', conselheiro_providencia_nome: 'LUIZA' };
+        }
+        if (updated.conselheiros_providencia_nomes && updated.conselheiros_providencia_nomes.some(n => n?.toUpperCase() === 'LUIZ')) {
+          updated = { ...updated, conselheiros_providencia_nomes: updated.conselheiros_providencia_nomes.map(n => n?.toUpperCase() === 'LUIZ' ? 'LUIZA' : n) };
+        }
+        if (updated.notificacoes_trio && updated.notificacoes_trio.some(n => n?.toUpperCase() === 'LUIZ')) {
+          updated = { ...updated, notificacoes_trio: updated.notificacoes_trio.map(n => n?.toUpperCase() === 'LUIZ' ? 'LUIZA' : n) };
+        }
+        if (Array.isArray(updated.status) && updated.status.some(s => s === ('NOTIFICACAO_LUIZ' as any))) {
+          updated = { ...updated, status: updated.status.map(s => s === ('NOTIFICACAO_LUIZ' as any) ? ('NOTIFICACAO_LUIZA' as DocumentStatus) : s) };
+        }
+      }
+
+      return updated;
     });
   }, [allDocuments]);
 
@@ -494,6 +515,14 @@ const App: React.FC = () => {
       }
     }, { limitCount: 300, orderByField: 'created_at', orderDirection: 'desc' });
     const unsubUsers = syncCollection<User>('users', (storedUsers, meta?: SyncMetadata) => {
+      // Auto-reparação silenciosa se algum registro remoto no Firestore estiver com perfil ou nome corrompido
+      storedUsers.forEach(s => {
+        const sanitized = sanitizeUserRoleAndIdentity(s);
+        if (sanitized.perfil !== s.perfil || sanitized.nome !== s.nome || sanitized.cargo !== s.cargo || sanitized.unidade_id !== s.unidade_id) {
+          saveUser({ id: s.id, perfil: sanitized.perfil, nome: sanitized.nome, cargo: sanitized.cargo, unidade_id: sanitized.unidade_id }).catch(() => {});
+        }
+      });
+
       setUsers(prev => {
         const baseUsers = getSafeInitialUsers();
         
@@ -505,10 +534,10 @@ const App: React.FC = () => {
               const { senha: _s, ...rest } = found as any;
               return rest;
             })() : null;
-            const mergedUser: User = safeFound ? { 
+            const mergedUser: User = sanitizeUserRoleAndIdentity(safeFound ? { 
               ...bu, 
               ...safeFound 
-            } : bu;
+            } : bu);
             // Preserva aceite de termo do localStorage se já aceito previamente neste dispositivo
             const localAccepted = localStorage.getItem(`simct_term_accepted_${mergedUser.id}`) || 
                                   (mergedUser.nome ? localStorage.getItem(`simct_term_accepted_${mergedUser.nome.toUpperCase()}`) : null);
@@ -525,9 +554,9 @@ const App: React.FC = () => {
             const { senha: _s, ...safeS } = s as any;
             const localAccepted = localStorage.getItem(`simct_term_accepted_${safeS.id}`) || 
                                   (safeS.nome ? localStorage.getItem(`simct_term_accepted_${safeS.nome.toUpperCase()}`) : null);
-            const safeUser: User = {
+            const safeUser: User = sanitizeUserRoleAndIdentity({
               ...safeS
-            };
+            });
             if (!safeUser.termo_aceito_em && localAccepted) {
               safeUser.termo_aceito_em = localAccepted;
             }

@@ -20,7 +20,7 @@ import {
 } from 'firebase/firestore';
 import { db, ensureAuthenticated, auth } from './firebase';
 import { Documento, Log, AgendaEntry, User, ScaleException, ChatMessage, DocumentStatus } from '../types';
-import { isSameCounselorName, getEffectiveEscala, INITIAL_USERS, normalizeCanalName, isRotationChannel, getActiveRotationCounselors, isCounselorInTrioOrSubstitution, getActiveSubstituteInTrio } from '../constants';
+import { isSameCounselorName, getEffectiveEscala, INITIAL_USERS, normalizeCanalName, isRotationChannel, getActiveRotationCounselors, isCounselorInTrioOrSubstitution, getActiveSubstituteInTrio, sanitizeUserRoleAndIdentity } from '../constants';
 
 export enum OperationType {
   CREATE = 'create',
@@ -751,8 +751,9 @@ export const deleteAgenda = async (id: string, user?: User | { id: string; nome:
 export const saveUser = async (userData: Partial<User & { senha?: string }>, user?: User | { id: string; nome: string }): Promise<void> => {
   if (!userData.id) throw new Error('User ID required');
   const userIdentifier = user?.nome || user?.id || 'SISTEMA';
+  const sanitized = sanitizeUserRoleAndIdentity(userData);
   const data = cleanData({
-    ...userData,
+    ...sanitized,
     updated_at: new Date().toISOString(),
     updatedAt: serverTimestamp(),
     updatedBy: userIdentifier
@@ -764,9 +765,9 @@ export const saveUser = async (userData: Partial<User & { senha?: string }>, use
 
   try {
     await ensureAuthenticated();
-    await setDoc(doc(db, 'users', userData.id), data, { merge: true });
+    await setDoc(doc(db, 'users', sanitized.id!), data, { merge: true });
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `users/${userData.id}`);
+    handleFirestoreError(error, OperationType.WRITE, `users/${sanitized.id}`);
   }
 };
 
