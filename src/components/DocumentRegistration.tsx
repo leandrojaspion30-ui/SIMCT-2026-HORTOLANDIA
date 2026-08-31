@@ -184,6 +184,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     matchedBy: string;
   } | null>(null);
   const lastAutofilledDocIdRef = useRef<string | null>(null);
+  const isSubmittedRef = useRef<boolean>(false);
 
   const cleanCPF = (val: string) => (val || '').replace(/\D/g, '').slice(0, 11);
 
@@ -225,6 +226,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
 
   // Auto-salvamento contínuo das informações preenchidas no rascunho local
   useEffect(() => {
+    if (isSubmittedRef.current) return;
     try {
       const isTouched = 
         Boolean(formData.relato_inicial?.trim()) ||
@@ -1088,9 +1090,49 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
       finalData.conselheiro_providencia_nome = finalData.conselheiro_referencia_nome;
     }
 
+    isSubmittedRef.current = true;
     try {
       localStorage.removeItem(draftStorageKey);
     } catch {}
+    setHasDraftRestored(false);
+
+    // Reseta o estado local do formulário para campos em branco
+    setFormData({
+      unidade_id: currentUser.unidade_id || 1,
+      origem_categoria: '',
+      origem: '',
+      canal_comunicado: '',
+      notificacao: '',
+      tipo_documento: '',
+      numero_comunicado_violacao: '',
+      numero_sipia: '',
+      data_aporte: todayDate,
+      hora_aporte: todayTime,
+      genitora_nome: '',
+      genitora_nao_informado: false,
+      cpf_genitora: '',
+      outro_membro_nome: '',
+      outro_membro_parentesco: '',
+      outro_membro_cpf: '',
+      tem_outro_membro: false,
+      bairro: '',
+      relato_inicial: '',
+      conselheiro_referencia_id: '',
+      providencia_imediata_manual: '',
+      local_ocorrencia: '',
+      is_urgente: false,
+      is_prontuario_fisico: false,
+      conselheiro_prontuario_fisico_id: '',
+      criancas: [{ nome: '', nao_informado: false, data_nascimento: '', cpf: '', genero_identidade: '' }] as ChildData[]
+    });
+    setCustomOrigem('');
+    setSelectedOrigemDropdown('');
+    setIsReferenceLocked(false);
+    setIsManualReference(false);
+    setFamilyHistory([]);
+    setCpfAutofillBanner(null);
+    lastAutofilledDocIdRef.current = null;
+    setShowRelatoError(false);
 
     onSubmit(finalData, []);
   };

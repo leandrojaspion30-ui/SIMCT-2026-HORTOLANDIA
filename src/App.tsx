@@ -183,6 +183,7 @@ const App: React.FC = () => {
 
   const [myDocsExpandedFolders, setMyDocsExpandedFolders] = useState<Record<string, boolean>>({});
   const [myDocsFocusedFolderKey, setMyDocsFocusedFolderKey] = useState<string | null>(null);
+  const [registrationFormKey, setRegistrationFormKey] = useState<number>(0);
   const [myDocsIsGroupedByFamily, setMyDocsIsGroupedByFamily] = useState<boolean>(true);
   const getSafeInitialUsers = (): User[] => {
     return INITIAL_USERS.map(u => {
@@ -1103,6 +1104,7 @@ const App: React.FC = () => {
 
       setAllDocuments(prev => [finalDoc, ...prev.filter(d => d.id !== finalDoc.id)]);
       setSelectedDocId(finalDoc.id);
+      setRegistrationFormKey(prev => prev + 1);
       setActiveTab('dashboard');
       // Remove telas temporárias de cadastro do histórico
       setNavHistory(prev => prev.filter(h => h.activeTab !== 'register' && h.activeTab !== 'plantao'));
@@ -1540,7 +1542,7 @@ const App: React.FC = () => {
       return null;
     }
 
-    if (activeTab === 'register' || activeTab === 'plantao') return <DocumentRegistration documents={documents} users={filteredUsers} agenda={agenda} currentUser={currentUser} onSubmit={handleDocumentSubmit} onCancel={goBack} isReadOnly={activeTab === 'register' ? !isAdministrative : false} title={activeTab === 'plantao' ? 'SIMCT - Novo Proced/Plantão' : undefined} nameMap={userNameMap} allUsers={filteredUsers} scaleExceptions={scaleExceptions} />;
+    if (activeTab === 'register' || activeTab === 'plantao') return <DocumentRegistration key={`reg_${activeTab}_${registrationFormKey}`} documents={documents} users={filteredUsers} agenda={agenda} currentUser={currentUser} onSubmit={handleDocumentSubmit} onCancel={goBack} isReadOnly={activeTab === 'register' ? !isAdministrative : false} title={activeTab === 'plantao' ? 'SIMCT - Novo Proced/Plantão' : undefined} nameMap={userNameMap} allUsers={filteredUsers} scaleExceptions={scaleExceptions} />;
     if (activeTab === 'edit' && editingDocId) {
       const editDoc = documents.find(d => d.id === editingDocId) || allDocuments.find(d => d.id === editingDocId);
       const isEditingProvImediata = editDoc && currentUser ? (
