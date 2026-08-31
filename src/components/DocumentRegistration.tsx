@@ -185,13 +185,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
   } | null>(null);
   const lastAutofilledDocIdRef = useRef<string | null>(null);
 
-  const formatCPF = (val: string) => {
-    const digits = val.replace(/\D/g, '').slice(0, 11);
-    if (digits.length <= 3) return digits;
-    if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
-    if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
-    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
-  };
+  const cleanCPF = (val: string) => (val || '').replace(/\D/g, '').slice(0, 11);
 
   const [customOrigem, setCustomOrigem] = useState(() => {
     try {
@@ -580,7 +574,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
               updatedCriancas = existingDoc.criancas.map(c => ({
                 nome: c.nome || '',
                 data_nascimento: c.data_nascimento || '',
-                cpf: c.cpf ? formatCPF(c.cpf) : '',
+                cpf: c.cpf ? cleanCPF(c.cpf) : '',
                 genero_identidade: c.genero_identidade || '',
                 nao_informado: Boolean(c.nao_informado)
               }));
@@ -595,13 +589,13 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
             bairro: existingDoc.bairro || prev.bairro,
             // 2. Identificação Familiar
             genitora_nome: existingDoc.genitora_nome || prev.genitora_nome,
-            cpf_genitora: existingDoc.cpf_genitora ? formatCPF(existingDoc.cpf_genitora) : prev.cpf_genitora,
+            cpf_genitora: existingDoc.cpf_genitora ? cleanCPF(existingDoc.cpf_genitora) : prev.cpf_genitora,
             genitora_nao_informado: false,
             // Outro Membro
             tem_outro_membro: hasMembro ? true : prev.tem_outro_membro,
             outro_membro_nome: hasMembro ? (existingDoc.outro_membro_nome || prev.outro_membro_nome) : prev.outro_membro_nome,
             outro_membro_parentesco: hasMembro ? (existingDoc.outro_membro_parentesco || prev.outro_membro_parentesco || 'GENITOR / GENITORA') : prev.outro_membro_parentesco,
-            outro_membro_cpf: hasMembro && existingDoc.outro_membro_cpf ? formatCPF(existingDoc.outro_membro_cpf) : prev.outro_membro_cpf,
+            outro_membro_cpf: hasMembro && existingDoc.outro_membro_cpf ? cleanCPF(existingDoc.outro_membro_cpf) : prev.outro_membro_cpf,
             // 3. Dados das Crianças
             criancas: updatedCriancas,
             // 4. Conselheiro de Referência e Unidade
@@ -817,7 +811,7 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
         nome: isChecked ? 'NÃO INFORMADO' : (newChildren[index].nome === 'NÃO INFORMADO' ? '' : newChildren[index].nome)
       };
     } else if (field === 'cpf') {
-      newChildren[index] = { ...newChildren[index], cpf: formatCPF(value) };
+      newChildren[index] = { ...newChildren[index], cpf: cleanCPF(value) };
     } else {
       newChildren[index] = { ...newChildren[index], [field]: value };
     }
@@ -1548,10 +1542,11 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CPF da Genitora / Genitor / Responsável Legal</label>
                 <input 
                   type="text" 
+                  maxLength={11}
                   className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-blue-500"
                   value={formData.cpf_genitora}
-                  onChange={e => setFormData({...formData, cpf_genitora: formatCPF(e.target.value)})}
-                  placeholder="000.000.000-00"
+                  onChange={e => setFormData({...formData, cpf_genitora: cleanCPF(e.target.value)})}
+                  placeholder="12345678900 (apenas números)"
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
@@ -1640,10 +1635,11 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">CPF do Membro da Família</label>
                     <input 
                       type="text"
-                      placeholder="000.000.000-00"
+                      maxLength={11}
+                      placeholder="12345678900 (apenas números)"
                       className="w-full p-3.5 bg-white border border-slate-200 rounded-xl font-bold text-[11px] outline-none focus:border-blue-500"
                       value={formData.outro_membro_cpf}
-                      onChange={e => setFormData({ ...formData, outro_membro_cpf: formatCPF(e.target.value) })}
+                      onChange={e => setFormData({ ...formData, outro_membro_cpf: cleanCPF(e.target.value) })}
                     />
                   </div>
                 </div>
@@ -1716,7 +1712,8 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">CPF</label>
                       <input 
                         type="text" 
-                        placeholder="000.000.000-00"
+                        maxLength={11}
+                        placeholder="12345678900"
                         className="w-full p-3 bg-white border border-slate-200 rounded-lg font-bold outline-none focus:border-blue-500 text-xs sm:text-sm" 
                         value={crianca.cpf || ''} 
                         onChange={e => handleChildChange(idx, 'cpf', e.target.value)} 
