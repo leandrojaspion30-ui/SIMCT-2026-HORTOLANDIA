@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Clock, UserCheck, Activity, CheckCircle2, FileText, ChevronDown, ChevronUp, Folder, FolderOpen, UserRound, ShieldAlert, Scale, TriangleAlert, Ban, Filter, RefreshCw, Building2, Baby, Users, MapPin, Fingerprint, LayoutGrid, Eye, Bookmark, Zap, ShieldCheck, FileCheck2, Tag, Database, Trash2, Timer, Calendar, GraduationCap, Stethoscope, HandHeart, Phone, Mail, Siren, PhoneCall, Bell, BellRing, AlertCircle, Archive } from 'lucide-react';
 import { Documento, User as UserType, DocumentStatus, ScaleException } from '../types';
-import { STATUS_LABELS, INITIAL_USERS, BAIRROS, getBairrosByUnidade, isSameCounselorName, getEffectiveEscala } from '../constants';
+import { STATUS_LABELS, INITIAL_USERS, BAIRROS, getBairrosByUnidade, isSameCounselorName, getEffectiveEscala, formatUserRolePrefix } from '../constants';
 import { formatLocalDateString, parseLocalDate, formatCadastroDateTime } from '../lib/dateUtils';
 
 export const getOrigemIconAndStyle = (origemRaw?: string) => {
@@ -647,12 +647,16 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   <Bell className="w-4 h-4 text-amber-600 shrink-0 animate-bounce" />
                   <div>
                     <span className="font-bold text-amber-950">Alerta (Conselheiro de Referência):</span>{' '}
-                    {unreadRefAlerts.map((a, idx) => (
-                      <span key={a.id}>
-                        {idx > 0 && ' | '}
-                        O conselheiro de providência imediata <strong>{a.alterado_por_nome}</strong> alterou a situação para <strong className="text-amber-950 font-bold">[{STATUS_LABELS[a.status_novo as DocumentStatus] || a.status_novo}]</strong>
-                      </span>
-                    ))}
+                    {unreadRefAlerts.map((a, idx) => {
+                      const prefix = formatUserRolePrefix(a.alterado_por_nome, a.alterado_por_id, users, doc);
+                      const isAdm = prefix.includes('administrativo');
+                      return (
+                        <span key={a.id}>
+                          {idx > 0 && ' | '}
+                          {prefix} {isAdm ? `(${a.alterado_por_nome})` : <strong>{a.alterado_por_nome}</strong>} alterou a situação para <strong className="text-amber-950 font-bold">[{STATUS_LABELS[a.status_novo as DocumentStatus] || a.status_novo}]</strong>
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
                 <button

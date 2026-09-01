@@ -508,6 +508,58 @@ export const classifyTurno = (dateStr: string, timeStr: string): 'COMERCIAL' | '
   return (isWeekend || !isBusinessHours) ? 'PLANTAO' : 'COMERCIAL';
 };
 
+export const formatUserRolePrefix = (
+  userName: string | undefined | null,
+  userId: string | undefined | null,
+  users: Array<{ id: string; nome: string; perfil?: string; cargo?: string; unidade_id?: number }> = [],
+  doc?: { conselheiro_providencia_id?: string; conselheiro_providencia_nome?: string; conselheiro_referencia_id?: string; conselheiro_referencia_nome?: string }
+): string => {
+  if (!userName && !userId) return 'O usuário';
+  const cleanName = (userName || '').trim().toUpperCase();
+  const foundUser = users.find(u => (userId && u.id === userId) || (u.nome && u.nome.trim().toUpperCase() === cleanName));
+
+  // 1. Identificação estrita para equipe Administrativa (CT1 e CT2) - NUNCA conselheiros
+  if (
+    cleanName === 'EDSON' ||
+    cleanName === 'LUIZ' ||
+    cleanName === 'LUDIMILA' ||
+    cleanName === 'FATIMA' ||
+    cleanName === 'ISRAEL' ||
+    cleanName === 'RAISSA' ||
+    cleanName === 'THAINA' ||
+    foundUser?.perfil === 'ADMIN' ||
+    foundUser?.perfil === 'ADMINISTRATIVO' ||
+    (foundUser?.cargo || '').toUpperCase().includes('ADM')
+  ) {
+    return 'O setor administrativo';
+  }
+
+  // 2. Se for o próprio Conselheiro de Providência Imediata do documento
+  if (
+    doc &&
+    ((userId && doc.conselheiro_providencia_id === userId) ||
+     (doc.conselheiro_providencia_nome && isSameCounselorName(doc.conselheiro_providencia_nome, userName)))
+  ) {
+    return 'O conselheiro de providência imediata';
+  }
+
+  // 3. Se for o Conselheiro de Referência do documento
+  if (
+    doc &&
+    ((userId && doc.conselheiro_referencia_id === userId) ||
+     (doc.conselheiro_referencia_nome && isSameCounselorName(doc.conselheiro_referencia_nome, userName)))
+  ) {
+    return 'O conselheiro de referência';
+  }
+
+  // 4. Se for Conselheiro Titular ou Suplente
+  if (foundUser?.perfil === 'CONSELHEIRO' || foundUser?.perfil === 'SUPLENTE') {
+    return 'O(A) conselheiro(a) tutelar';
+  }
+
+  return 'O usuário';
+};
+
 export const sanitizeUserRoleAndIdentity = <T extends Partial<User>>(user: T): T => {
   if (!user) return user;
   const result = { ...user } as any;

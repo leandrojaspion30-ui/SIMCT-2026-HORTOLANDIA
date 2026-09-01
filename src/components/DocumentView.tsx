@@ -18,7 +18,8 @@ import {
   SIPIA_HIERARCHY, AGENTES_VIOLADORES_ESTRUTURA, 
   MEDIDAS_101_ECA, MEDIDAS_129_ECA,
   ATRIBUICOES_136_ECA, REDE_HORTOLANDIA, getEffectiveEscala, isSameCounselorName,
-  LOCAL_OCORRENCIA_OPTIONS, ORIGENS_HIERARQUICAS, getOrigensHierarquicasByUnidade, CANAIS_COMUNICADO_LIST
+  LOCAL_OCORRENCIA_OPTIONS, ORIGENS_HIERARQUICAS, getOrigensHierarquicasByUnidade, CANAIS_COMUNICADO_LIST,
+  formatUserRolePrefix
 } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
 import { formatLocalDateString } from '../lib/dateUtils';
@@ -907,11 +908,15 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                   </span>
                 </div>
                 <div className="space-y-1 mt-1 text-xs text-amber-900 font-medium">
-                  {unreadRefAlerts.map(a => (
-                    <p key={a.id}>
-                      O conselheiro de providência imediata <strong>{a.alterado_por_nome}</strong> alterou a situação deste prontuário de <span className="underline font-bold">[{STATUS_LABELS[a.status_anterior as DocumentStatus] || a.status_anterior}]</span> para <strong className="text-amber-950 bg-amber-200/80 px-1.5 py-0.5 rounded font-bold">[{STATUS_LABELS[a.status_novo as DocumentStatus] || a.status_novo}]</strong> em {new Date(a.data_hora).toLocaleString('pt-BR')}.
-                    </p>
-                  ))}
+                  {unreadRefAlerts.map(a => {
+                    const prefix = formatUserRolePrefix(a.alterado_por_nome, a.alterado_por_id, users, doc);
+                    const isAdm = prefix.includes('administrativo');
+                    return (
+                      <p key={a.id}>
+                        {prefix} {isAdm ? `(${a.alterado_por_nome})` : <strong>{a.alterado_por_nome}</strong>} alterou a situação deste prontuário de <span className="underline font-bold">[{STATUS_LABELS[a.status_anterior as DocumentStatus] || a.status_anterior}]</span> para <strong className="text-amber-950 bg-amber-200/80 px-1.5 py-0.5 rounded font-bold">[{STATUS_LABELS[a.status_novo as DocumentStatus] || a.status_novo}]</strong> em {new Date(a.data_hora).toLocaleString('pt-BR')}.
+                      </p>
+                    );
+                  })}
                 </div>
               </div>
             </div>
