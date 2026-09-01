@@ -54,6 +54,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   agenda,
   currentUser, 
   logs,
+  isReadOnly = false,
   onBack, 
   onEdit,
   onDelete,
@@ -283,10 +284,14 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     false;
 
   const isADM = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
-  const isConselheiro = currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE';
-  const canEditTechnicalFields = isActualProvidenciaImediata || isImediata || isADM;
-  const canEditIdentifiers = isResponsible || isActualProvidenciaImediata || isADM;
-  const canEditViolationOrSipia = isConselheiro || isADM || isResponsible || isActualProvidenciaImediata;
+  const isConselheiro = currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE' || (currentUser.nome || '').trim().toUpperCase().includes('LEANDRO');
+  const isStaffAdm = isADM && !(currentUser.nome || '').trim().toUpperCase().includes('LEANDRO') && currentUser.cargo !== 'CONSELHEIRO';
+
+  // ADM das Unidades 1 e 2 NÃO podem modificar a tela que é exclusiva de uso de conselheiros
+  const canModifyDocument = !isReadOnly && !isStaffAdm && isConselheiro;
+  const canEditTechnicalFields = canModifyDocument && (isActualProvidenciaImediata || isImediata);
+  const canEditIdentifiers = canModifyDocument && (isResponsible || isActualProvidenciaImediata);
+  const canEditViolationOrSipia = canModifyDocument && (isResponsible || isActualProvidenciaImediata);
 
   const isReferenceCounselor = doc.conselheiro_referencia_id === currentUser.id ||
     (currentUser.is_suplente_active && currentUser.real_user_id && doc.conselheiro_referencia_id === currentUser.real_user_id);
@@ -836,7 +841,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
           <button onClick={onBack} className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 rounded-2xl font-black text-[12px] uppercase tracking-wider transition-all" title="Voltar para a tela anterior"><ArrowLeft className="w-5 h-5" /> <span>Voltar</span></button>
           <div className="text-center"><h2 className="text-[20px] font-black uppercase">{doc.crianca_nome}</h2><p className="text-[10px] opacity-60 uppercase">SIMCT #{doc.id}</p></div>
           <div className="flex items-center gap-3">
-            {(isADM || isResponsible) && (
+            {canModifyDocument && (isResponsible || isActualProvidenciaImediata) && (
               <button 
                 onClick={onEdit}
                 className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-[11px] uppercase tracking-wider transition-all shadow-md cursor-pointer"
@@ -846,22 +851,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                 <span>Editar Documento</span>
               </button>
             )}
-            {(hasCounselorActions => {
-               const isLeandroOrSuperAdmin = (currentUser.nome?.toUpperCase() === 'LEANDRO' || currentUser.perfil === 'ADMIN');
-               const isCreatorAdmin = 
-                 (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome?.toUpperCase() === 'LEANDRO');
-               
-               return isLeandroOrSuperAdmin || (isCreatorAdmin && !hasCounselorActions);
-             })(!!(
-               (doc.ciência_registrada_por && doc.ciência_registrada_por.length > 0) ||
-               doc.medidas_detalhadas?.some(m => m.confirmacoes && m.confirmacoes.length > 0) ||
-               doc.status.some(s => s !== 'AGUARDANDO_ANALISE' && s !== 'EM_PREENCHIMENTO' && !s.startsWith('NOTIFICACAO_')) ||
-               (doc.medidas_detalhadas && doc.medidas_detalhadas.length > 0) ||
-               (doc.relato_providencias && doc.relato_providencias.trim() !== '') ||
-               (doc.fundamentacao_tecnica && doc.fundamentacao_tecnica.trim() !== '') ||
-               (doc.monitoramento?.requisicoes && doc.monitoramento.requisicoes.length > 0) ||
-               (doc.historico_monitoramento && doc.historico_monitoramento.length > 0)
-             )) && (
+            {canModifyDocument && (currentUser.nome?.toUpperCase() === 'LEANDRO' || (currentUser.perfil === 'ADMIN' && currentUser.cargo === 'CONSELHEIRO')) && (
               <button 
                 onClick={() => setShowDeleteConfirm(true)}
                 className="p-3 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white rounded-2xl transition-all"
