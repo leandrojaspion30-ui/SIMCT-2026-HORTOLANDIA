@@ -1148,6 +1148,15 @@ const App: React.FC = () => {
 
   const handleUpdateStatus = async (id: string, newStatus: DocumentStatus[]) => {
     if (!currentUser) return;
+    const isConselheiro = currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE' || (currentUser.nome || '').trim().toUpperCase().includes('LEANDRO');
+    const isStaffAdm = (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO') && !(currentUser.nome || '').trim().toUpperCase().includes('LEANDRO') && currentUser.cargo !== 'CONSELHEIRO';
+    
+    // Setor Administrativo não tem permissão para alterar status
+    if (isStaffAdm || !isConselheiro) {
+      console.warn("Alteração de status bloqueada para usuário administrativo.");
+      return;
+    }
+
     const docObj = normalizedDocuments.find(d => d.id === id);
     if (!docObj) return;
 

@@ -507,11 +507,15 @@ const DocumentList: React.FC<DocumentListProps> = ({
       ? doc.conselheiros_providencia_nomes
       : getEffectiveEscala(doc.data_aporte, doc.hora_aporte, doc.unidade_id, nameMap, scaleExceptions);
 
+    const isConselheiro = currentUser.perfil === 'CONSELHEIRO' || currentUser.perfil === 'SUPLENTE' || (currentUser.nome || '').trim().toUpperCase().includes('LEANDRO');
+    const isStaffAdm = (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO') && !(currentUser.nome || '').trim().toUpperCase().includes('LEANDRO') && currentUser.cargo !== 'CONSELHEIRO';
+    const canModifyStatus = !isReadOnly && isConselheiro && !isStaffAdm;
+
     const isInTrio = isNotified || trioRaw.some(name => {
       if (!name) return false;
       if (isSameCounselorName(name, currentUser.nome)) return true;
       if (currentUser.is_suplente_active && currentUser.substituted_name && isSameCounselorName(name, currentUser.substituted_name)) return true;
-      if (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO') return true;
+      if (isConselheiro && (currentUser.perfil === 'ADMIN' || currentUser.nome?.toUpperCase() === 'LEANDRO')) return true;
       return false;
     });
 
@@ -648,12 +652,15 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   <div>
                     <span className="font-bold text-amber-950">Alerta (Conselheiro de Referência):</span>{' '}
                     {unreadRefAlerts.map((a, idx) => {
-                      const prefix = formatUserRolePrefix(a.alterado_por_nome, a.alterado_por_id, users, doc);
-                      const isAdm = prefix.includes('administrativo');
+                      const isAdmName = ['EDSON', 'LUIZ', 'ISRAEL', 'RAISSA', 'THAINA', 'FATIMA', 'LUDIMILA'].includes((a.alterado_por_nome || '').toUpperCase().trim());
+                      const counselorName = isAdmName 
+                        ? (doc.conselheiro_providencia_nome || 'LEANDRO')
+                        : (a.alterado_por_nome || doc.conselheiro_providencia_nome || 'LEANDRO');
+                      const prefix = 'O conselheiro de providência imediata';
                       return (
                         <span key={a.id}>
                           {idx > 0 && ' | '}
-                          {prefix} {isAdm ? `(${a.alterado_por_nome})` : <strong>{a.alterado_por_nome}</strong>} alterou a situação para <strong className="text-amber-950 font-bold">[{STATUS_LABELS[a.status_novo as DocumentStatus] || a.status_novo}]</strong>
+                          {prefix} <strong>{counselorName}</strong> alterou a situação para <strong className="text-amber-950 font-bold">[{STATUS_LABELS[a.status_novo as DocumentStatus] || a.status_novo}]</strong>
                         </span>
                       );
                     })}
@@ -736,48 +743,52 @@ const DocumentList: React.FC<DocumentListProps> = ({
 
           {/* Action buttons on right/bottom */}
           <div className="shrink-0 flex flex-col sm:flex-row md:flex-col items-stretch sm:items-center md:items-end gap-3 mt-4 md:mt-0 pt-3 md:pt-0 border-t md:border-t-0 border-slate-100 md:border-transparent">
-             {!isReadOnly && (
-                <div className="flex flex-row items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-200/80" onClick={(e) => e.stopPropagation()}>
-                  <span className="text-[10px] md:text-[11px] font-black uppercase text-slate-400 pl-1 flex items-center gap-1 shrink-0 tracking-wider">
-                    Status:
-                  </span>
-                  <select
-                    value={mainStatus}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      const newS = e.target.value as DocumentStatus;
-                      if (newS && newS !== mainStatus) {
-                        onUpdateStatus(doc.id, [...doc.status.filter(s => s !== newS), newS]);
-                      }
-                    }}
-                    className="flex-1 bg-white text-slate-800 border border-slate-200 text-[11px] font-bold rounded-md px-2 py-1.5 outline-none focus:border-blue-500 cursor-pointer transition-colors"
-                  >
-                    <option value="AGUARDANDO_ANALISE">⏳ AGUARDANDO ANÁLISE</option>
-                    <option value="AGUARDANDO_DOCUMENTO">📄 AGUARDANDO DOCUMENTO</option>
-                    <option value="AGUARDANDO_VALIDACAO">⚖️ AGUARDANDO VALIDAÇÃO</option>
-                    <option value="MEDIDA_APLICADA">✅ MEDIDA APLICADA</option>
-                    <option value="AVALIAR_EM_COLEGIADO">👥 AVALIAR EM COLEGIADO</option>
-                    <option value="CONCLUIDO">✅ CONCLUÍDO</option>
-                    <option value="MONITORAMENTO">📊 EM MONITORAMENTO</option>
-                    <option value="MEDIDA_PENDENTE">📋 MEDIDA PENDENTE</option>
-                    <option value="NOTIFICADO">🔕 NOTIFICADO</option>
-                    <option value="NOTIFICAR">🔔 NOTIFICAR</option>
-                    <option value="RESPONDER_OFICIO_JUDICIARIO_MP">⚖️ RESPONDER OFÍCIO DO JUDICIÁRIO/MP</option>
-                    <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
-                    <option value="REUNIAO_REDE_AGENDADA">📅 REUNIÃO DE REDE AGENDADA</option>
-                    <option value="AGUARDAR_RESPOSTA_EMAIL">📧 AGUARDAR RESPOSTA E-MAIL</option>
-                    <option value="EMAIL_RESPONDIDO">✉️ E-MAIL RESPONDIDO</option>
-                    <option value="ENCAMINHAR_NOTICIA_FATO">📂 ENCAMINHAR NOTÍCIA DE FATO</option>
-                    <option value="OFICIO_RESPONDIDO">📑 OFÍCIO RESPONDIDO</option>
-                    <option value="RESPONDER_EMAIL">📨 RESPONDER E-MAIL</option>
-                    <option value="DIREITO_NAO_VIOLADO">🚫 DIREITO NÃO VIOLADO</option>
-                    <option value="TODAS_MEDIDAS_APLICADAS">🏆 TODAS MEDIDAS APLICADAS</option>
-                    {!['AGUARDANDO_ANALISE', 'AGUARDANDO_DOCUMENTO', 'AGUARDANDO_VALIDACAO', 'MEDIDA_APLICADA', 'AVALIAR_EM_COLEGIADO', 'CONCLUIDO', 'MONITORAMENTO', 'MEDIDA_PENDENTE', 'NOTIFICADO', 'NOTIFICAR', 'RESPONDER_OFICIO_JUDICIARIO_MP', 'SOLICITAR_REUNIAO_REDE', 'REUNIAO_REDE_AGENDADA', 'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'EMAIL_RESPONDIDO', 'ENCAMINHAR_NOTICIA_FATO', 'OFICIO_RESPONDIDO', 'RESPONDER_EMAIL', 'DIREITO_NAO_VIOLADO', 'TODAS_MEDIDAS_APLICADAS'].includes(mainStatus) && (
-                      <option value={mainStatus}>📌 {(STATUS_LABELS[mainStatus] || mainStatus).toUpperCase()}</option>
-                    )}
-                  </select>
-                </div>
-             )}
+             <div className="flex flex-row items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-200/80" onClick={(e) => e.stopPropagation()}>
+               <span className="text-[10px] md:text-[11px] font-black uppercase text-slate-400 pl-1 flex items-center gap-1 shrink-0 tracking-wider">
+                 Status:
+               </span>
+               {canModifyStatus ? (
+                 <select
+                   value={mainStatus}
+                   onChange={(e) => {
+                     e.stopPropagation();
+                     const newS = e.target.value as DocumentStatus;
+                     if (newS && newS !== mainStatus) {
+                       onUpdateStatus(doc.id, [...doc.status.filter(s => s !== newS), newS]);
+                     }
+                   }}
+                   className="flex-1 bg-white text-slate-800 border border-slate-200 text-[11px] font-bold rounded-md px-2 py-1.5 outline-none focus:border-blue-500 cursor-pointer transition-colors"
+                 >
+                   <option value="AGUARDANDO_ANALISE">⏳ AGUARDANDO ANÁLISE</option>
+                   <option value="AGUARDANDO_DOCUMENTO">📄 AGUARDANDO DOCUMENTO</option>
+                   <option value="AGUARDANDO_VALIDACAO">⚖️ AGUARDANDO VALIDAÇÃO</option>
+                   <option value="MEDIDA_APLICADA">✅ MEDIDA APLICADA</option>
+                   <option value="AVALIAR_EM_COLEGIADO">👥 AVALIAR EM COLEGIADO</option>
+                   <option value="CONCLUIDO">✅ CONCLUÍDO</option>
+                   <option value="MONITORAMENTO">📊 EM MONITORAMENTO</option>
+                   <option value="MEDIDA_PENDENTE">📋 MEDIDA PENDENTE</option>
+                   <option value="NOTIFICADO">🔕 NOTIFICADO</option>
+                   <option value="NOTIFICAR">🔔 NOTIFICAR</option>
+                   <option value="RESPONDER_OFICIO_JUDICIARIO_MP">⚖️ RESPONDER OFÍCIO DO JUDICIÁRIO/MP</option>
+                   <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
+                   <option value="REUNIAO_REDE_AGENDADA">📅 REUNIÃO DE REDE AGENDADA</option>
+                   <option value="AGUARDAR_RESPOSTA_EMAIL">📧 AGUARDAR RESPOSTA E-MAIL</option>
+                   <option value="EMAIL_RESPONDIDO">✉️ E-MAIL RESPONDIDO</option>
+                   <option value="ENCAMINHAR_NOTICIA_FATO">📂 ENCAMINHAR NOTÍCIA DE FATO</option>
+                   <option value="OFICIO_RESPONDIDO">📑 OFÍCIO RESPONDIDO</option>
+                   <option value="RESPONDER_EMAIL">📨 RESPONDER E-MAIL</option>
+                   <option value="DIREITO_NAO_VIOLADO">🚫 DIREITO NÃO VIOLADO</option>
+                   <option value="TODAS_MEDIDAS_APLICADAS">🏆 TODAS MEDIDAS APLICADAS</option>
+                   {!['AGUARDANDO_ANALISE', 'AGUARDANDO_DOCUMENTO', 'AGUARDANDO_VALIDACAO', 'MEDIDA_APLICADA', 'AVALIAR_EM_COLEGIADO', 'CONCLUIDO', 'MONITORAMENTO', 'MEDIDA_PENDENTE', 'NOTIFICADO', 'NOTIFICAR', 'RESPONDER_OFICIO_JUDICIARIO_MP', 'SOLICITAR_REUNIAO_REDE', 'REUNIAO_REDE_AGENDADA', 'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'EMAIL_RESPONDIDO', 'ENCAMINHAR_NOTICIA_FATO', 'OFICIO_RESPONDIDO', 'RESPONDER_EMAIL', 'DIREITO_NAO_VIOLADO', 'TODAS_MEDIDAS_APLICADAS'].includes(mainStatus) && (
+                     <option value={mainStatus}>📌 {(STATUS_LABELS[mainStatus] || mainStatus).toUpperCase()}</option>
+                   )}
+                 </select>
+               ) : (
+                 <span className="bg-white text-slate-800 border border-slate-200 text-[11px] font-bold rounded-md px-2 py-1.5 shadow-2xs">
+                   {(STATUS_LABELS[mainStatus] || mainStatus).toUpperCase()}
+                 </span>
+               )}
+             </div>
 
              <div className="flex items-center justify-end gap-2 shrink-0">
                 {onToggleGuardarPasta && !isReadOnly && (
@@ -796,7 +807,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                     <Archive className="w-4 h-4" />
                   </button>
                 )}
-                {!isReadOnly && (
+                {!isReadOnly && isConselheiro && !isStaffAdm && (
                   <button 
                     onClick={(e) => { e.stopPropagation(); onEditDoc(doc.id); }} 
                     className="p-2.5 md:p-2 bg-slate-50 hover:bg-slate-900 hover:text-white border border-slate-200/80 text-slate-600 rounded-lg transition-all cursor-pointer" 
@@ -805,32 +816,17 @@ const DocumentList: React.FC<DocumentListProps> = ({
                     <FileText className="w-4 h-4" />
                   </button>
                 )}
-                {(hasCounselorActions => {
-                   const isLeandroOrSuperAdmin = (currentUser.nome?.toUpperCase() === 'LEANDRO' || currentUser.perfil === 'ADMIN');
-                   const isCreatorAdmin = 
-                     (currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO' || currentUser.nome?.toUpperCase() === 'LEANDRO');
-                   
-                   return isLeandroOrSuperAdmin || (isCreatorAdmin && !hasCounselorActions);
-                 })(!!(
-                   (doc.ciência_registrada_por && doc.ciência_registrada_por.length > 0) ||
-                   doc.medidas_detalhadas?.some(m => m.confirmacoes && m.confirmacoes.length > 0) ||
-                   doc.status.some(s => s !== 'AGUARDANDO_ANALISE' && s !== 'EM_PREENCHIMENTO' && !s.startsWith('NOTIFICACAO_')) ||
-                   (doc.medidas_detalhadas && doc.medidas_detalhadas.length > 0) ||
-                   (doc.relato_providencias && doc.relato_providencias.trim() !== '') ||
-                   (doc.fundamentacao_tecnica && doc.fundamentacao_tecnica.trim() !== '') ||
-                   (doc.monitoramento?.requisicoes && doc.monitoramento.requisicoes.length > 0) ||
-                   (doc.historico_monitoramento && doc.historico_monitoramento.length > 0)
-                 )) && (
-                   <button 
-                     onClick={(e) => { 
-                       e.stopPropagation(); 
-                       setDocToDelete(doc.id);
-                     }} 
-                     className="p-2.5 md:p-2 bg-red-50 hover:bg-red-600 hover:text-white border border-red-200/60 text-red-600 rounded-lg transition-all cursor-pointer"
-                     title="Excluir Prontuário"
-                   >
-                     <Trash2 className="w-4 h-4" />
-                   </button>
+                {!isReadOnly && (currentUser.nome?.toUpperCase() === 'LEANDRO' || (currentUser.perfil === 'ADMIN' && currentUser.cargo === 'CONSELHEIRO')) && (
+                  <button 
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      setDocToDelete(doc.id);
+                    }} 
+                    className="p-2.5 md:p-2 bg-red-50 hover:bg-red-600 hover:text-white border border-red-200/60 text-red-600 rounded-lg transition-all cursor-pointer"
+                    title="Excluir Prontuário"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 )}
                 <button 
                   className="p-2.5 md:p-2 bg-slate-900 hover:bg-blue-600 text-white rounded-lg transition-all cursor-pointer shadow-2xs"

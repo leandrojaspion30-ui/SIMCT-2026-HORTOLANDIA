@@ -514,27 +514,11 @@ export const formatUserRolePrefix = (
   users: Array<{ id: string; nome: string; perfil?: string; cargo?: string; unidade_id?: number }> = [],
   doc?: { conselheiro_providencia_id?: string; conselheiro_providencia_nome?: string; conselheiro_referencia_id?: string; conselheiro_referencia_nome?: string }
 ): string => {
-  if (!userName && !userId) return 'O usuário';
+  if (!userName && !userId) return 'O conselheiro de providência imediata';
   const cleanName = (userName || '').trim().toUpperCase();
   const foundUser = users.find(u => (userId && u.id === userId) || (u.nome && u.nome.trim().toUpperCase() === cleanName));
 
-  // 1. Identificação estrita para equipe Administrativa (CT1 e CT2) - NUNCA conselheiros
-  if (
-    cleanName === 'EDSON' ||
-    cleanName === 'LUIZ' ||
-    cleanName === 'LUDIMILA' ||
-    cleanName === 'FATIMA' ||
-    cleanName === 'ISRAEL' ||
-    cleanName === 'RAISSA' ||
-    cleanName === 'THAINA' ||
-    foundUser?.perfil === 'ADMIN' ||
-    foundUser?.perfil === 'ADMINISTRATIVO' ||
-    (foundUser?.cargo || '').toUpperCase().includes('ADM')
-  ) {
-    return 'O setor administrativo';
-  }
-
-  // 2. Se for o próprio Conselheiro de Providência Imediata do documento
+  // 1. Se for o próprio Conselheiro de Providência Imediata do documento
   if (
     doc &&
     ((userId && doc.conselheiro_providencia_id === userId) ||
@@ -543,7 +527,7 @@ export const formatUserRolePrefix = (
     return 'O conselheiro de providência imediata';
   }
 
-  // 3. Se for o Conselheiro de Referência do documento
+  // 2. Se for o Conselheiro de Referência do documento
   if (
     doc &&
     ((userId && doc.conselheiro_referencia_id === userId) ||
@@ -552,12 +536,13 @@ export const formatUserRolePrefix = (
     return 'O conselheiro de referência';
   }
 
-  // 4. Se for Conselheiro Titular ou Suplente
-  if (foundUser?.perfil === 'CONSELHEIRO' || foundUser?.perfil === 'SUPLENTE') {
+  // 3. Se for Conselheiro Titular ou Suplente
+  if (foundUser?.perfil === 'CONSELHEIRO' || foundUser?.perfil === 'SUPLENTE' || cleanName.includes('LEANDRO')) {
     return 'O(A) conselheiro(a) tutelar';
   }
 
-  return 'O usuário';
+  // ADM não altera status: fallback sempre para conselheiro de providência imediata
+  return 'O conselheiro de providência imediata';
 };
 
 export const sanitizeUserRoleAndIdentity = <T extends Partial<User>>(user: T): T => {
