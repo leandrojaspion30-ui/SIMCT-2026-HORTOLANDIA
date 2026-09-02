@@ -776,14 +776,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                      <option value="RESPONDER_OFICIO_JUDICIARIO_MP">⚖️ RESPONDER OFÍCIO DO JUDICIÁRIO/MP</option>
                      <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
                      <option value="REUNIAO_REDE_AGENDADA">📅 REUNIÃO DE REDE AGENDADA</option>
-                     <option value="AGUARDAR_RESPOSTA_EMAIL">📧 AGUARDAR RESPOSTA E-MAIL</option>
-                     <option value="EMAIL_RESPONDIDO">✉️ E-MAIL RESPONDIDO</option>
-                     <option value="ENCAMINHAR_NOTICIA_FATO">📂 ENCAMINHAR NOTÍCIA DE FATO</option>
-                     <option value="OFICIO_RESPONDIDO">📑 OFÍCIO RESPONDIDO</option>
-                     <option value="RESPONDER_EMAIL">📨 RESPONDER E-MAIL</option>
-                     <option value="DIREITO_NAO_VIOLADO">🚫 DIREITO NÃO VIOLADO</option>
-                     <option value="TODAS_MEDIDAS_APLICADAS">🏆 TODAS MEDIDAS APLICADAS</option>
-                     {!['AGUARDANDO_ANALISE', 'AGUARDANDO_DOCUMENTO', 'AGUARDANDO_VALIDACAO', 'MEDIDA_APLICADA', 'AVALIAR_EM_COLEGIADO', 'CONCLUIDO', 'MONITORAMENTO', 'MEDIDA_PENDENTE', 'NOTIFICADO', 'NOTIFICAR', 'RESPONDER_OFICIO_JUDICIARIO_MP', 'SOLICITAR_REUNIAO_REDE', 'REUNIAO_REDE_AGENDADA', 'AGENDAR_REUNIAO_REDE', 'AGUARDAR_RESPOSTA_EMAIL', 'EMAIL_RESPONDIDO', 'ENCAMINHAR_NOTICIA_FATO', 'OFICIO_RESPONDIDO', 'RESPONDER_EMAIL', 'DIREITO_NAO_VIOLADO', 'TODAS_MEDIDAS_APLICADAS'].includes(mainStatus) && (
+                     {!['AGUARDANDO_ANALISE', 'AGUARDANDO_DOCUMENTO', 'AGUARDANDO_VALIDACAO', 'MEDIDA_APLICADA', 'AVALIAR_EM_COLEGIADO', 'CONCLUIDO', 'MONITORAMENTO', 'MEDIDA_PENDENTE', 'NOTIFICADO', 'NOTIFICAR', 'RESPONDER_OFICIO_JUDICIARIO_MP', 'SOLICITAR_REUNIAO_REDE', 'REUNIAO_REDE_AGENDADA'].includes(mainStatus) && (
                        <option value={mainStatus}>📌 {(STATUS_LABELS[mainStatus] || mainStatus).toUpperCase()}</option>
                      )}
                    </select>
@@ -869,7 +862,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
         </div>
 
         {/* Filter inputs row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${isConselheiro && !isStaffAdm ? 'xl:grid-cols-6' : 'xl:grid-cols-5'} gap-3`}>
           {/* Search Term */}
           <div className="relative group">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none group-focus-within:text-blue-500 transition-colors" />
@@ -882,33 +875,35 @@ const DocumentList: React.FC<DocumentListProps> = ({
             />
           </div>
 
-          {/* Status Select */}
-          <div className="relative group">
-            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none group-focus-within:text-blue-500 transition-colors">
-              <Tag className="w-4 h-4" />
+          {/* Status Select - apenas para Conselheiros */}
+          {isConselheiro && !isStaffAdm && (
+            <div className="relative group">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none group-focus-within:text-blue-500 transition-colors">
+                <Tag className="w-4 h-4" />
+              </div>
+              <select 
+                className="w-full h-11 pl-10 pr-10 bg-slate-50/50 ring-1 ring-slate-200/60 rounded-xl text-[13px] font-medium text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer appearance-none" 
+                value={filters.status} 
+                onChange={(e) => setFilters({...filters, status: e.target.value})}
+              >
+                <option value="">Qualquer Status</option>
+                <option value="AGUARDANDO_ANALISE">⏳ AGUARDANDO ANÁLISE</option>
+                <option value="AGUARDANDO_DOCUMENTO">📄 AGUARDANDO DOCUMENTO</option>
+                <option value="AGUARDANDO_VALIDACAO">⚖️ AGUARDANDO VALIDAÇÃO</option>
+                <option value="MEDIDA_APLICADA">✅ MEDIDA APLICADA</option>
+                <option value="AVALIAR_EM_COLEGIADO">👥 AVALIAR EM COLEGIADO</option>
+                <option value="CONCLUIDO">✅ CONCLUÍDO</option>
+                <option value="MONITORAMENTO">📊 EM MONITORAMENTO</option>
+                <option value="MEDIDA_PENDENTE">📋 MEDIDA PENDENTE</option>
+                <option value="NOTIFICADO">🔕 NOTIFICADO</option>
+                <option value="NOTIFICAR">🔔 NOTIFICAR</option>
+                <option value="RESPONDER_OFICIO_JUDICIARIO_MP">⚖️ RESPONDER OFÍCIO DO JUDICIÁRIO/MP</option>
+                <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
+                <option value="REUNIAO_REDE_AGENDADA">📅 REUNIÃO DE REDE AGENDADA</option>
+              </select>
+              <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none group-focus-within:text-blue-500 transition-colors" />
             </div>
-            <select 
-              className="w-full h-11 pl-10 pr-10 bg-slate-50/50 ring-1 ring-slate-200/60 rounded-xl text-[13px] font-medium text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer appearance-none" 
-              value={filters.status} 
-              onChange={(e) => setFilters({...filters, status: e.target.value})}
-            >
-              <option value="">Qualquer Status</option>
-              <option value="AGUARDANDO_ANALISE">⏳ AGUARDANDO ANÁLISE</option>
-              <option value="AGUARDANDO_DOCUMENTO">📄 AGUARDANDO DOCUMENTO</option>
-              <option value="AGUARDANDO_VALIDACAO">⚖️ AGUARDANDO VALIDAÇÃO</option>
-              <option value="MEDIDA_APLICADA">✅ MEDIDA APLICADA</option>
-              <option value="AVALIAR_EM_COLEGIADO">👥 AVALIAR EM COLEGIADO</option>
-              <option value="CONCLUIDO">✅ CONCLUÍDO</option>
-              <option value="MONITORAMENTO">📊 EM MONITORAMENTO</option>
-              <option value="MEDIDA_PENDENTE">📋 MEDIDA PENDENTE</option>
-              <option value="NOTIFICADO">🔕 NOTIFICADO</option>
-              <option value="NOTIFICAR">🔔 NOTIFICAR</option>
-              <option value="RESPONDER_OFICIO_JUDICIARIO_MP">⚖️ RESPONDER OFÍCIO DO JUDICIÁRIO/MP</option>
-              <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
-              <option value="REUNIAO_REDE_AGENDADA">📅 REUNIÃO DE REDE AGENDADA</option>
-            </select>
-            <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none group-focus-within:text-blue-500 transition-colors" />
-          </div>
+          )}
 
           {/* Bairro Select */}
           <div className="relative group">
