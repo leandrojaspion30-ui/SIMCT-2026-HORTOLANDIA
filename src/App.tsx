@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, ArrowLeft, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart, Timer, Save, Eye, EyeOff, RefreshCw, MessageSquare, Bot, Scale } from 'lucide-react';
 import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada, ScaleException, ChatMessage } from './types';
-import { INITIAL_USERS, INITIAL_AGENDA, getUnidadeByBairro, STATUS_LABELS, getEffectiveEscala, isSameCounselorName, sanitizeUserRoleAndIdentity } from './constants';
+import { INITIAL_USERS, INITIAL_AGENDA, getUnidadeByBairro, STATUS_LABELS, getEffectiveEscala, isSameCounselorName, sanitizeUserRoleAndIdentity, isScaleExceptionExpired, isScaleExceptionActive } from './constants';
 import { db, ensureAuthenticated } from './lib/firebase';
 import { syncCollection, saveDocument, saveDocumentWithAtomicRotation, saveLog, saveAgenda, deleteDocument, deleteAgenda, saveUser, deleteUser, deleteAllDocuments, saveScaleException, deleteScaleException, verifyUserCredentials, SyncMetadata } from './lib/db';
 import ConfidentialityTermModal from './components/ConfidentialityTermModal';
@@ -317,41 +317,26 @@ const App: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Limpeza automática de trocas de escala após 47 horas
+  // Atualização e limpeza automática de trocas de escala sempre que vencer o prazo
   useEffect(() => {
     if (!currentUser || scaleExceptions.length === 0) return;
-    
-    // Rodar limpeza apenas a cada 1 hora para evitar excesso de requisições
-    const now = Date.now();
-    if (now - lastCleanup < 3600000) return; 
 
-    const cleanup = async () => {
-      const threshold = 47 * 60 * 60 * 1000; // 47 horas
-      const currentMs = Date.now();
-
+    const checkAndCleanExpiredSwaps = async () => {
+      const now = new Date();
       for (const ex of scaleExceptions) {
-        try {
-          let endMs: number;
-          if (ex.fim_data && ex.fim_hora) {
-            endMs = new Date(`${ex.fim_data}T${ex.fim_hora}:00`).getTime();
-          } else {
-            // Fallback para o dia da troca
-            endMs = new Date(`${ex.data || ex.inicio_data}T23:59:59`).getTime();
-          }
-
-          if (!isNaN(endMs) && (currentMs - endMs) > threshold) {
-            console.log(`[SIMCT] Limpeza automática: Removendo troca expirada ${ex.id}`);
+        if (isScaleExceptionExpired(ex, now)) {
+          console.log(`[SIMCT] Troca de escala expirada (${ex.id}): atualizando sistema e removendo automaticamente.`);
+          try {
             await deleteScaleException(ex.id);
+          } catch (e) {
+            console.warn("Falha na remoção de troca expirada:", e);
           }
-        } catch (e) {
-          console.warn("Falha na limpeza de troca:", e);
         }
       }
-      setLastCleanup(currentMs);
     };
 
-    cleanup();
-  }, [currentUser, scaleExceptions, lastCleanup]);
+    checkAndCleanExpiredSwaps();
+  }, [currentUser, scaleExceptions, currentTime]);
 
   const isLud = useMemo(() => currentUser?.nome?.toUpperCase().includes('LUDIMILA'), [currentUser]);
   const isSuperAdmin = useMemo(() => currentUser?.nome?.toUpperCase().includes('LUDIMILA') || currentUser?.nome?.toUpperCase().includes('LEANDRO'), [currentUser]);

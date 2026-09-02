@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { X, Save, Calendar, Clock, ShieldCheck, Table, AlertCircle, Building2, ChevronRight, CheckCircle2, UserRound, FileText, MapPin, Hash, Phone, Users, Baby, Trash2, PlusCircle, LayoutDashboard, ClipboardCheck, History, Search, ChevronDown, Check, Repeat, Lock, ArrowLeft, Sparkles, Loader2, RotateCcw, FolderArchive, UserCheck } from 'lucide-react';
 import { Documento, User, ChildData, DocumentStatus, AgendaEntry, ScaleException } from '../types';
-import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, getOrigensHierarquicasByUnidade, CANAIS_COMUNICADO_LIST, getEffectiveEscala, isSameCounselorName, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade, getUnidadeByBairro, LOCAL_OCORRENCIA_OPTIONS, normalizeCanalName, isRotationChannel, getChannelNextCounselor, getActiveRotationCounselors, isCounselorInTrioOrSubstitution, getActiveSubstituteInTrio } from '../constants';
+import { BAIRROS, INITIAL_USERS, classifyTurno, ORIGENS_HIERARQUICAS, getOrigensHierarquicasByUnidade, CANAIS_COMUNICADO_LIST, getEffectiveEscala, isSameCounselorName, UNIFIED_GENDER_OPTIONS, CONSELHEIROS_ALFABETICO_POR_UNIDADE, getBairrosByUnidade, getUnidadeByBairro, LOCAL_OCORRENCIA_OPTIONS, normalizeCanalName, isRotationChannel, getChannelNextCounselor, getActiveRotationCounselors, isCounselorInTrioOrSubstitution, getActiveSubstituteInTrio, isScaleExceptionActive } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
 import { saveScaleException, deleteScaleException, saveLog } from '../lib/db';
 import { SearchableSelect } from './SearchableSelect';

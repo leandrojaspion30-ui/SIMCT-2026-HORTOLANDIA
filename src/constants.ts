@@ -663,6 +663,98 @@ export const parseSafeDateTime = (d?: string, t?: string): Date | null => {
   return isNaN(dt.getTime()) ? null : dt;
 };
 
+/**
+ * Verifica se uma substituição/troca excepcional de escala está ativa em um determinado momento (ou agora).
+ * Quando o prazo da troca vence, retorna false imediatamente, restaurando a escala original automaticamente.
+ */
+export const isScaleExceptionActive = (
+  ex: ScaleException,
+  dateStr?: string,
+  timeStr?: string
+): boolean => {
+  if (!ex) return false;
+
+  let queryDateTime: Date | null = null;
+  if (dateStr) {
+    queryDateTime = parseSafeDateTime(dateStr, timeStr || "08:00");
+  } else {
+    queryDateTime = new Date();
+  }
+  if (!queryDateTime || isNaN(queryDateTime.getTime())) {
+    queryDateTime = new Date();
+  }
+  const queryMs = queryDateTime.getTime();
+
+  // 1. Se possuir campos explícitos de início e término com data e hora
+  if (ex.inicio_data && ex.fim_data) {
+    const startDateTime = parseSafeDateTime(ex.inicio_data, ex.inicio_hora || "00:00");
+    const endDateTime = parseSafeDateTime(ex.fim_data, ex.fim_hora || "23:59:59");
+    if (startDateTime && endDateTime) {
+      return queryMs >= startDateTime.getTime() && queryMs <= endDateTime.getTime();
+    }
+  }
+
+  // 2. Se possuir fim_data
+  if (ex.fim_data) {
+    const endDateTime = parseSafeDateTime(ex.fim_data, ex.fim_hora || "23:59:59");
+    const startDateTime = parseSafeDateTime(ex.inicio_data || ex.data, ex.inicio_hora || "00:00");
+    if (startDateTime && endDateTime) {
+      return queryMs >= startDateTime.getTime() && queryMs <= endDateTime.getTime();
+    }
+  }
+
+  // 3. Se possuir apenas a data do plantão (ex.data ou ex.inicio_data) sem fim_data
+  const dutyDate = ex.data || ex.inicio_data;
+  if (dutyDate) {
+    const startDuty = parseSafeDateTime(dutyDate, ex.inicio_hora || "08:00");
+    let endDuty: Date | null = null;
+    if (startDuty) {
+      // Plantão de 24h a partir do início das 08h até 08h do dia seguinte
+      endDuty = new Date(startDuty.getTime() + 24 * 60 * 60 * 1000);
+    } else {
+      endDuty = parseSafeDateTime(dutyDate, "23:59:59");
+    }
+    if (startDuty && endDuty) {
+      return queryMs >= startDuty.getTime() && queryMs <= endDuty.getTime();
+    }
+  }
+
+  return false;
+};
+
+/**
+ * Verifica se o prazo de uma troca de escala já expirou em relação a uma data de referência (padrão: agora).
+ */
+export const isScaleExceptionExpired = (
+  ex: ScaleException,
+  referenceDate: Date = new Date()
+): boolean => {
+  if (!ex) return false;
+  const refMs = referenceDate.getTime();
+
+  if (ex.fim_data) {
+    const endDateTime = parseSafeDateTime(ex.fim_data, ex.fim_hora || "23:59:59");
+    if (endDateTime) {
+      return refMs > endDateTime.getTime();
+    }
+  }
+
+  const dutyDate = ex.data || ex.inicio_data;
+  if (dutyDate) {
+    const startDuty = parseSafeDateTime(dutyDate, ex.inicio_hora || "08:00");
+    if (startDuty) {
+      const endDuty = new Date(startDuty.getTime() + 24 * 60 * 60 * 1000);
+      return refMs > endDuty.getTime();
+    }
+    const endOfDay = parseSafeDateTime(dutyDate, "23:59:59");
+    if (endOfDay) {
+      return refMs > endOfDay.getTime();
+    }
+  }
+
+  return false;
+};
+
 export const getEffectiveEscala = (
   dateStr: string, 
   timeStr: string = "08:00", 
@@ -752,24 +844,11 @@ export const getEffectiveEscala = (
     ];
   }
 
-  // Se houver exceções/trocas excepcionais cadastradas
+  // Se houver exceções/trocas excepcionais ativas cadastradas (expira automaticamente após o período)
   if (scaleExceptions && scaleExceptions.length > 0) {
-    const queryDateTime = parseSafeDateTime(dateStr, safeTime);
-
     const activeExceptions = scaleExceptions.filter(ex => {
       if (ex.unidade_id !== unidade_id) return false;
-
-      // Se houver campos de início e fim personalizados
-      if (ex.inicio_data && ex.inicio_hora && ex.fim_data && ex.fim_hora) {
-        const startDateTime = parseSafeDateTime(ex.inicio_data, ex.inicio_hora);
-        const endDateTime = parseSafeDateTime(ex.fim_data, ex.fim_hora);
-        if (startDateTime && endDateTime && queryDateTime) {
-          return queryDateTime >= startDateTime && queryDateTime <= endDateTime;
-        }
-      }
-
-      // Fallback para correspondência por data de plantão
-      return ex.data === dutyDayStr || ex.data === dateStr || ex.inicio_data === dutyDayStr || ex.inicio_data === dateStr;
+      return isScaleExceptionActive(ex, dateStr, safeTime);
     });
 
     activeExceptions.forEach(exception => {
@@ -818,8 +897,6 @@ export const isCounselorInTrioOrSubstitution = (
 
   // 2. Está presente e ativo como conselheiro substituto em alguma troca na data/horário
   if (scaleExceptions && scaleExceptions.length > 0 && dateStr) {
-    const queryDateTime = parseSafeDateTime(dateStr, timeStr || "08:00");
-
     const isSubActive = scaleExceptions.some(ex => {
       if (unidade_id && ex.unidade_id !== unidade_id) return false;
       const matchesSub = (counselorId && ex.conselheiro_substituto_id === counselorId) ||
@@ -827,14 +904,7 @@ export const isCounselorInTrioOrSubstitution = (
                          isSameCounselorName(ex.conselheiro_substituto_nome, rawName);
       if (!matchesSub) return false;
 
-      if (ex.inicio_data && ex.inicio_hora && ex.fim_data && ex.fim_hora) {
-        const start = parseSafeDateTime(ex.inicio_data, ex.inicio_hora);
-        const end = parseSafeDateTime(ex.fim_data, ex.fim_hora);
-        if (start && end && queryDateTime) {
-          return queryDateTime >= start && queryDateTime <= end;
-        }
-      }
-      return ex.data === dateStr || ex.inicio_data === dateStr;
+      return isScaleExceptionActive(ex, dateStr, timeStr);
     });
 
     if (isSubActive) return true;
@@ -872,7 +942,6 @@ export const getActiveSubstituteInTrio = (
 
   // Se houver uma troca ativa onde este conselheiro é o original (sendo substituído por outro no plantão de hoje)
   if (scaleExceptions && scaleExceptions.length > 0 && dateStr) {
-    const queryDateTime = parseSafeDateTime(dateStr, timeStr || "08:00");
     const activeException = scaleExceptions.find(ex => {
       if (unidade_id && ex.unidade_id !== unidade_id) return false;
       const isOriginal = (counselorId && ex.conselheiro_original_id === counselorId) ||
@@ -880,14 +949,7 @@ export const getActiveSubstituteInTrio = (
                          isSameCounselorName(ex.conselheiro_original_nome, rawName);
       if (!isOriginal) return false;
 
-      if (ex.inicio_data && ex.inicio_hora && ex.fim_data && ex.fim_hora) {
-        const start = parseSafeDateTime(ex.inicio_data, ex.inicio_hora);
-        const end = parseSafeDateTime(ex.fim_data, ex.fim_hora);
-        if (start && end && queryDateTime) {
-          return queryDateTime >= start && queryDateTime <= end;
-        }
-      }
-      return ex.data === dateStr || ex.inicio_data === dateStr;
+      return isScaleExceptionActive(ex, dateStr, timeStr);
     });
 
     if (activeException) {

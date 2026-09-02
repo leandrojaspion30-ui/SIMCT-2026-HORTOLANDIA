@@ -40,7 +40,8 @@ import {
   getChannelNextCounselor,
   getActiveRotationCounselors,
   isCounselorInTrioOrSubstitution,
-  getActiveSubstituteInTrio
+  getActiveSubstituteInTrio,
+  isScaleExceptionActive
 } from '../constants';
 import { saveDocumentWithAtomicRotation, deleteDocument, deleteScaleException, saveLog } from '../lib/db';
 
@@ -199,7 +200,10 @@ export const DistributionSimulator: React.FC<DistributionSimulatorProps> = ({
 
   const activeExceptionsForUnit = useMemo(() => {
     if (!scaleExceptions) return [];
-    return scaleExceptions.filter(ex => ex.unidade_id === selectedUnidade);
+    const today = new Date();
+    const todayDateReal = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const currentTimeReal = today.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return scaleExceptions.filter(ex => ex.unidade_id === selectedUnidade && isScaleExceptionActive(ex, todayDateReal, currentTimeReal));
   }, [scaleExceptions, selectedUnidade]);
 
   // Encontra quem foi o último conselheiro de providência imediata distribuído hoje automaticamente
