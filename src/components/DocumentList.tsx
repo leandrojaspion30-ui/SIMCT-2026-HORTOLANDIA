@@ -807,7 +807,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                     <Archive className="w-4 h-4" />
                   </button>
                 )}
-                {!isReadOnly && isConselheiro && !isStaffAdm && (
+                {!isReadOnly && (
                   <button 
                     onClick={(e) => { e.stopPropagation(); onEditDoc(doc.id); }} 
                     className="p-2.5 md:p-2 bg-slate-50 hover:bg-slate-900 hover:text-white border border-slate-200/80 text-slate-600 rounded-lg transition-all cursor-pointer" 
@@ -816,7 +816,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                     <FileText className="w-4 h-4" />
                   </button>
                 )}
-                {!isReadOnly && (currentUser.nome?.toUpperCase() === 'LEANDRO' || (currentUser.perfil === 'ADMIN' && currentUser.cargo === 'CONSELHEIRO')) && (
+                {!isReadOnly && (
                   <button 
                     onClick={(e) => { 
                       e.stopPropagation(); 
