@@ -296,6 +296,15 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const isReferenceCounselor = doc.conselheiro_referencia_id === currentUser.id ||
     (currentUser.is_suplente_active && currentUser.real_user_id && doc.conselheiro_referencia_id === currentUser.real_user_id);
 
+  // Conselheiro de Providência Imediata ou Conselheiro de Referência podem alterar status e marcar Direito Não Violado/Improcedente
+  const canToggleImprocedente = canModifyDocument && (isActualProvidenciaImediata || isImediata || isReferenceCounselor || isResponsible);
+  const canChangeStatusInView = canModifyDocument && (isActualProvidenciaImediata || isImediata || isReferenceCounselor || isResponsible);
+
+  // Alerta de urgência só fica ativo visualmente se o documento ainda estiver no status AGUARDANDO_ANALISE.
+  // Assim que o conselheiro de providência imediata altera o status, a tela fica normal novamente.
+  const latestDocStatus = doc.status[doc.status.length - 1] || 'AGUARDANDO_ANALISE';
+  const isUrgentActive = Boolean(doc.is_urgente && (latestDocStatus === 'AGUARDANDO_ANALISE' || (doc.status.length === 1 && doc.status[0] === 'AGUARDANDO_ANALISE')));
+
   const unreadRefAlerts = useMemo(() => {
     if (!isReferenceCounselor) return [];
     return (doc.alertas_status_referencia || []).filter(a => !a.lido);
@@ -409,13 +418,19 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   }, [doc.unidade_id, users]);
 
   const handleQuickStatusChange = (newStatus: DocumentStatus) => {
-    // DIRETRIZ: Apenas o Conselheiro de Providência Imediata possui autonomia para despacho sem validação
-    if (!isImediata) return;
+    // Conselheiro de Providência Imediata ou Conselheiro de Referência podem alterar o status
+    if (!canChangeStatusInView) return;
     
-    const hasTechnical = (doc.violacoesSipia?.length || 0) > 0 || 
-                         (doc.medidas_detalhadas?.length || 0) > 0 || 
-                         (doc.atribuicoes_136?.length || 0) > 0 ||
-                         ((doc.agentesVioladores?.length || 0) > 0 && doc.agentesVioladores?.[0]?.categoria !== 'INEXISTENTE');
+    const isNowImprocedente = newStatus === 'DIREITO_NAO_VIOLADO';
+    if (isNowImprocedente) {
+      setIsImprocedente(true);
+      setTempViolacoes([]);
+      setTempAgentes([]);
+      setSelectedMedidas101([]);
+      setSelectedMedidas129([]);
+      setSelectedAtribuicoes([]);
+      setAtribuicoesDetalhadas([]);
+    }
 
     // REGRA: Quando um despacho é selecionado, a validação colegiada não deve aparecer
     let nextStatus: DocumentStatus[] = doc.status.filter(s => s !== 'AGUARDANDO_VALIDACAO');
@@ -443,10 +458,14 @@ const DocumentView: React.FC<DocumentViewProps> = ({
 
     onUpdateDocument(doc.id, { 
       status: nextStatus,
+      is_improcedente: isNowImprocedente ? true : doc.is_improcedente,
       alertas_status_referencia: updatedAlerts,
-      medidas_detalhadas: (newStatus === 'ARQUIVADO' || newStatus === 'CONCLUIDO') ? [] : doc.medidas_detalhadas
+      medidas_detalhadas: (newStatus === 'ARQUIVADO' || newStatus === 'CONCLUIDO' || newStatus === 'DIREITO_NAO_VIOLADO') ? [] : doc.medidas_detalhadas,
+      violacoesSipia: isNowImprocedente ? [] : doc.violacoesSipia,
+      agentesVioladores: isNowImprocedente ? [] : doc.agentesVioladores
     });
-    onAddLog(doc.id, `MOVIMENTAÇÃO ADMINISTRATIVA: Situação alterada para [${STATUS_LABELS[newStatus] || newStatus}]. Alerta enviado ao Conselheiro de Referência.`, 'DOCUMENTO');
+    onUpdateStatus(doc.id, nextStatus);
+    onAddLog(doc.id, `MOVIMENTAÇÃO ADMINISTRATIVA: Situação alterada para [${STATUS_LABELS[newStatus] || newStatus}] por ${currentUser.nome}.`, 'DOCUMENTO');
   };
 
   const hasEcaMeasuresInDoc = (doc.medidas_detalhadas || []).some(m => 
@@ -618,7 +637,14 @@ const DocumentView: React.FC<DocumentViewProps> = ({
 
     let statusFinal: DocumentStatus[] = [...doc.status];
     
-    if (!hasEcaMeasuresInCombined) {
+    if (isImprocedente) {
+      // Quando for improcedente, o status padrão é DIREITO_NAO_VIOLADO, exceto se o conselheiro já escolheu outro status específico
+      const currentChoice = doc.status[doc.status.length - 1];
+      if (!currentChoice || currentChoice === 'AGUARDANDO_ANALISE' || currentChoice === 'EM_PREENCHIMENTO' || currentChoice === 'AGUARDANDO_VALIDACAO') {
+        statusFinal = [...doc.status.filter(s => s !== 'AGUARDANDO_VALIDACAO' && s !== 'MEDIDA_APLICADA' && s !== 'DIREITO_NAO_VIOLADO'), 'DIREITO_NAO_VIOLADO'];
+      }
+      notificacoesTrio = [];
+    } else if (!hasEcaMeasuresInCombined) {
       // REGRA EXPLICITA: A validação do colegiado só deve APLICAR/APARECER se houver MEDIDA ECA selecionada e confirmada.
       statusFinal = statusFinal.filter(s => s !== 'AGUARDANDO_VALIDACAO' && s !== 'MEDIDA_APLICADA');
       if (finalize && !isInformative && !statusFinal.includes('CONCLUIDO')) {
@@ -626,9 +652,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       }
       notificacoesTrio = [];
     } else if (finalize) {
-      if (isImprocedente) {
-        statusFinal = [...doc.status.filter(s => s !== 'AGUARDANDO_VALIDACAO' && s !== 'MEDIDA_APLICADA'), 'DIREITO_NAO_VIOLADO'];
-      } else if (isTechnicalChange) {
+      if (isTechnicalChange) {
         // REGRA: Edições técnicas em Medidas ECA obrigam revalidação pelo MESMO trio original
         statusFinal = statusFinal.filter(s => s !== 'MEDIDA_APLICADA');
         if (!statusFinal.includes('AGUARDANDO_VALIDACAO')) {
@@ -864,7 +888,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
         </header>
 
         {/* INFO CARDS (Diretriz: Hierarquia Visual de Identidade) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-8 bg-slate-50 border-b border-slate-200">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-8 bg-slate-50 border-b border-slate-200">
            <div className="p-4 bg-white rounded-2xl border border-slate-200 flex items-center gap-4">
               <div className="p-3 bg-blue-50 rounded-xl text-blue-600"><UserCog className="w-5 h-5" /></div>
               <div>
@@ -877,6 +901,44 @@ const DocumentView: React.FC<DocumentViewProps> = ({
               <div>
                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Atendimento Imediato</p>
                  <p className="text-[13px] font-black text-slate-800 uppercase">{provName}</p>
+              </div>
+           </div>
+           <div className="p-4 bg-white rounded-2xl border border-slate-200 flex items-center gap-4">
+              <div className="p-3 bg-indigo-50 rounded-xl text-indigo-600"><Tag className="w-5 h-5" /></div>
+              <div className="flex-1 min-w-0">
+                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Situação / Status</p>
+                 {canChangeStatusInView ? (
+                   <select
+                     id="select-status-docview"
+                     value={doc.status[doc.status.length - 1] || 'AGUARDANDO_ANALISE'}
+                     onChange={(e) => {
+                       const newS = e.target.value as DocumentStatus;
+                       if (newS) {
+                         handleQuickStatusChange(newS);
+                       }
+                     }}
+                     className="w-full mt-0.5 bg-slate-50 border border-slate-200 text-slate-800 text-[11px] font-bold rounded-lg px-2 py-1 outline-none focus:border-indigo-500 cursor-pointer"
+                   >
+                     <option value="AGUARDANDO_ANALISE">⏳ AGUARDANDO ANÁLISE</option>
+                     <option value="AGUARDANDO_DOCUMENTO">📄 AGUARDANDO DOCUMENTO</option>
+                     <option value="AGUARDANDO_VALIDACAO">⚖️ AGUARDANDO VALIDAÇÃO</option>
+                     <option value="MEDIDA_APLICADA">✅ MEDIDA APLICADA</option>
+                     <option value="AVALIAR_EM_COLEGIADO">👥 AVALIAR EM COLEGIADO</option>
+                     <option value="CONCLUIDO">✅ CONCLUÍDO</option>
+                     <option value="MONITORAMENTO">📊 EM MONITORAMENTO</option>
+                     <option value="MEDIDA_PENDENTE">📋 MEDIDA PENDENTE</option>
+                     <option value="NOTIFICADO">🔕 NOTIFICADO</option>
+                     <option value="NOTIFICAR">🔔 NOTIFICAR</option>
+                     <option value="RESPONDER_OFICIO_JUDICIARIO_MP">⚖️ RESPONDER OFÍCIO DO JUDICIÁRIO/MP</option>
+                     <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
+                     <option value="REUNIAO_REDE_AGENDADA">📅 REUNIÃO DE REDE AGENDADA</option>
+                     <option value="DIREITO_NAO_VIOLADO">🛡️ DIREITO NÃO VIOLADO / IMPROCEDENTE</option>
+                   </select>
+                 ) : (
+                   <p className="text-[12px] font-black text-slate-800 uppercase truncate">
+                     {STATUS_LABELS[doc.status[doc.status.length - 1]] || doc.status[doc.status.length - 1]}
+                   </p>
+                 )}
               </div>
            </div>
         </div>
@@ -926,7 +988,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
         )}
 
         {/* ALERTA DE DOCUMENTO URGENTE PARA PROVIDÊNCIA IMEDIATA */}
-        {doc.is_urgente && (
+        {isUrgentActive && (
           <div className="bg-rose-600 text-white p-5 px-8 flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg border-b-2 border-rose-700 animate-pulse">
             <div className="flex items-center gap-4">
               <AlertCircle className="w-8 h-8 shrink-0 text-white animate-bounce" />
@@ -1142,25 +1204,84 @@ const DocumentView: React.FC<DocumentViewProps> = ({
           {/* ACORDEÕES TÉCNICOS */}
           <div className="space-y-4">
             <div 
+              id="btn-direito-nao-violado-improcedente"
               onClick={() => {
-                if (!canEditTechnicalFields) return;
+                if (!canToggleImprocedente) return;
                 const next = !isImprocedente;
                 setIsImprocedente(next);
                 if (next) {
                   setTempViolacoes([]);
                   setTempAgentes([]);
-                  onUpdateDocument(doc.id, { is_improcedente: true, violacoesSipia: [], agentesVioladores: [] });
+                  setSelectedMedidas101([]);
+                  setSelectedMedidas129([]);
+                  setSelectedAtribuicoes([]);
+                  setAtribuicoesDetalhadas([]);
+
+                  // Status "DIREITO_NAO_VIOLADO" é automaticamente escolhido
+                  const currentFiltered = doc.status.filter(s => s !== 'AGUARDANDO_VALIDACAO' && s !== 'MEDIDA_APLICADA' && s !== 'DIREITO_NAO_VIOLADO');
+                  const nextStatusList: DocumentStatus[] = [...currentFiltered, 'DIREITO_NAO_VIOLADO'];
+
+                  let updatedAlerts = [...(doc.alertas_status_referencia || [])];
+                  if (doc.conselheiro_referencia_id && currentUser.id !== doc.conselheiro_referencia_id) {
+                    const prevStatus = doc.status[doc.status.length - 1] || 'AGUARDANDO_ANALISE';
+                    updatedAlerts.push({
+                      id: `alerta_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+                      documento_id: doc.id,
+                      conselheiro_referencia_id: doc.conselheiro_referencia_id,
+                      alterado_por_id: currentUser.id,
+                      alterado_por_nome: currentUser.nome,
+                      status_anterior: prevStatus,
+                      status_novo: 'DIREITO_NAO_VIOLADO',
+                      data_hora: new Date().toISOString(),
+                      lido: false
+                    });
+                  }
+
+                  onUpdateDocument(doc.id, { 
+                    is_improcedente: true, 
+                    status: nextStatusList,
+                    alertas_status_referencia: updatedAlerts,
+                    violacoesSipia: [], 
+                    agentesVioladores: [],
+                    medidas_detalhadas: []
+                  });
+                  onUpdateStatus(doc.id, nextStatusList);
+                  onAddLog(doc.id, `SITUAÇÃO: Marcado como [DIREITO NÃO VIOLADO / IMPROCEDENTE] por ${currentUser.nome}. Status atualizado automaticamente.`, 'DOCUMENTO');
                 } else {
-                  onUpdateDocument(doc.id, { is_improcedente: false });
+                  const remaining = doc.status.filter(s => s !== 'DIREITO_NAO_VIOLADO');
+                  const nextStatusList: DocumentStatus[] = remaining.length > 0 ? remaining : ['AGUARDANDO_ANALISE'];
+                  onUpdateDocument(doc.id, { is_improcedente: false, status: nextStatusList });
+                  onUpdateStatus(doc.id, nextStatusList);
+                  onAddLog(doc.id, `SITUAÇÃO: Desmarcado [DIREITO NÃO VIOLADO / IMPROCEDENTE] por ${currentUser.nome}.`, 'DOCUMENTO');
                 }
               }}
-              className={`p-6 rounded-[2rem] border-2 cursor-pointer transition-all flex items-center justify-between ${isImprocedente ? 'bg-slate-900 border-slate-900 text-white shadow-lg' : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50'}`}
+              className={`p-6 rounded-[2rem] border-2 cursor-pointer transition-all flex items-center justify-between ${
+                isImprocedente 
+                  ? 'bg-slate-900 border-slate-900 text-white shadow-lg' 
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+              } ${!canToggleImprocedente ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
               <div className="flex items-center gap-4">
-                {isImprocedente ? <Ban className="w-6 h-6 text-red-500" /> : <ShieldAlert className="w-6 h-6 opacity-30" />}
-                <span className="text-[14px] font-black uppercase tracking-widest">Direito não Violado / Improcedente</span>
+                {isImprocedente ? <Ban className="w-6 h-6 text-red-500" /> : <ShieldAlert className="w-6 h-6 text-slate-400" />}
+                <div>
+                  <span className="text-[14px] font-black uppercase tracking-wider block">
+                    Direito não Violado / Improcedente
+                  </span>
+                  <span className={`text-[10px] font-bold uppercase tracking-tight block mt-0.5 ${isImprocedente ? 'text-emerald-400' : 'text-slate-400'}`}>
+                    {isImprocedente 
+                      ? 'Status automático: DIREITO NÃO VIOLADO / IMPROCEDENTE (O Conselheiro pode alterar o status a qualquer momento)'
+                      : 'Clique para selecionar: O Status será automaticamente definido para DIREITO NÃO VIOLADO / IMPROCEDENTE'}
+                  </span>
+                </div>
               </div>
-              {isImprocedente && <CheckCircle2 className="w-6 h-6 text-emerald-500" />}
+              {isImprocedente ? (
+                <div className="flex items-center gap-2 px-3.5 py-1.5 bg-emerald-600 text-white rounded-xl text-[11px] font-black uppercase shadow-xs">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Selecionado</span>
+                </div>
+              ) : (
+                <div className="w-5 h-5 rounded-md border-2 border-slate-300 flex items-center justify-center group-hover:border-slate-400" />
+              )}
             </div>
 
             {!isImprocedente && (

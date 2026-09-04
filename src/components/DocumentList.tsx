@@ -589,11 +589,15 @@ const DocumentList: React.FC<DocumentListProps> = ({
       ? (doc.alertas_status_referencia || []).filter(a => !a.lido)
       : [];
 
+    // Alerta de urgência só fica ativo enquanto o documento estiver com status AGUARDANDO_ANALISE.
+    // Assim que o conselheiro de providência imediata altera para qualquer outro status, a tela fica normal novamente.
+    const isUrgentActive = Boolean(doc.is_urgente && (mainStatus === 'AGUARDANDO_ANALISE' || (doc.status.length === 1 && doc.status[0] === 'AGUARDANDO_ANALISE')));
+
     return (
       <div 
         key={doc.id} 
         onClick={() => onSelectDoc(doc.id)} 
-        className={`bg-white rounded-xl border ${doc.is_urgente ? 'border-2 border-rose-500 bg-rose-50/20 shadow-md ring-2 ring-rose-200/60' : `border-slate-200/80 ${style.border}`} border-l-4 shadow-2xs hover:shadow-md transition-all cursor-pointer group p-4 md:p-5 ${isNested ? 'bg-white' : ''}`}
+        className={`bg-white rounded-xl border ${isUrgentActive ? 'border-2 border-rose-500 bg-rose-50/20 shadow-md ring-2 ring-rose-200/60' : `border-slate-200/80 ${style.border}`} border-l-4 shadow-2xs hover:shadow-md transition-all cursor-pointer group p-4 md:p-5 ${isNested ? 'bg-white' : ''}`}
       >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-2.5 flex-1">
@@ -604,7 +608,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   <Archive className="w-3.5 h-3.5 text-amber-700" /> Pasta Guardada
                 </span>
               )}
-              {doc.is_urgente && (
+              {isUrgentActive && (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-rose-600 text-white text-[12px] font-black uppercase tracking-wider animate-pulse shadow-sm">
                   <AlertCircle className="w-3.5 h-3.5 text-white" /> URGENTE - PROVIDÊNCIA IMEDIATA
                 </span>
@@ -720,11 +724,11 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   <UserCheck className="w-3.5 h-3.5 text-blue-600" /> Titular: {refCouncilor?.nome || 'N/A'}
                </div>
                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[12px] ${
-                  doc.is_urgente 
+                  isUrgentActive 
                     ? 'bg-rose-600 text-white font-black shadow-sm animate-pulse ring-2 ring-rose-400' 
                     : 'bg-sky-50 border border-sky-200/60 font-medium text-sky-800'
                 }`}>
-                  <ShieldCheck className={`w-3.5 h-3.5 ${doc.is_urgente ? 'text-white' : 'text-sky-600'}`} /> Imediata: {provCouncilor?.nome || 'N/A'}
+                  <ShieldCheck className={`w-3.5 h-3.5 ${isUrgentActive ? 'text-white' : 'text-sky-600'}`} /> Imediata: {provCouncilor?.nome || 'N/A'}
                </div>
                {doc.origem && (
                   <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200/80 rounded-lg text-[12px] font-medium text-slate-700" title="Origem do Caso">
@@ -776,7 +780,8 @@ const DocumentList: React.FC<DocumentListProps> = ({
                      <option value="RESPONDER_OFICIO_JUDICIARIO_MP">⚖️ RESPONDER OFÍCIO DO JUDICIÁRIO/MP</option>
                      <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
                      <option value="REUNIAO_REDE_AGENDADA">📅 REUNIÃO DE REDE AGENDADA</option>
-                     {!['AGUARDANDO_ANALISE', 'AGUARDANDO_DOCUMENTO', 'AGUARDANDO_VALIDACAO', 'MEDIDA_APLICADA', 'AVALIAR_EM_COLEGIADO', 'CONCLUIDO', 'MONITORAMENTO', 'MEDIDA_PENDENTE', 'NOTIFICADO', 'NOTIFICAR', 'RESPONDER_OFICIO_JUDICIARIO_MP', 'SOLICITAR_REUNIAO_REDE', 'REUNIAO_REDE_AGENDADA'].includes(mainStatus) && (
+                     <option value="DIREITO_NAO_VIOLADO">🛡️ DIREITO NÃO VIOLADO / IMPROCEDENTE</option>
+                     {!['AGUARDANDO_ANALISE', 'AGUARDANDO_DOCUMENTO', 'AGUARDANDO_VALIDACAO', 'MEDIDA_APLICADA', 'AVALIAR_EM_COLEGIADO', 'CONCLUIDO', 'MONITORAMENTO', 'MEDIDA_PENDENTE', 'NOTIFICADO', 'NOTIFICAR', 'RESPONDER_OFICIO_JUDICIARIO_MP', 'SOLICITAR_REUNIAO_REDE', 'REUNIAO_REDE_AGENDADA', 'DIREITO_NAO_VIOLADO'].includes(mainStatus) && (
                        <option value={mainStatus}>📌 {(STATUS_LABELS[mainStatus] || mainStatus).toUpperCase()}</option>
                      )}
                    </select>
@@ -900,6 +905,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                 <option value="RESPONDER_OFICIO_JUDICIARIO_MP">⚖️ RESPONDER OFÍCIO DO JUDICIÁRIO/MP</option>
                 <option value="SOLICITAR_REUNIAO_REDE">🏛️ SOLICITAR REUNIÃO DE REDE</option>
                 <option value="REUNIAO_REDE_AGENDADA">📅 REUNIÃO DE REDE AGENDADA</option>
+                <option value="DIREITO_NAO_VIOLADO">🛡️ DIREITO NÃO VIOLADO / IMPROCEDENTE</option>
               </select>
               <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none group-focus-within:text-blue-500 transition-colors" />
             </div>

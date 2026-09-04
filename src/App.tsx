@@ -1148,14 +1148,20 @@ const App: React.FC = () => {
     const prevStatus = docObj.status[docObj.status.length - 1] || 'AGUARDANDO_ANALISE';
     const latestStatus = newStatus[newStatus.length - 1];
     
+    // REGRA DE PROVIDÊNCIA IMEDIATA: Quando o conselheiro de providência imediata modifica o status
+    // "AGUARDANDO_ANALISE" para qualquer outro status em um documento urgente, a urgência é atendida e desativada
+    const shouldClearUrgency = Boolean(docObj.is_urgente && latestStatus !== 'AGUARDANDO_ANALISE');
+    const finalIsUrgente = shouldClearUrgency ? false : docObj.is_urgente;
+
     if (prevStatus === latestStatus) {
-      setAllDocuments(prev => prev.map(d => d.id === id ? { ...d, status: newStatus } : d));
-      await saveDocument({ ...docObj, id, status: newStatus }, currentUser);
+      setAllDocuments(prev => prev.map(d => d.id === id ? { ...d, status: newStatus, is_urgente: finalIsUrgente } : d));
+      await saveDocument({ ...docObj, id, status: newStatus, is_urgente: finalIsUrgente }, currentUser);
       return;
     }
 
     const label = STATUS_LABELS[latestStatus] || latestStatus;
-    addLog(id, `STATUS: Situação alterada para [${label}].`, 'SISTEMA');
+    const urgencyNote = shouldClearUrgency ? ' Providência imediata realizada (urgência normalizada).' : '';
+    addLog(id, `STATUS: Situação alterada para [${label}].${urgencyNote}`, 'SISTEMA');
 
     let updatedAlerts = [...(docObj.alertas_status_referencia || [])];
     const isReference = docObj.conselheiro_referencia_id === currentUser.id || 
@@ -1177,9 +1183,13 @@ const App: React.FC = () => {
 
     // REGRA DE ATUALIZAÇÃO AUTOMÁTICA IMEDIATA:
     // Atualiza imediatamente o estado da UI do React sem esperar o ciclo do banco
+    const isImprocedenteUpdate = latestStatus === 'DIREITO_NAO_VIOLADO' ? true : docObj.is_improcedente;
+
     setAllDocuments(prev => prev.map(d => d.id === id ? { 
       ...d, 
       status: newStatus,
+      is_urgente: finalIsUrgente,
+      is_improcedente: isImprocedenteUpdate,
       alertas_status_referencia: updatedAlerts 
     } : d));
 
@@ -1187,6 +1197,8 @@ const App: React.FC = () => {
       ...docObj,
       id, 
       status: newStatus,
+      is_urgente: finalIsUrgente,
+      is_improcedente: isImprocedenteUpdate,
       alertas_status_referencia: updatedAlerts
     }, currentUser);
   };
@@ -1610,7 +1622,18 @@ const App: React.FC = () => {
       return <DocumentView document={doc} allDocuments={documents} users={users} agenda={agenda} files={[]} logs={logs.filter(l => l.documento_id === selectedDocId)} currentUser={currentUser} isReadOnly={isAdministrative} forceEdit={forceDirectEdit} onBack={goBack} onEdit={() => navigateTo('edit', { editId: doc.id })} onDelete={async (id) => { 
           await handleDeleteDocument(id, 'Visualizador de Documento');
           goBack();
-      }} onUpdateStatus={handleUpdateStatus} onUpdateDocument={async (id, fields) => { const existingDoc = allDocuments.find(d => d.id === id); setAllDocuments(prev => prev.map(d => d.id === id ? { ...d, ...fields } : d)); await saveDocument({ ...existingDoc, ...fields, id }, currentUser); }} onAddLog={addLog} onScience={handleScience} nameMap={userNameMap} scaleExceptions={scaleExceptions} />;
+      }} onUpdateStatus={handleUpdateStatus} onUpdateDocument={async (id, fields) => { 
+        const existingDoc = allDocuments.find(d => d.id === id); 
+        let updatedFields = { ...fields };
+        if (existingDoc?.is_urgente && fields.status) {
+          const latestFieldStatus = fields.status[fields.status.length - 1];
+          if (latestFieldStatus && latestFieldStatus !== 'AGUARDANDO_ANALISE') {
+            updatedFields.is_urgente = false;
+          }
+        }
+        setAllDocuments(prev => prev.map(d => d.id === id ? { ...d, ...updatedFields } : d)); 
+        await saveDocument({ ...existingDoc, ...updatedFields, id }, currentUser); 
+      }} onAddLog={addLog} onScience={handleScience} nameMap={userNameMap} scaleExceptions={scaleExceptions} />;
     }
 
     if (activeTab === 'logs' && !(isSuperAdmin || isAdministrative)) {
