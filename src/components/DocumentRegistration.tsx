@@ -1151,12 +1151,18 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
   };
 
   const currentInstitutions = useMemo(() => {
-    if (!formData.origem_categoria || formData.origem_categoria === 'SOCIEDADE') {
+    if (!formData.origem_categoria) {
+      return [];
+    }
+    const norm = (formData.origem_categoria || '').trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (norm === 'SOCIEDADE') {
       return [];
     }
     const list = getOrigensHierarquicasByUnidade(formData.unidade_id);
-    const base = list.find(h => h.label === formData.origem_categoria)?.options || [];
-    if (formData.origem_categoria && !base.includes('OUTRO') && !base.includes('OUTROS')) {
+    const found = list.find(h => (h.label || '').trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === norm)
+      || ORIGENS_HIERARQUICAS.find(h => (h.label || '').trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === norm);
+    const base = found?.options || [];
+    if (!base.includes('OUTRO') && !base.includes('OUTROS')) {
       return [...base, 'OUTRO'];
     }
     return base;

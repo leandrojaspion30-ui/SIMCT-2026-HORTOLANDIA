@@ -91,13 +91,18 @@ const DocumentView: React.FC<DocumentViewProps> = ({
 
   const [customLocalText, setCustomLocalText] = useState<string>(parseCustomLocalText(doc.local_ocorrencia));
 
+  const normalizeCatName = (str?: string) => 
+    (str || '').trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
   const parseOrigem = (origemStr?: string, categoriaStr?: string) => {
-    let cat = categoriaStr || '';
-    let inst = origemStr || '';
+    let cat = (categoriaStr || '').trim();
+    let inst = (origemStr || '').trim();
     if (origemStr && origemStr.includes(' - ')) {
       const parts = origemStr.split(' - ');
       cat = cat || parts[0].trim();
       inst = parts.slice(1).join(' - ').trim();
+    } else if (cat && inst && normalizeCatName(cat) === normalizeCatName(inst)) {
+      inst = '';
     }
     return { cat, inst };
   };
@@ -109,17 +114,26 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const [customOrigem, setCustomOrigem] = useState<string>('');
   const [quemComunicouClassificado, setQuemComunicouClassificado] = useState<boolean>(Boolean(doc.quem_comunicou_classificado));
 
+  const effectiveUnidadeId = doc.unidade_id || currentUser.unidade_id || 1;
+
   const unitOrigensHierarquicas = useMemo(() => {
-    return getOrigensHierarquicasByUnidade(doc.unidade_id || 1);
-  }, [doc.unidade_id]);
+    return getOrigensHierarquicasByUnidade(effectiveUnidadeId);
+  }, [effectiveUnidadeId]);
 
   const currentInstitutions = useMemo(() => {
-    if (!origemCategoria || origemCategoria === 'SOCIEDADE') return [];
-    const base = unitOrigensHierarquicas.find(h => h.label === origemCategoria)?.options || [];
-    if (origemCategoria && !base.includes('OUTRO') && !base.includes('OUTROS')) {
-      return [...base, 'OUTRO'];
+    if (!origemCategoria) return [];
+    const norm = normalizeCatName(origemCategoria);
+    if (norm === 'SOCIEDADE') return [];
+
+    const foundCategory = unitOrigensHierarquicas.find(h => normalizeCatName(h.label) === norm)
+      || ORIGENS_HIERARQUICAS.find(h => normalizeCatName(h.label) === norm);
+    
+    const base = foundCategory?.options || [];
+    const res = [...base];
+    if (!res.includes('OUTRO') && !res.includes('OUTROS')) {
+      res.push('OUTRO');
     }
-    return base;
+    return res;
   }, [unitOrigensHierarquicas, origemCategoria]);
 
   const handleUpdateOrigem = (newCat: string, newInst: string, newCanal: string, isManualAction: boolean = true) => {
@@ -292,6 +306,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const canEditTechnicalFields = canModifyDocument && (isActualProvidenciaImediata || isImediata);
   const canEditIdentifiers = canModifyDocument && (isResponsible || isActualProvidenciaImediata);
   const canEditViolationOrSipia = canModifyDocument && (isResponsible || isActualProvidenciaImediata);
+  const canEditQuemComunicou = canModifyDocument && (isResponsible || isActualProvidenciaImediata || isImediata || isConselheiro);
 
   const isReferenceCounselor = doc.conselheiro_referencia_id === currentUser.id ||
     (currentUser.is_suplente_active && currentUser.real_user_id && doc.conselheiro_referencia_id === currentUser.real_user_id);
@@ -1362,7 +1377,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                       {(origemCategoria || origemInstituicao || canalComunicado || customOrigem) && (
                         <button
                           type="button"
-                          disabled={!canEditTechnicalFields}
+                          disabled={!canEditQuemComunicou}
                           onClick={() => {
                             setOrigemCategoria('');
                             setOrigemInstituicao('');
@@ -1385,9 +1400,9 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                       <div className="space-y-2">
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoria</label>
                         <select 
-                          disabled={!canEditTechnicalFields}
+                          disabled={!canEditQuemComunicou}
                           className="w-full p-3 sm:p-4 bg-white border border-slate-200 rounded-xl sm:rounded-[1.25rem] font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-sky-500 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                          value={origemCategoria}
+                          value={unitOrigensHierarquicas.find(h => normalizeCatName(h.label) === normalizeCatName(origemCategoria))?.label || origemCategoria}
                           onChange={e => {
                             const nextCat = e.target.value;
                             setOrigemCategoria(nextCat);
@@ -1402,14 +1417,14 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                       </div>
 
                       {/* COLUNA 2: INSTITUIÇÃO */}
-                      <div className="space-y-2">
+                      <div className="space-y-2 relative z-20">
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Instituição</label>
                         <SearchableSelect
-                          disabled={!canEditTechnicalFields || !origemCategoria || origemCategoria === 'SOCIEDADE'}
+                          disabled={!canEditQuemComunicou || !origemCategoria || normalizeCatName(origemCategoria) === 'SOCIEDADE'}
                           className="w-full p-3 sm:p-4 bg-white border border-slate-200 rounded-xl sm:rounded-[1.25rem] font-bold uppercase text-[10px] sm:text-[11px] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-100"
-                          placeholder={origemCategoria === 'SOCIEDADE' ? "NÃO SE APLICA (SOCIEDADE)" : "SELECIONE INSTITUIÇÃO..."}
+                          placeholder={normalizeCatName(origemCategoria) === 'SOCIEDADE' ? "NÃO SE APLICA (SOCIEDADE)" : "SELECIONE INSTITUIÇÃO..."}
                           options={[...currentInstitutions].sort((a, b) => a.localeCompare(b))}
-                          value={origemCategoria === 'SOCIEDADE' ? '' : origemInstituicao}
+                          value={normalizeCatName(origemCategoria) === 'SOCIEDADE' ? '' : origemInstituicao}
                           onChange={val => {
                             setOrigemInstituicao(val);
                             if (val === 'OUTRO' || val === 'OUTROS') {
@@ -1426,13 +1441,13 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                       <div className="space-y-2">
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Canal</label>
                         <select 
-                          disabled={!canEditTechnicalFields}
+                          disabled={!canEditQuemComunicou}
                           className="w-full p-3 sm:p-4 bg-white border border-slate-200 rounded-xl sm:rounded-[1.25rem] font-bold uppercase text-[10px] sm:text-[11px] outline-none focus:border-sky-500 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                           value={canalComunicado}
                           onChange={e => {
                             const nextCanal = e.target.value;
                             setCanalComunicado(nextCanal);
-                            handleUpdateOrigem(origemCategoria, origemCategoria === 'SOCIEDADE' ? '' : (origemInstituicao === 'OUTRO' || origemInstituicao === 'OUTROS' ? customOrigem : origemInstituicao), nextCanal);
+                            handleUpdateOrigem(origemCategoria, normalizeCatName(origemCategoria) === 'SOCIEDADE' ? '' : (origemInstituicao === 'OUTRO' || origemInstituicao === 'OUTROS' ? customOrigem : origemInstituicao), nextCanal);
                           }}
                         >
                           <option value="">SELECIONE CANAL...</option>
@@ -1441,12 +1456,12 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                       </div>
                     </div>
 
-                    {origemCategoria !== 'SOCIEDADE' && (origemInstituicao === 'OUTRO' || origemInstituicao === 'OUTROS' || (origemInstituicao && !currentInstitutions.includes(origemInstituicao))) && (
+                    {normalizeCatName(origemCategoria) !== 'SOCIEDADE' && (origemInstituicao === 'OUTRO' || origemInstituicao === 'OUTROS' || (origemInstituicao && !currentInstitutions.includes(origemInstituicao))) && (
                       <div className="pt-2 animate-in slide-in-from-top-2 duration-300">
                         <div className="p-4 bg-white rounded-2xl border border-sky-100 space-y-2">
                           <label className="text-[10px] font-black text-sky-600 uppercase tracking-widest leading-none">Descreva a Instituição / Escola não cadastrada</label>
                           <input 
-                            disabled={!canEditTechnicalFields}
+                            disabled={!canEditQuemComunicou}
                             type="text"
                             placeholder="DIGITE O NOME OU DESCRIÇÃO DA INSTITUIÇÃO..."
                             className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold uppercase text-[11px] outline-none focus:border-sky-500 shadow-inner disabled:opacity-50"
@@ -2083,7 +2098,7 @@ const AccordionSection: React.FC<AccordionSectionProps> = ({
 }) => {
   const isOpen = active === id;
   return (
-    <div className={`border-2 rounded-[2rem] overflow-hidden transition-all ${isOpen ? 'border-slate-300 shadow-xl scale-[1.01]' : 'border-slate-100 shadow-sm'}`}>
+    <div className={`border-2 rounded-[2rem] transition-all ${isOpen ? 'border-slate-300 shadow-xl scale-[1.01] overflow-visible' : 'border-slate-100 shadow-sm overflow-hidden'}`}>
       <button onClick={() => onToggle(isOpen ? null : id)} className={`w-full flex items-center justify-between p-7 ${isOpen ? `${color} text-white` : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
         <div className="flex items-center gap-5">
           {isOpen ? <ChevronDown className="w-6 h-6" /> : <Play className={`w-5 h-5 ${saved ? 'text-emerald-500' : 'opacity-40'}`} />}
@@ -2091,7 +2106,7 @@ const AccordionSection: React.FC<AccordionSectionProps> = ({
         </div>
         {saved && <CheckCircle className={`w-7 h-7 ${isOpen ? 'text-white' : 'text-emerald-500'}`} />}
       </button>
-      {isOpen && <div className="p-10 bg-white animate-in slide-in-from-top-2 duration-300">{children}</div>}
+      {isOpen && <div className="p-6 sm:p-10 bg-white animate-in slide-in-from-top-2 duration-300 overflow-visible">{children}</div>}
     </div>
   );
 };

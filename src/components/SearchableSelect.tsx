@@ -34,8 +34,13 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const normalizeText = (text: string) => 
+    (text || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
   const filteredOptions = useMemo(() => {
-    return options.filter(opt => opt.toLowerCase().includes(search.toLowerCase()));
+    if (!search.trim()) return options;
+    const searchNorm = normalizeText(search);
+    return options.filter(opt => normalizeText(opt).includes(searchNorm));
   }, [options, search]);
 
   useEffect(() => {
