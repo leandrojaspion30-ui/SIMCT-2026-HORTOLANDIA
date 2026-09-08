@@ -1345,3 +1345,80 @@ export const restoreFullSystemBackup = async (
   return { documentsRestored, logsRestored, agendaRestored };
 };
 
+export interface FreshSystemData {
+  documents: Documento[];
+  agenda: AgendaEntry[];
+  logs: Log[];
+  users: User[];
+  scaleExceptions: ScaleException[];
+  chatMessages: ChatMessage[];
+}
+
+/**
+ * Busca de dados atualizados diretamente do Firestore sob demanda
+ * Permite que a tela atualize suas informações sem reload da página e sem deslogar o usuário.
+ */
+export const fetchFreshSystemData = async (): Promise<FreshSystemData> => {
+  await ensureAuthenticated();
+
+  const [docsSnap, agendaSnap, logsSnap, usersSnap, scaleSnap, chatSnap] = await Promise.allSettled([
+    getDocs(collection(db, 'documents')),
+    getDocs(collection(db, 'agenda')),
+    getDocs(query(collection(db, 'logs'), orderBy('data_hora', 'desc'), limit(150))),
+    getDocs(collection(db, 'users')),
+    getDocs(collection(db, 'scale_exceptions')),
+    getDocs(query(collection(db, 'chat_messages'), orderBy('created_at', 'desc'), limit(300)))
+  ]);
+
+  const documents: Documento[] = docsSnap.status === 'fulfilled'
+    ? docsSnap.value.docs.map(d => ({ ...d.data(), id: d.id } as Documento))
+    : getFromLocalBackup<Documento>('documents');
+  if (docsSnap.status === 'fulfilled' && documents.length > 0) {
+    try { localStorage.setItem(`${LOCAL_STORAGE_PREFIX}documents`, JSON.stringify(documents)); } catch {}
+  }
+
+  const agenda: AgendaEntry[] = agendaSnap.status === 'fulfilled'
+    ? agendaSnap.value.docs.map(d => ({ ...d.data(), id: d.id } as AgendaEntry))
+    : getFromLocalBackup<AgendaEntry>('agenda');
+  if (agendaSnap.status === 'fulfilled') {
+    try { localStorage.setItem(`${LOCAL_STORAGE_PREFIX}agenda`, JSON.stringify(agenda)); } catch {}
+  }
+
+  const logs: Log[] = logsSnap.status === 'fulfilled'
+    ? logsSnap.value.docs.map(d => ({ ...d.data(), id: d.id } as Log))
+    : getFromLocalBackup<Log>('logs');
+  if (logsSnap.status === 'fulfilled' && logs.length > 0) {
+    try { localStorage.setItem(`${LOCAL_STORAGE_PREFIX}logs`, JSON.stringify(logs)); } catch {}
+  }
+
+  const users: User[] = usersSnap.status === 'fulfilled'
+    ? usersSnap.value.docs.map(d => ({ ...d.data(), id: d.id } as User))
+    : getFromLocalBackup<User>('users');
+  if (usersSnap.status === 'fulfilled' && users.length > 0) {
+    try { localStorage.setItem(`${LOCAL_STORAGE_PREFIX}users`, JSON.stringify(users)); } catch {}
+  }
+
+  const scaleExceptions: ScaleException[] = scaleSnap.status === 'fulfilled'
+    ? scaleSnap.value.docs.map(d => ({ ...d.data(), id: d.id } as ScaleException))
+    : getFromLocalBackup<ScaleException>('scale_exceptions');
+  if (scaleSnap.status === 'fulfilled') {
+    try { localStorage.setItem(`${LOCAL_STORAGE_PREFIX}scale_exceptions`, JSON.stringify(scaleExceptions)); } catch {}
+  }
+
+  const chatMessages: ChatMessage[] = chatSnap.status === 'fulfilled'
+    ? chatSnap.value.docs.map(d => ({ ...d.data(), id: d.id } as ChatMessage))
+    : getFromLocalBackup<ChatMessage>('chat_messages');
+  if (chatSnap.status === 'fulfilled') {
+    try { localStorage.setItem(`${LOCAL_STORAGE_PREFIX}chat_messages`, JSON.stringify(chatMessages)); } catch {}
+  }
+
+  return {
+    documents,
+    agenda,
+    logs,
+    users,
+    scaleExceptions,
+    chatMessages
+  };
+};
+

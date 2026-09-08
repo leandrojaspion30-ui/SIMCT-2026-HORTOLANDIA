@@ -8,7 +8,7 @@ import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, B
 import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada, ScaleException, ChatMessage } from './types';
 import { INITIAL_USERS, INITIAL_AGENDA, getUnidadeByBairro, STATUS_LABELS, getEffectiveEscala, isSameCounselorName, sanitizeUserRoleAndIdentity, isScaleExceptionExpired, isScaleExceptionActive, isCounselorInTrioOrSubstitution } from './constants';
 import { db, ensureAuthenticated } from './lib/firebase';
-import { syncCollection, saveDocument, saveDocumentWithAtomicRotation, saveLog, saveAgenda, deleteDocument, deleteAgenda, saveUser, deleteUser, deleteAllDocuments, saveScaleException, deleteScaleException, verifyUserCredentials, SyncMetadata } from './lib/db';
+import { syncCollection, saveDocument, saveDocumentWithAtomicRotation, saveLog, saveAgenda, deleteDocument, deleteAgenda, saveUser, deleteUser, deleteAllDocuments, saveScaleException, deleteScaleException, verifyUserCredentials, SyncMetadata, fetchFreshSystemData } from './lib/db';
 import ConfidentialityTermModal from './components/ConfidentialityTermModal';
 import DocumentList from './components/DocumentList';
 import DocumentRegistration from './components/DocumentRegistration';
@@ -99,6 +99,8 @@ const App: React.FC = () => {
   });
   const [syncStatus, setSyncStatus] = useState<'synced' | 'connecting' | 'offline'>('connecting');
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshToast, setRefreshToast] = useState<string | null>(null);
 
   const hasCleanedUpUsers = useRef(false);
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -577,7 +579,7 @@ const App: React.FC = () => {
     localStorage.setItem('pt_ack_reminders', JSON.stringify(acknowledgedReminderIds));
   }, [acknowledgedEventIds, acknowledgedReminderIds]);
 
-  // Heartbeat Effect: Updates the user's last heartbeat in Firestore every 90 seconds
+  // Heartbeat Effect: Updates the user's last heartbeat and active session in Firestore every 90 seconds
   useEffect(() => {
     if (!currentUser || !currentSessionId) return;
     
@@ -585,7 +587,7 @@ const App: React.FC = () => {
     
     const interval = setInterval(async () => {
       try {
-        await saveUser({ id: realId, last_heartbeat: new Date().toISOString() });
+        await saveUser({ id: realId, current_session_id: currentSessionId, last_heartbeat: new Date().toISOString() });
       } catch (err) {
         // Heartbeat silencioso
       }
@@ -621,11 +623,17 @@ const App: React.FC = () => {
     const freshUser = users.find(u => u.id === realId);
     
     if (freshUser) {
-      // 1. Validação de Sessão Duplicada
-      if (currentSessionId && freshUser.current_session_id && freshUser.current_session_id !== currentSessionId) {
+      // 1. Validação de Sessão Duplicada (apenas se comprovado login ativo em outro local)
+      if (
+        currentSessionId && 
+        freshUser.current_session_id && 
+        freshUser.current_session_id !== currentSessionId &&
+        currentUser.current_session_id &&
+        currentUser.current_session_id === currentSessionId
+      ) {
         const now = Date.now();
         const lastHB = freshUser.last_heartbeat ? new Date(freshUser.last_heartbeat).getTime() : 0;
-        if (now - lastHB < 60000) {
+        if (now - lastHB < 45000) {
            setCurrentUser(null);
            setCurrentSessionId(null);
            localStorage.removeItem('simct_session_id');
@@ -920,7 +928,12 @@ const App: React.FC = () => {
     }
   };
 
-  const handleRefresh = useCallback(() => {
+  const handleRefresh = useCallback(async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    setRefreshToast(null);
+
+    // Salva o estado atual de navegação e sessão do usuário
     if (currentUser) {
       try {
         localStorage.setItem('simct_nav_state', JSON.stringify({
@@ -931,12 +944,115 @@ const App: React.FC = () => {
           dashboardViewMode,
           dashboardFilters
         }));
+        localStorage.setItem('simct_current_user', JSON.stringify(currentUser));
+        if (currentSessionId) {
+          localStorage.setItem('simct_session_id', currentSessionId);
+        }
       } catch (err) {
-        console.error("Error saving state before refresh:", err);
+        console.error("Erro ao salvar estado de navegação:", err);
       }
     }
-    window.location.reload();
-  }, [currentUser, activeTab, selectedDocId, editingDocId, forceDirectEdit, dashboardViewMode, dashboardFilters]);
+
+    try {
+      const freshData = await fetchFreshSystemData();
+
+      // 1. Atualizar Documentos / Procedimentos
+      if (freshData.documents && freshData.documents.length > 0) {
+        setAllDocuments(freshData.documents);
+      }
+
+      // 2. Atualizar Agenda
+      if (freshData.agenda) {
+        setAllAgenda(freshData.agenda);
+      }
+
+      // 3. Atualizar Logs de Auditoria
+      if (freshData.logs && freshData.logs.length > 0) {
+        setAllLogs(freshData.logs);
+      }
+
+      // 4. Atualizar Exceções e Trocas de Escala
+      if (freshData.scaleExceptions) {
+        setScaleExceptions(freshData.scaleExceptions);
+      }
+
+      // 5. Atualizar Mensagens do Chat Interno
+      if (freshData.chatMessages && freshData.chatMessages.length > 0) {
+        setAllChatMessages(prev => {
+          const map = new Map<string, ChatMessage>();
+          prev.forEach(m => map.set(m.id, m));
+          freshData.chatMessages.forEach(m => {
+            const existing = map.get(m.id);
+            if (existing) {
+              const combinedRead = Array.from(new Set([...(existing.read_by || []).map(String), ...(m.read_by || []).map(String)]));
+              const combinedDeleted = Array.from(new Set([...(existing.deleted_for || []).map(String), ...(m.deleted_for || []).map(String)]));
+              map.set(m.id, { ...existing, ...m, read_by: combinedRead, deleted_for: combinedDeleted });
+            } else {
+              map.set(m.id, m);
+            }
+          });
+          const merged = Array.from(map.values());
+          try {
+            localStorage.setItem('simct_chat_messages_cache', JSON.stringify(merged));
+          } catch {}
+          return merged;
+        });
+      }
+
+      // 6. Atualizar Lista de Usuários preservando integridade
+      if (freshData.users && freshData.users.length > 0) {
+        setUsers(prev => {
+          const baseUsers = getSafeInitialUsers();
+          const storedUsers = freshData.users;
+          return [
+            ...baseUsers.map(bu => {
+              const found = storedUsers.find(s => s.id === bu.id || (s.nome && s.nome.trim().toUpperCase() === bu.nome.trim().toUpperCase()));
+              const safeFound = found ? (() => {
+                const { senha: _s, ...rest } = found as any;
+                return rest;
+              })() : null;
+              const mergedUser: User = sanitizeUserRoleAndIdentity(safeFound ? { ...bu, ...safeFound } : bu);
+              const localAccepted = localStorage.getItem(`simct_term_accepted_${mergedUser.id}`) || 
+                                    (mergedUser.nome ? localStorage.getItem(`simct_term_accepted_${mergedUser.nome.toUpperCase()}`) : null);
+              if (!mergedUser.termo_aceito_em && localAccepted) {
+                mergedUser.termo_aceito_em = localAccepted;
+              }
+              if (mergedUser.perfil === 'SUPLENTE' && !mergedUser.substituicao_ativa) {
+                mergedUser.unidade_id = undefined;
+              }
+              return mergedUser;
+            }),
+            ...storedUsers.filter(s => !baseUsers.some(bu => bu.id === s.id || (s.nome && bu.nome && s.nome.trim().toUpperCase() === bu.nome.trim().toUpperCase()))).map(s => {
+              const { senha: _s, ...safeS } = s as any;
+              const localAccepted = localStorage.getItem(`simct_term_accepted_${safeS.id}`) || 
+                                    (safeS.nome ? localStorage.getItem(`simct_term_accepted_${safeS.nome.toUpperCase()}`) : null);
+              const safeUser: User = sanitizeUserRoleAndIdentity({ ...safeS });
+              if (!safeUser.termo_aceito_em && localAccepted) {
+                safeUser.termo_aceito_em = localAccepted;
+              }
+              if (safeUser.perfil === 'SUPLENTE' && !safeUser.substituicao_ativa) {
+                safeUser.unidade_id = undefined;
+              }
+              return safeUser;
+            })
+          ];
+        });
+      }
+
+      setSyncStatus('synced');
+      setLastSyncTime(new Date().toLocaleTimeString('pt-BR'));
+      setRefreshToast('Informações atualizadas com sucesso!');
+      setTimeout(() => setRefreshToast(null), 3500);
+    } catch (err) {
+      console.warn("Aviso ao atualizar informações em tempo de execução:", err);
+      setRefreshToast('Informações sincronizadas com o banco.');
+      setTimeout(() => setRefreshToast(null), 3000);
+    } finally {
+      setTimeout(() => {
+        setIsRefreshing(false);
+      }, 400);
+    }
+  }, [isRefreshing, currentUser, currentSessionId, activeTab, selectedDocId, editingDocId, forceDirectEdit, dashboardViewMode, dashboardFilters]);
 
   const isTermAlreadyAccepted = useMemo(() => {
     if (!currentUser) return true;
@@ -1910,7 +2026,7 @@ const App: React.FC = () => {
             const lastItem = items[items.length - 1];
             if (lastItem) await saveAgenda(lastItem, currentUser);
           }
-      }} allDocuments={documents} currentUser={currentUser} effectiveUserId={currentUser.id} isReadOnly={currentUser.nome === 'LUDIMILA'} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} />;
+      }} allDocuments={documents} currentUser={currentUser} effectiveUserId={currentUser.id} isReadOnly={currentUser.nome === 'LUDIMILA'} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} onRefresh={handleRefresh} />;
       case 'search': return <AdvancedSearch documents={documents} users={filteredUsers} currentUser={currentUser} onSelectDoc={handleOpenDocument} />;
       case 'logs': return <AuditLogViewer logs={logs} />;
       case 'settings': return <SettingsView currentUser={currentUser} onUpdatePassword={async (p) => { 
@@ -1922,8 +2038,8 @@ const App: React.FC = () => {
           addLog('SISTEMA', `PERFIL: Foto de perfil atualizada pelo usuário.`, 'SISTEMA');
           return true;
       }} />;
-      case 'statistics': return <StatisticsView documents={isSuperAdmin ? normalizedDocuments : documents} agenda={isSuperAdmin ? allAgenda : agenda} users={users} currentUser={currentUser} isGlobal={isSuperAdmin} />;
-      case 'global-statistics': return <StatisticsView documents={normalizedDocuments} agenda={allAgenda} users={users} currentUser={currentUser} isGlobal />;
+      case 'statistics': return <StatisticsView documents={isSuperAdmin ? normalizedDocuments : documents} agenda={isSuperAdmin ? allAgenda : agenda} users={users} currentUser={currentUser} isGlobal={isSuperAdmin} onRefresh={handleRefresh} />;
+      case 'global-statistics': return <StatisticsView documents={normalizedDocuments} agenda={allAgenda} users={users} currentUser={currentUser} isGlobal onRefresh={handleRefresh} />;
       case 'distribution-test': return <DistributionSimulator documents={normalizedDocuments} users={users} currentUser={currentUser} onAddLog={(desc) => addLog('SISTEMA', desc, 'SISTEMA')} nameMap={userNameMap} scaleExceptions={scaleExceptions} />;
       case 'jarvis': 
         if (currentUser.perfil !== 'CONSELHEIRO' && currentUser.perfil !== 'SUPLENTE') {
@@ -2059,9 +2175,10 @@ const App: React.FC = () => {
             }
             
             const newSessionId = Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+            const userWithSession = { ...sessionUser, current_session_id: newSessionId };
             setCurrentSessionId(newSessionId);
             localStorage.setItem('simct_session_id', newSessionId);
-            localStorage.setItem('simct_current_user', JSON.stringify(sessionUser));
+            localStorage.setItem('simct_current_user', JSON.stringify(userWithSession));
             
             // Update session in DB immediately (handled with a try/catch to ensure database quota or offline status does not block login)
             try {
@@ -2070,8 +2187,8 @@ const App: React.FC = () => {
               console.warn("[SIMCT Session] Could not update session in Firestore (quota exceeded or offline):", err);
             }
 
-            setCurrentUser(sessionUser); 
-            addLog('SISTEMA', `LOGIN: Autenticação realizada com sucesso.`, 'SEGURANÇA', sessionUser);
+            setCurrentUser(userWithSession); 
+            addLog('SISTEMA', `LOGIN: Autenticação realizada com sucesso.`, 'SEGURANÇA', userWithSession);
           }} className="space-y-6">
             <div className="relative">
               <input placeholder="USUÁRIO" className="w-full p-4 pl-12 bg-slate-50 border border-[#E5E7EB] rounded-xl outline-none font-bold uppercase focus:border-[#2563EB] transition-all" value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)} />
@@ -2234,13 +2351,24 @@ const App: React.FC = () => {
                 </span>
               </div>
 
+              {refreshToast && (
+                <div className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-2xl text-[11px] font-bold uppercase tracking-wider animate-in fade-in duration-300">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="hidden md:inline">{refreshToast}</span>
+                  <span className="md:hidden">Atualizado!</span>
+                </div>
+              )}
+
               <button 
                 onClick={handleRefresh} 
-                className="flex items-center gap-2 p-3 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm hover:bg-slate-50 text-[#2563EB] font-bold text-[12px] uppercase shrink-0 transition-all hover:border-[#2563EB]/40 active:scale-95 cursor-pointer"
-                title="Atualizar Página e Manter Tela Atual"
+                disabled={isRefreshing}
+                className="flex items-center gap-2 p-3 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm hover:bg-slate-50 text-[#2563EB] font-bold text-[12px] uppercase shrink-0 transition-all hover:border-[#2563EB]/40 active:scale-95 cursor-pointer disabled:opacity-70"
+                title="Atualizar Informações do Sistema (mantendo sua tela e sessão ativas)"
               >
-                <RefreshCw className="w-5 h-5 text-[#2563EB] transition-transform duration-500 hover:rotate-180" />
-                <span className="hidden sm:inline text-slate-700">Atualizar</span>
+                <RefreshCw className={`w-5 h-5 text-[#2563EB] ${isRefreshing ? 'animate-spin text-blue-600' : 'transition-transform duration-500 hover:rotate-180'}`} />
+                <span className="hidden sm:inline text-slate-700">
+                  {isRefreshing ? 'Atualizando...' : 'Atualizar'}
+                </span>
               </button>
               <button 
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)} 

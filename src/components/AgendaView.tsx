@@ -37,6 +37,7 @@ interface AgendaViewProps {
   effectiveUserId: string;
   isReadOnly?: boolean;
   onAddLog: (action: string) => void;
+  onRefresh?: () => void;
 }
 
 const COUNCILOR_AVATAR_COLORS = [
@@ -105,7 +106,7 @@ const getEventCardStyle = (tipo: string) => {
   };
 };
 
-const AgendaView: React.FC<AgendaViewProps> = ({ agenda, users, setAgenda, allDocuments, currentUser, effectiveUserId, isReadOnly, onAddLog }) => {
+const AgendaView: React.FC<AgendaViewProps> = ({ agenda, users, setAgenda, allDocuments, currentUser, effectiveUserId, isReadOnly, onAddLog, onRefresh }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const isAdmin = currentUser.perfil === 'ADMIN' || currentUser.perfil === 'ADMINISTRATIVO';
@@ -439,8 +440,9 @@ const AgendaView: React.FC<AgendaViewProps> = ({ agenda, users, setAgenda, allDo
 
         <div className="flex flex-wrap items-center gap-2.5 justify-end">
           <button 
-            onClick={() => window.location.reload()}
+            onClick={() => onRefresh ? onRefresh() : undefined}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-white border border-slate-200/90 hover:bg-slate-50 rounded-xl text-xs font-extrabold uppercase text-slate-700 transition-all shadow-2xs cursor-pointer active:scale-95"
+            title="Atualizar Informações"
           >
             <RotateCw className="w-3.5 h-3.5 text-slate-500" /> ATUALIZAR
           </button>

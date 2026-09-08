@@ -18,6 +18,7 @@ interface StatisticsViewProps {
   users: User[];
   currentUser: User;
   isGlobal?: boolean;
+  onRefresh?: () => void;
 }
 
 interface DataListItem {
@@ -201,7 +202,7 @@ const ProfessionalHorizontalChart: React.FC<ProfessionalHorizontalChartProps> = 
   );
 };
 
-const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, users, currentUser, isGlobal }) => {
+const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, users, currentUser, isGlobal, onRefresh }) => {
   const COLORS = ['#2563EB', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
   const [selectedUnidadeFilter, setSelectedUnidadeFilter] = useState<'all' | 1 | 2>('all');
   const [startDate, setStartDate] = useState<string>('');
@@ -1141,8 +1142,9 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
               <Printer className="w-3.5 h-3.5 text-slate-500" /> IMPRIMIR PDF
             </button>
             <button 
-              onClick={() => window.location.reload()}
+              onClick={() => onRefresh ? onRefresh() : undefined}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-white border border-slate-200/90 hover:bg-slate-50 rounded-xl text-xs font-extrabold uppercase text-slate-700 transition-all shadow-2xs cursor-pointer active:scale-95"
+              title="Atualizar Informações"
             >
               <RotateCw className="w-3.5 h-3.5 text-slate-500" /> ATUALIZAR
             </button>
