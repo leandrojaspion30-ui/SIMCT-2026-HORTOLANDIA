@@ -567,7 +567,7 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                 {user.unidade_id ? `CT ${user.unidade_id}` : (user.perfil === 'SUPLENTE' ? 'SUPLENTE GERAL (SEM CT)' : 'SEM CT DEFINIDO')} • {user.cargo}
               </p>
               
-              {user.substituicao_ativa && (
+              {user.perfil !== 'SUPLENTE' && user.substituicao_ativa && (
                 <div className="mb-6 p-4 bg-amber-50 border border-amber-100 rounded-2xl animate-in slide-in-from-top-2">
                   <div className="flex items-center gap-2 text-amber-700 mb-1">
                     <UserCheck className="w-4 h-4" />
@@ -583,7 +583,7 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                     <Shield className="w-4 h-4" />
                     <span className="text-[10px] font-black uppercase tracking-widest">Em Substituição Ativa</span>
                   </div>
-                  <p className="text-[11px] font-bold text-blue-600 uppercase">Substituindo: {users.find(u => u.id === user.substituindo_id)?.nome || 'Desconhecido'}</p>
+                  <p className="text-[11px] font-bold text-blue-600 uppercase">Substituindo: {users.find(u => u.id === user.substituindo_id)?.nome || (user.nome === 'ROSILDA' ? 'LEANDRO' : 'Desconhecido')}</p>
                 </div>
               )}
             </div>

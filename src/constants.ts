@@ -10,12 +10,12 @@ export const INITIAL_USERS: UserWithPassword[] = [
   { id: 'admin1', nome: 'EDSON', perfil: 'ADMIN', cargo: 'ADM', senha: '123456', unidade_id: 1 },
   { id: 'admin2', nome: 'LUIZ', perfil: 'ADMIN', cargo: 'ADM', senha: '123456', unidade_id: 1 },
   { id: 'admin3', nome: 'FATIMA', perfil: 'ADMIN', cargo: 'ADM', senha: '123456', unidade_id: 1 },
-  { id: 'cons1', nome: 'LEANDRO', perfil: 'CONSELHEIRO', cargo: 'Conselheiro', senha: '123456', unidade_id: 1 },
+  { id: 'cons1', nome: 'LEANDRO', perfil: 'CONSELHEIRO', cargo: 'Conselheiro', senha: '123456', unidade_id: 1, substituicao_ativa: true, data_inicio_substituicao: '2026-09-08', data_fim_prevista: '2026-09-17' },
   { id: 'cons2', nome: 'LUIZA', perfil: 'CONSELHEIRO', cargo: 'Conselheira', senha: '123456', unidade_id: 1 },
   { id: 'cons3', nome: 'MILENA', perfil: 'CONSELHEIRO', cargo: 'Conselheira', senha: '123456', unidade_id: 1 },
   { id: 'cons5', nome: 'MIRIAN', perfil: 'CONSELHEIRO', cargo: 'Conselheira', senha: '123456', unidade_id: 1 },
   { id: 'cons4', nome: 'SANDRA', perfil: 'CONSELHEIRO', cargo: 'Conselheira', senha: '123456', unidade_id: 1 },
-  { id: 'suplente1', nome: 'ROSILDA', perfil: 'SUPLENTE', cargo: 'Conselheira Suplente', senha: '123456', status: 'INATIVO', unidade_id: 1 },
+  { id: 'suplente1', nome: 'ROSILDA', perfil: 'SUPLENTE', cargo: 'Conselheira Suplente', senha: '123456', status: 'ATIVO', unidade_id: 1, substituicao_ativa: true, substituindo_id: 'cons1', data_inicio_substituicao: '2026-09-08', data_fim_prevista: '2026-09-17' },
 
   // UNIDADE 2 - CT 2
   { id: 'ct2_admin1', nome: 'ISRAEL', perfil: 'ADMINISTRATIVO', cargo: 'ADM', senha: '123456', unidade_id: 2 },
