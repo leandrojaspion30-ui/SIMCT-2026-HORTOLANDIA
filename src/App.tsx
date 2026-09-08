@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { LayoutDashboard, LogOut, FilePlus, Database, BarChart3, CalendarDays, Briefcase, UserCog, X, Repeat, AlertCircle, ShieldCheck, CheckCircle2, Zap, ClipboardCheck, ArrowRight, ArrowLeft, Activity, Lock, Users, Heart, GraduationCap, Building2, History, BellRing, TriangleAlert, PieChart, Timer, Save, Eye, EyeOff, RefreshCw, MessageSquare, Bot, Scale } from 'lucide-react';
 import { User, Documento, Log, LogType, DocumentFile, AgendaEntry, DocumentStatus, MonitoringInfo, MedidaAplicada, ScaleException, ChatMessage } from './types';
-import { INITIAL_USERS, INITIAL_AGENDA, getUnidadeByBairro, STATUS_LABELS, getEffectiveEscala, isSameCounselorName, sanitizeUserRoleAndIdentity, isScaleExceptionExpired, isScaleExceptionActive } from './constants';
+import { INITIAL_USERS, INITIAL_AGENDA, getUnidadeByBairro, STATUS_LABELS, getEffectiveEscala, isSameCounselorName, sanitizeUserRoleAndIdentity, isScaleExceptionExpired, isScaleExceptionActive, isCounselorInTrioOrSubstitution } from './constants';
 import { db, ensureAuthenticated } from './lib/firebase';
 import { syncCollection, saveDocument, saveDocumentWithAtomicRotation, saveLog, saveAgenda, deleteDocument, deleteAgenda, saveUser, deleteUser, deleteAllDocuments, saveScaleException, deleteScaleException, verifyUserCredentials, SyncMetadata } from './lib/db';
 import ConfidentialityTermModal from './components/ConfidentialityTermModal';
@@ -1078,7 +1078,72 @@ const App: React.FC = () => {
       }
       const id = `doc-${Math.random().toString(36).substr(2, 9)}`;
       const isAutoDistribution = !data.is_manual_override && !data.is_prontuario_fisico;
-      const newDoc: Documento = { 
+
+      // DIRETRIZ: Verificação de consistência de presença real daquele dia (Trio Imediato)
+      const now = new Date();
+      const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const todayTime = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const targetUnidadeId = currentUser!.unidade_id || 1;
+      const effectiveTrioNames = getEffectiveEscala(todayDate, todayTime, targetUnidadeId, userNameMap, scaleExceptions || []);
+      const unitCounselors = users.filter(u => 
+        (u.unidade_id || 1) === targetUnidadeId && 
+        u.status === 'ATIVO' && 
+        (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE')
+      );
+
+      // Conselheiro atual do Trio Imediato (primeiro plantonista da escala ou membro presente)
+      const activeTrioCounselor = unitCounselors.find(u => 
+        effectiveTrioNames.length > 0 && isSameCounselorName(effectiveTrioNames[0], u.nome)
+      ) || unitCounselors.find(u => 
+        effectiveTrioNames.some(tName => isSameCounselorName(tName, u.nome))
+      ) || unitCounselors[0];
+
+      // Função de consistência que cruza a providência com o status de presença real daquele dia
+      const enforcePresenceConsistency = (docItem: Documento): { checkedDoc: Documento; adjusted: boolean; originalProvName: string } => {
+        const currentProvId = docItem.conselheiro_providencia_id;
+        const currentProvUser = users.find(u => u.id === currentProvId);
+        const currentProvName = docItem.conselheiro_providencia_nome || currentProvUser?.nome || '';
+
+        const isPresentInTrio = effectiveTrioNames.some(tName => isSameCounselorName(tName, currentProvName));
+        const isPresentInSub = isCounselorInTrioOrSubstitution(
+          currentProvUser || currentProvName,
+          effectiveTrioNames,
+          scaleExceptions,
+          todayDate,
+          todayTime,
+          targetUnidadeId,
+          userNameMap
+        );
+
+        const isActuallyPresent = isPresentInTrio || isPresentInSub;
+
+        // Se o conselheiro definido pelo rodízio original não estiver presente, força a atualização
+        if (!isActuallyPresent && activeTrioCounselor) {
+          return {
+            checkedDoc: {
+              ...docItem,
+              conselheiro_providencia_id: activeTrioCounselor.id,
+              conselheiro_providencia_nome: activeTrioCounselor.nome,
+              conselheiros_providencia_nomes: effectiveTrioNames
+            },
+            adjusted: true,
+            originalProvName: currentProvName || 'Desconhecido'
+          };
+        }
+
+        return {
+          checkedDoc: {
+            ...docItem,
+            conselheiros_providencia_nomes: (docItem.conselheiros_providencia_nomes && docItem.conselheiros_providencia_nomes.length > 0)
+              ? docItem.conselheiros_providencia_nomes
+              : effectiveTrioNames
+          },
+          adjusted: false,
+          originalProvName: currentProvName
+        };
+      };
+
+      const initialDoc: Documento = { 
         ...data, 
         id, 
         unidade_id: currentUser!.unidade_id,
@@ -1088,17 +1153,17 @@ const App: React.FC = () => {
         ciência_registrada_por: [], 
         distribuicao_automatica: isAutoDistribution 
       };
-      
-      // USAR LISTA VIVA DE USUÁRIOS PARA O LOG
-      const refName = users.find(u => u.id === newDoc.conselheiro_referencia_id)?.nome || 'N/A';
-      const provName = users.find(u => u.id === newDoc.conselheiro_providencia_id)?.nome || 'N/A';
-      const persistenceNote = newDoc.is_family_persistence ? ' [PERSISTÊNCIA FAMILIAR]' : '';
-      const fisicoNote = newDoc.is_prontuario_fisico ? ' [PRONTUÁRIO FÍSICO]' : '';
+
+      const preCheck = enforcePresenceConsistency(initialDoc);
+      const newDoc = preCheck.checkedDoc;
 
       let finalDoc = newDoc;
+      let wasConsistencyEnforced = preCheck.adjusted;
+      let originalProvidence = preCheck.originalProvName;
+
       if (isAutoDistribution) {
         const savedResult = await saveDocumentWithAtomicRotation(newDoc, currentUser!.unidade_id || 1, currentUser!, users, userNameMap, scaleExceptions);
-        finalDoc = {
+        const candidateDoc: Documento = {
           ...newDoc,
           id: savedResult.id || id,
           conselheiro_referencia_id: savedResult.conselheiro_referencia_id || newDoc.conselheiro_referencia_id,
@@ -1107,14 +1172,31 @@ const App: React.FC = () => {
           conselheiro_providencia_nome: savedResult.conselheiro_providencia_nome || newDoc.conselheiro_providencia_nome,
           conselheiros_providencia_nomes: savedResult.conselheiros_providencia_nomes || newDoc.conselheiros_providencia_nomes
         };
+
+        const postCheck = enforcePresenceConsistency(candidateDoc);
+        if (postCheck.adjusted) {
+          finalDoc = postCheck.checkedDoc;
+          wasConsistencyEnforced = true;
+          originalProvidence = postCheck.originalProvName;
+          await saveDocument(finalDoc, currentUser);
+        } else {
+          finalDoc = candidateDoc;
+        }
       } else {
         await saveDocument(newDoc, currentUser);
-        const refName = users.find(u => u.id === newDoc.conselheiro_referencia_id)?.nome || 'N/A';
-        const provName = users.find(u => u.id === newDoc.conselheiro_providencia_id)?.nome || 'N/A';
-        const persistenceNote = newDoc.is_family_persistence ? ' [PERSISTÊNCIA FAMILIAR]' : '';
-        const fisicoNote = newDoc.is_prontuario_fisico ? ' [PRONTUÁRIO FÍSICO]' : '';
-        addLog(id, `CRIAÇÃO: Novo procedimento registrado.${fisicoNote}${persistenceNote} REF: [${refName}] | IMEDIATA: [${provName}].`, 'DOCUMENTO');
+        finalDoc = newDoc;
       }
+
+      // USAR LISTA VIVA DE USUÁRIOS PARA O LOG
+      const refName = users.find(u => u.id === finalDoc.conselheiro_referencia_id)?.nome || finalDoc.conselheiro_referencia_nome || 'N/A';
+      const provName = users.find(u => u.id === finalDoc.conselheiro_providencia_id)?.nome || finalDoc.conselheiro_providencia_nome || 'N/A';
+      const persistenceNote = finalDoc.is_family_persistence ? ' [PERSISTÊNCIA FAMILIAR]' : '';
+      const fisicoNote = finalDoc.is_prontuario_fisico ? ' [PRONTUÁRIO FÍSICO]' : '';
+      const consistencyNote = wasConsistencyEnforced 
+        ? ` [CONSISTÊNCIA DE ESCALA HOJE: Providência transferida de '${originalProvidence}' para o Trio Imediato '${provName}']`
+        : '';
+
+      addLog(id, `CRIAÇÃO: Novo procedimento registrado.${fisicoNote}${persistenceNote}${consistencyNote} REF: [${refName}] | IMEDIATA: [${provName}].`, 'DOCUMENTO');
 
       setAllDocuments(prev => [finalDoc, ...prev.filter(d => d.id !== finalDoc.id)]);
       setSelectedDocId(finalDoc.id);
