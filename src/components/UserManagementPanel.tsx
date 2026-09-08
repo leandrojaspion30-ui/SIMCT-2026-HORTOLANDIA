@@ -1,11 +1,46 @@
 
-import React, { useState, useRef } from 'react';
-import { User } from '../types';
-import { UserCog, Shield, User as UserIcon, Lock, Power, Calendar, UserCheck, Plus, Trash2, Edit3, X, Save, AlertCircle, RefreshCw, ArrowRight, Download, Upload, KeyRound, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { User, Log, AgendaEntry } from '../types';
+import { 
+  UserCog, 
+  Shield, 
+  User as UserIcon, 
+  Lock, 
+  Power, 
+  Calendar, 
+  UserCheck, 
+  Plus, 
+  Trash2, 
+  Edit3, 
+  X, 
+  Save, 
+  AlertCircle, 
+  RefreshCw, 
+  ArrowRight, 
+  Download, 
+  Upload, 
+  KeyRound, 
+  Eye, 
+  EyeOff, 
+  CheckCircle2,
+  Database,
+  FileText,
+  History,
+  Check,
+  Clock,
+  Sparkles
+} from 'lucide-react';
+import { 
+  exportFullSystemBackupFromFirestore, 
+  downloadFullSystemBackupJson, 
+  restoreFullSystemBackup 
+} from '../lib/db';
 
 interface UserManagementPanelProps {
   users: User[];
   documents: any[];
+  logs?: Log[];
+  agenda?: AgendaEntry[];
   currentUser?: User;
   onUpdateUser: (id: string, update: Partial<User & { senha?: string }>) => Promise<void> | void;
   onDeleteUser?: (id: string) => Promise<void> | void;
@@ -19,6 +54,8 @@ interface UserManagementPanelProps {
 const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ 
   users, 
   documents,
+  logs = [],
+  agenda = [],
   currentUser,
   onUpdateUser, 
   onDeleteUser, 
@@ -54,6 +91,34 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [replaceSuccess, setReplaceSuccess] = useState<{from: string, to: string} | null>(null);
   const [resetTargetUnit, setResetTargetUnit] = useState<number | 'ALL'>('ALL');
+
+  // Estados para a Exportação e Backup Completo do Firestore para JSON
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [exportStep, setExportStep] = useState<string>('');
+  const [exportFilterScope, setExportFilterScope] = useState<'ALL' | 'DOCS_ONLY' | 'LOGS_ONLY'>('ALL');
+  const [autoExportEnabled, setAutoExportEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('simct_auto_export_enabled') === 'true';
+  });
+  const [autoExportFrequency, setAutoExportFrequency] = useState<'ON_ACCESS' | 'DAILY' | 'WEEKLY'>(() => {
+    return (localStorage.getItem('simct_auto_export_frequency') as any) || 'DAILY';
+  });
+  const [lastExportInfo, setLastExportInfo] = useState<{
+    date: string;
+    filename: string;
+    docCount: number;
+    logCount: number;
+    userCount?: number;
+    scope?: string;
+  } | null>(() => {
+    try {
+      const raw = localStorage.getItem('simct_last_export_info');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [exportSuccessNotification, setExportSuccessNotification] = useState<string | null>(null);
+
   const [newUser, setNewUser] = useState<Partial<User> & { senha?: string }>({
     id: '',
     nome: '',
@@ -252,30 +317,92 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
     }
   };
 
-  const handleExportData = () => {
+  // Rotina de verificação e execução automática do backup quando habilitado
+  useEffect(() => {
+    if (!autoExportEnabled) return;
+
+    const lastExportTs = Number(localStorage.getItem('simct_last_auto_export_ts') || 0);
+    const now = Date.now();
+
+    let intervalMs = 24 * 60 * 60 * 1000; // 24 horas por padrão (DAILY)
+    if (autoExportFrequency === 'WEEKLY') intervalMs = 7 * 24 * 60 * 60 * 1000;
+    if (autoExportFrequency === 'ON_ACCESS') intervalMs = 12 * 60 * 60 * 1000; // 12 horas
+
+    if (now - lastExportTs > intervalMs) {
+      localStorage.setItem('simct_last_auto_export_ts', String(now));
+      const timer = setTimeout(() => {
+        handleExportData('ALL', true);
+      }, 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [autoExportEnabled, autoExportFrequency]);
+
+  const handleExportData = async (
+    scope: 'ALL' | 'DOCS_ONLY' | 'LOGS_ONLY' = exportFilterScope, 
+    isAutomatic: boolean = false
+  ): Promise<boolean> => {
+    if (isExporting) return false;
     try {
-      const dataStr = JSON.stringify({
-        exportDate: new Date().toISOString(),
-        documents: documents,
-        userCount: users.length,
-        version: "SICT-BACKUP-1.0"
-      }, null, 2);
+      setIsExporting(true);
+      setExportStep('Conectando ao banco de dados Firestore...');
+
+      // Extração completa de todas as coleções do Firestore com fallback local integrado
+      const fullBackup = await exportFullSystemBackupFromFirestore(currentUser);
+
+      setExportStep(`Coletando registros: ${fullBackup.documents.length} prontuários e ${fullBackup.logs.length} logs...`);
+
+      let dataToExport: any = fullBackup;
+      let filenamePrefix = 'SIMCT_BACKUP_COMPLETO_FIRESTORE';
+
+      if (scope === 'DOCS_ONLY') {
+        dataToExport = {
+          metadata: { ...fullBackup.metadata, scope: 'PRONTUARIOS_SOMENTE' },
+          documents: fullBackup.documents,
+        };
+        filenamePrefix = 'SIMCT_PRONTUARIOS_FIRESTORE';
+      } else if (scope === 'LOGS_ONLY') {
+        dataToExport = {
+          metadata: { ...fullBackup.metadata, scope: 'LOGS_AUDITORIA_SOMENTE' },
+          logs: fullBackup.logs,
+        };
+        filenamePrefix = 'SIMCT_LOGS_AUDITORIA_FIRESTORE';
+      }
+
+      setExportStep('Compilando JSON estruturado e iniciando download...');
+      const filename = downloadFullSystemBackupJson(dataToExport, filenamePrefix);
+
+      const info = {
+        date: new Date().toLocaleString('pt-BR'),
+        filename,
+        docCount: fullBackup.documents.length,
+        logCount: fullBackup.logs.length,
+        userCount: fullBackup.users.length,
+        scope
+      };
+      setLastExportInfo(info);
+      localStorage.setItem('simct_last_export_info', JSON.stringify(info));
+
+      const logText = isAutomatic
+        ? `SISTEMA: Backup AUTOMÁTICO do Firestore gerado com sucesso em JSON (${fullBackup.documents.length} prontuários, ${fullBackup.logs.length} logs). Arquivo: ${filename}`
+        : `SISTEMA: Backup do Firestore exportado para JSON por ${currentUser?.nome || 'Administrador'} (${fullBackup.documents.length} prontuários, ${fullBackup.logs.length} logs). Arquivo: ${filename}`;
       
-      const blob = new Blob([dataStr], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `SIMCT_BACKUP_${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      
-      onAddLog('SISTEMA: Backup de dados exportado com sucesso.');
+      onAddLog(logText);
+
+      setExportSuccessNotification(`Backup exportado com sucesso: ${filename} (${fullBackup.documents.length} prontuários e ${fullBackup.logs.length} logs).`);
+      setTimeout(() => setExportSuccessNotification(null), 6000);
+
+      setExportStep('Download concluído com sucesso!');
+      setTimeout(() => {
+        setIsExporting(false);
+        setExportStep('');
+      }, 1500);
+
       return true;
     } catch (error) {
-      console.error(error);
-      alert("Erro ao exportar backup.");
+      console.error('Erro ao exportar dados do Firestore:', error);
+      alert('Houve uma falha ao extrair os dados do Firestore para JSON. Todos os registros permanecem íntegros.');
+      setIsExporting(false);
+      setExportStep('');
       return false;
     }
   };
@@ -290,32 +417,56 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
       const data = JSON.parse(text);
 
       let docsToRestore: any[] = [];
+      let logsToRestore: any[] = [];
+      let agendaToRestore: any[] = [];
+
       if (Array.isArray(data)) {
         docsToRestore = data;
-      } else if (data.documents && Array.isArray(data.documents)) {
-        docsToRestore = data.documents;
       } else {
-        alert("Formato de arquivo de backup não reconhecido.");
+        if (data.documents && Array.isArray(data.documents)) {
+          docsToRestore = data.documents;
+        }
+        if (data.logs && Array.isArray(data.logs)) {
+          logsToRestore = data.logs;
+        }
+        if (data.agenda && Array.isArray(data.agenda)) {
+          agendaToRestore = data.agenda;
+        }
+      }
+
+      if (docsToRestore.length === 0 && logsToRestore.length === 0) {
+        alert("Nenhum prontuário ou log de auditoria encontrado no arquivo JSON selecionado.");
         return;
       }
 
-      if (docsToRestore.length === 0) {
-        alert("Nenhum procedimento encontrado no arquivo JSON de backup.");
+      const confirmMsg = 
+        `CONFIRMAÇÃO DE RESTAURAÇÃO DE BACKUP\n\n` +
+        `• Prontuários no arquivo: ${docsToRestore.length}\n` +
+        `• Logs de auditoria: ${logsToRestore.length}\n` +
+        `• Eventos de agenda: ${agendaToRestore.length}\n\n` +
+        `Esta operação preservará todos os registros e mesclará com os dados existentes no Firestore sem perda de dados.\n\nDeseja prosseguir?`;
+
+      if (!confirm(confirmMsg)) {
         return;
       }
 
-      if (!confirm(`Confirmar a restauração de ${docsToRestore.length} procedimento(s) do backup? Os procedimentos existentes serão mantidos ou atualizados.`)) {
-        return;
-      }
+      const res = await restoreFullSystemBackup(data, currentUser);
 
-      if (onRestoreDocuments) {
+      if (onRestoreDocuments && docsToRestore.length > 0) {
         await onRestoreDocuments(docsToRestore);
-        alert(`Restauração concluída! ${docsToRestore.length} procedimento(s) foram restaurados com sucesso.`);
-        onAddLog(`SISTEMA: Backup restaurado com sucesso (${docsToRestore.length} procedimentos).`);
       }
+
+      alert(
+        `Restauração de Backup Concluída com Sucesso!\n\n` +
+        `• ${res.documentsRestored} prontuários restaurados/atualizados\n` +
+        `• ${res.logsRestored} logs de auditoria integrados\n` +
+        `• ${res.agendaRestored} eventos de agenda sincronizados`
+      );
+
+      onAddLog(`SISTEMA: Restauração de backup JSON concluída (${res.documentsRestored} prontuários, ${res.logsRestored} logs).`);
     } catch (err) {
       console.error("Erro ao importar backup:", err);
-      alert("Erro ao ler ou restaurar o arquivo JSON de backup. Verifique se o arquivo está correto.");
+      alert("Erro ao ler ou restaurar o arquivo JSON de backup. Certifique-se de que o arquivo está no formato JSON válido.");
     } finally {
       setIsRestoring(false);
       if (e.target) e.target.value = '';
@@ -549,8 +700,211 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
         ))}
       </div>
 
+      {/* SEÇÃO PRINCIPAL: CENTRAL DE EXPORTAÇÃO E BACKUP COMPLETO DO FIRESTORE (JSON) */}
+      <section className="mt-14 bg-white rounded-[2.5rem] border border-slate-200/80 shadow-md p-8 sm:p-10 space-y-8">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-slate-100">
+          <div className="flex items-start gap-4">
+            <div className="p-4 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-2xl shadow-md">
+              <Database className="w-7 h-7" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 uppercase tracking-tight">
+                  Exportação do Firestore & Backup do Sistema
+                </h2>
+                <span className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-black uppercase tracking-widest rounded-full flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-blue-600" />
+                  JSON Estruturado • Zero Data Loss
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm font-medium text-slate-500 mt-1 max-w-3xl leading-relaxed">
+                Gere e baixe uma cópia integral de segurança diretamente do banco de dados Firestore na nuvem. O arquivo JSON exportado consolida todos os prontuários, histórico completo de logs de auditoria, escala, agenda e equipe.
+              </p>
+            </div>
+          </div>
+
+          {/* Seletor de Escopo de Exportação */}
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl self-start lg:self-center">
+            <button
+              type="button"
+              onClick={() => setExportFilterScope('ALL')}
+              className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                exportFilterScope === 'ALL'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Completo (Tudo)
+            </button>
+            <button
+              type="button"
+              onClick={() => setExportFilterScope('DOCS_ONLY')}
+              className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                exportFilterScope === 'DOCS_ONLY'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Prontuários
+            </button>
+            <button
+              type="button"
+              onClick={() => setExportFilterScope('LOGS_ONLY')}
+              className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                exportFilterScope === 'LOGS_ONLY'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Logs de Auditoria
+            </button>
+          </div>
+        </div>
+
+        {/* Métricas do Banco de Dados em Tempo Real */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-slate-50/80 border border-slate-200/60 p-4 rounded-2xl">
+            <div className="flex items-center gap-2 text-blue-600 mb-1">
+              <FileText className="w-4 h-4" />
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Prontuários</span>
+            </div>
+            <div className="text-2xl font-black text-slate-900">{documents.length}</div>
+            <p className="text-[10px] text-slate-500 font-medium">Procedimentos registrados</p>
+          </div>
+
+          <div className="bg-slate-50/80 border border-slate-200/60 p-4 rounded-2xl">
+            <div className="flex items-center gap-2 text-indigo-600 mb-1">
+              <History className="w-4 h-4" />
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Logs de Auditoria</span>
+            </div>
+            <div className="text-2xl font-black text-slate-900">{logs?.length || 0}</div>
+            <p className="text-[10px] text-slate-500 font-medium">Registros históricos ativos</p>
+          </div>
+
+          <div className="bg-slate-50/80 border border-slate-200/60 p-4 rounded-2xl">
+            <div className="flex items-center gap-2 text-emerald-600 mb-1">
+              <UserCheck className="w-4 h-4" />
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Membros da Equipe</span>
+            </div>
+            <div className="text-2xl font-black text-slate-900">{users.length}</div>
+            <p className="text-[10px] text-slate-500 font-medium">Conselheiros e operadores</p>
+          </div>
+
+          <div className="bg-slate-50/80 border border-slate-200/60 p-4 rounded-2xl">
+            <div className="flex items-center gap-2 text-amber-600 mb-1">
+              <Calendar className="w-4 h-4" />
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Agenda</span>
+            </div>
+            <div className="text-2xl font-black text-slate-900">{agenda?.length || 0}</div>
+            <p className="text-[10px] text-slate-500 font-medium">Eventos e atendimentos</p>
+          </div>
+        </div>
+
+        {/* Notificação de Sucesso */}
+        {exportSuccessNotification && (
+          <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center gap-3 text-xs font-bold animate-in fade-in">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span>{exportSuccessNotification}</span>
+          </div>
+        )}
+
+        {/* Linha de Controles: Download Imediato, Exportação Automática e Restauração */}
+        <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-6 pt-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => handleExportData(exportFilterScope, false)}
+              disabled={isExporting}
+              className="px-8 py-4 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-3 shadow-lg shadow-blue-200 transition-all cursor-pointer disabled:opacity-50"
+            >
+              {isExporting ? (
+                <>
+                  <RefreshCw className="w-5 h-5 animate-spin" />
+                  <span>{exportStep || 'Extraindo dados...'}</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-5 h-5" />
+                  <span>Baixar Backup Completo do Firestore (JSON)</span>
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isRestoring || isProcessing || isExporting}
+              className="px-6 py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-2.5 shadow-md transition-all cursor-pointer disabled:opacity-50"
+            >
+              <Upload className={`w-4 h-4 ${isRestoring ? 'animate-bounce' : ''}`} />
+              <span>{isRestoring ? 'Processando Restauração...' : 'Restaurar Backup (JSON)'}</span>
+            </button>
+          </div>
+
+          {/* Configuração de Exportação Automática */}
+          <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const newVal = !autoExportEnabled;
+                  setAutoExportEnabled(newVal);
+                  localStorage.setItem('simct_auto_export_enabled', String(newVal));
+                }}
+                className={`w-12 h-6 rounded-full transition-colors relative p-0.5 cursor-pointer ${
+                  autoExportEnabled ? 'bg-emerald-600' : 'bg-slate-300'
+                }`}
+                title="Ativar/Desativar Exportação Automática"
+              >
+                <div
+                  className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                    autoExportEnabled ? 'translate-x-6' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+              <div>
+                <p className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-blue-600" />
+                  Exportação Automática
+                </p>
+                <p className="text-[10px] text-slate-500">
+                  {autoExportEnabled ? 'Ativa: download programado periódico' : 'Desativada (apenas manual)'}
+                </p>
+              </div>
+            </div>
+
+            {autoExportEnabled && (
+              <select
+                value={autoExportFrequency}
+                onChange={(e: any) => {
+                  const val = e.target.value;
+                  setAutoExportFrequency(val);
+                  localStorage.setItem('simct_auto_export_frequency', val);
+                }}
+                className="text-[10px] font-black uppercase tracking-wider bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-700 outline-none focus:border-blue-500 cursor-pointer"
+              >
+                <option value="ON_ACCESS">Ao acessar o Painel</option>
+                <option value="DAILY">Diária (a cada 24h)</option>
+                <option value="WEEKLY">Semanal (a cada 7 dias)</option>
+              </select>
+            )}
+          </div>
+        </div>
+
+        {/* Rodapé da seção com status da última exportação */}
+        {lastExportInfo && (
+          <div className="flex items-center justify-between text-[11px] text-slate-400 font-bold uppercase tracking-wider pt-3 border-t border-slate-100 flex-wrap gap-2">
+            <span className="flex items-center gap-1.5 text-slate-600">
+              <Check className="w-3.5 h-3.5 text-emerald-600" />
+              Último backup exportado: <strong className="text-slate-800">{lastExportInfo.date}</strong>
+            </span>
+            <span className="text-slate-500">
+              Arquivo: <code className="text-slate-700 font-mono text-[10px]">{lastExportInfo.filename}</code> ({lastExportInfo.docCount} prontuários, {lastExportInfo.logCount} logs)
+            </span>
+          </div>
+        )}
+      </section>
+
       {onResetDocuments && (
-        <section className="mt-16 p-10 bg-slate-50 rounded-[3rem] border-2 border-dashed border-slate-200">
+        <section className="mt-10 p-10 bg-slate-50 rounded-[3rem] border-2 border-dashed border-slate-200">
           <div className="flex flex-col md:flex-row items-center justify-between gap-8">
             <div className="space-y-4 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start gap-3">
@@ -570,14 +924,15 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                   className="hidden" 
                 />
                 <button 
-                   onClick={handleExportData}
-                   className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest flex items-center gap-2 hover:bg-slate-900 transition-all shadow-lg cursor-pointer"
+                   onClick={() => handleExportData('ALL')}
+                   disabled={isExporting}
+                   className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest flex items-center gap-2 hover:bg-slate-900 transition-all shadow-lg cursor-pointer disabled:opacity-50"
                 >
                   <Download className="w-4 h-4" /> Salvar Backup (JSON)
                 </button>
                 <button 
                    onClick={() => fileInputRef.current?.click()}
-                   disabled={isRestoring || isProcessing}
+                   disabled={isRestoring || isProcessing || isExporting}
                    className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest flex items-center gap-2 hover:bg-slate-900 transition-all shadow-lg cursor-pointer disabled:opacity-50"
                 >
                   <Upload className={`w-4 h-4 ${isRestoring ? 'animate-bounce' : ''}`} /> {isRestoring ? 'Restaurando...' : 'Restaurar Backup (JSON)'}
@@ -588,7 +943,7 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                      setResetConfirmText('');
                      setIsResetModalOpen(true);
                    }}
-                   disabled={isProcessing || isRestoring}
+                   disabled={isProcessing || isRestoring || isExporting}
                    className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest flex items-center gap-2 hover:bg-black transition-all shadow-lg disabled:opacity-50 cursor-pointer"
                 >
                   <RefreshCw className={`w-4 h-4 ${isProcessing ? 'animate-spin' : ''}`} /> Salvar e Resetar Agora
@@ -695,7 +1050,7 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                     setIsProcessing(true);
                     try {
                       if (pendingResetAction === 'BACKUP_AND_RESET') {
-                        const backupOk = handleExportData();
+                        const backupOk = await handleExportData('ALL');
                         if (!backupOk) throw new Error("Erro no backup");
                       }
                       

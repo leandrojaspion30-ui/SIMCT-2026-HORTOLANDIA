@@ -443,28 +443,28 @@ export const saveDocumentWithAtomicRotation = async (
       }
 
       // 4. Regra de Providência Imediata e Trio do Dia:
-      // Se for notificação ou manual, mantém a decisão específica
+      // O sistema deve SEMPRE reconhecer o Trio Imediato do Dia (Escala de Trabalho Hoje)
       let finalProvId = docData.conselheiro_providencia_id;
       let finalProvName = docData.conselheiro_providencia_nome;
       let finalProvTrio = docData.conselheiros_providencia_nomes;
 
-      // Verifica trio do dia para a data de aporte
-      const targetDate = docData.data_aporte || new Date().toISOString().split('T')[0];
-      const targetTime = docData.hora_aporte || '12:00';
-      const trioOfDate = getEffectiveEscala(targetDate, targetTime, unidadeId, nameMap, scaleExceptions || []);
+      const now = new Date();
+      const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const todayTime = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const trioOfDate = getEffectiveEscala(todayDate, todayTime, unidadeId, nameMap, scaleExceptions || []);
 
       const refUserObj = activeCounselors.find(u => u.id === finalRefId) || { id: finalRefId, nome: finalRefName };
       const isRefUserInTrio = isCounselorInTrioOrSubstitution(
         refUserObj,
         trioOfDate,
         scaleExceptions || [],
-        targetDate,
-        targetTime,
+        todayDate,
+        todayTime,
         unidadeId,
         nameMap
       );
 
-      if (!docData.notificacao && !docData.providencia_imediata_manual) {
+      if (!docData.notificacao && !docData.providencia_imediata_manual && !docData.is_prontuario_fisico) {
         if (isRefUserInTrio) {
           // Se o conselheiro de referência está no trio do dia ou em substituição/troca, a imediata é atribuída a ele (ou ao substituto ativo no trio)
           const activeSubUser = getActiveSubstituteInTrio(
@@ -472,8 +472,8 @@ export const saveDocumentWithAtomicRotation = async (
             trioOfDate,
             activeCounselors,
             scaleExceptions || [],
-            targetDate,
-            targetTime,
+            todayDate,
+            todayTime,
             unidadeId,
             nameMap
           );
@@ -484,18 +484,34 @@ export const saveDocumentWithAtomicRotation = async (
             finalProvId = finalRefId;
             finalProvName = finalRefName;
           }
-        } else if (!finalProvId) {
-          // Se não havia providência imediata definida, seleciona o primeiro plantonista do trio
-          const firstTrioName = trioOfDate[0];
-          const trioUser = activeCounselors.find(u => (u.unidade_id || 1) === unidadeId && u.status === 'ATIVO' && isSameCounselorName(u.nome, firstTrioName));
-          if (trioUser) {
-            finalProvId = trioUser.id;
-            finalProvName = trioUser.nome;
+        } else {
+          // Quando a referência NÃO ESTÁ no trio do dia:
+          // A providência imediata DEVE OBRIGATORIAMENTE pertencer ao Trio Imediato do dia.
+          const isCurrentProvInTrio = finalProvId && trioOfDate.some(tName => {
+            const pUser = activeCounselors.find(u => u.id === finalProvId);
+            return pUser ? isSameCounselorName(tName, pUser.nome) : false;
+          });
+
+          if (!isCurrentProvInTrio || finalProvId === finalRefId) {
+            // Se docData trouxe um conselheiro providência válido pertencente ao trio de hoje, usa ele
+            const candidateUser = docData.conselheiro_providencia_id ? activeCounselors.find(u => u.id === docData.conselheiro_providencia_id) : null;
+            if (candidateUser && candidateUser.id !== finalRefId && trioOfDate.some(tName => isSameCounselorName(tName, candidateUser.nome))) {
+              finalProvId = candidateUser.id;
+              finalProvName = candidateUser.nome;
+            } else {
+              // Fallback para o primeiro plantonista/conselheiro do trio de hoje
+              const firstTrioName = trioOfDate[0];
+              const trioUser = activeCounselors.find(u => (u.unidade_id || 1) === unidadeId && u.status === 'ATIVO' && isSameCounselorName(u.nome, firstTrioName)) || activeCounselors[0] || currentUser;
+              if (trioUser) {
+                finalProvId = trioUser.id;
+                finalProvName = trioUser.nome;
+              }
+            }
           }
         }
       }
 
-      if (!finalProvTrio || finalProvTrio.length === 0) {
+      if (!finalProvTrio || finalProvTrio.length === 0 || !isRefUserInTrio) {
         finalProvTrio = trioOfDate;
       }
 
@@ -1109,3 +1125,223 @@ export const deleteChatMessage = async (id: string): Promise<void> => {
     handleFirestoreError(error, OperationType.DELETE, `chat_messages/${id}`);
   }
 };
+
+/**
+ * Interface do backup completo do sistema em formato JSON.
+ */
+export interface FullSystemBackupData {
+  metadata: {
+    system: string;
+    version: string;
+    exportedAt: string;
+    exportedBy: {
+      id?: string;
+      nome?: string;
+      perfil?: string;
+    };
+    counts: {
+      documents: number;
+      logs: number;
+      users: number;
+      agenda: number;
+      scaleExceptions: number;
+    };
+    firestoreDatabaseId: string;
+    environment: string;
+  };
+  documents: Documento[];
+  logs: Log[];
+  users: Partial<User>[];
+  agenda: AgendaEntry[];
+  scale_exceptions: ScaleException[];
+}
+
+/**
+ * Exporta todos os dados do Firestore (prontuários, logs completos, usuários, agenda, exceções)
+ * mesclando com o cache de resiliência local para garantir Zero Data Loss.
+ */
+export const exportFullSystemBackupFromFirestore = async (
+  currentUser?: User | { id: string; nome: string; perfil?: string }
+): Promise<FullSystemBackupData> => {
+  await ensureAuthenticated();
+
+  // 1. Documents (Prontuários e Procedimentos)
+  const docsMap = new Map<string, Documento>();
+  getFromLocalBackup<Documento>('documents').forEach(d => {
+    if (d && d.id) docsMap.set(d.id, d);
+  });
+  try {
+    const snap = await getDocs(collection(db, 'documents'));
+    snap.docs.forEach(docSnap => {
+      const data = docSnap.data() as Documento;
+      docsMap.set(docSnap.id, { ...data, id: docSnap.id });
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.LIST, 'documents');
+  }
+
+  // 2. Logs de Auditoria (histórico completo, sem limites de exibição)
+  const logsMap = new Map<string, Log>();
+  getFromLocalBackup<Log>('logs').forEach(l => {
+    if (l && l.id) logsMap.set(l.id, l);
+  });
+  try {
+    const snap = await getDocs(collection(db, 'logs'));
+    snap.docs.forEach(docSnap => {
+      const data = docSnap.data() as Log;
+      logsMap.set(docSnap.id, { ...data, id: docSnap.id });
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.LIST, 'logs');
+  }
+
+  // 3. Agenda e Atendimentos
+  const agendaMap = new Map<string, AgendaEntry>();
+  getFromLocalBackup<AgendaEntry>('agenda').forEach(a => {
+    if (a && a.id) agendaMap.set(a.id, a);
+  });
+  try {
+    const snap = await getDocs(collection(db, 'agenda'));
+    snap.docs.forEach(docSnap => {
+      const data = docSnap.data() as AgendaEntry;
+      agendaMap.set(docSnap.id, { ...data, id: docSnap.id });
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.LIST, 'agenda');
+  }
+
+  // 4. Usuários e Equipe (sanitizando senhas para segurança)
+  const usersMap = new Map<string, Partial<User>>();
+  try {
+    const snap = await getDocs(collection(db, 'users'));
+    snap.docs.forEach(docSnap => {
+      const data = docSnap.data() as any;
+      const { senha: _senha, ...safeData } = data;
+      usersMap.set(docSnap.id, { ...safeData, id: docSnap.id });
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.LIST, 'users');
+  }
+
+  // 5. Exceções de Escala
+  const scaleMap = new Map<string, ScaleException>();
+  try {
+    const snap = await getDocs(collection(db, 'scale_exceptions'));
+    snap.docs.forEach(docSnap => {
+      const data = docSnap.data() as ScaleException;
+      scaleMap.set(docSnap.id, { ...data, id: docSnap.id });
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.LIST, 'scale_exceptions');
+  }
+
+  const documents = Array.from(docsMap.values());
+  const logs = Array.from(logsMap.values()).sort((a, b) => {
+    const dateA = a.data_hora || '';
+    const dateB = b.data_hora || '';
+    return dateB.localeCompare(dateA);
+  });
+  const agenda = Array.from(agendaMap.values());
+  const users = Array.from(usersMap.values());
+  const scale_exceptions = Array.from(scaleMap.values());
+
+  const backupData: FullSystemBackupData = {
+    metadata: {
+      system: 'SIMCT - Sistema de Informação e Monitoramento do Conselho Tutelar de Hortolândia',
+      version: '2.5',
+      exportedAt: new Date().toISOString(),
+      exportedBy: {
+        id: currentUser?.id,
+        nome: currentUser?.nome,
+        perfil: (currentUser as any)?.perfil,
+      },
+      counts: {
+        documents: documents.length,
+        logs: logs.length,
+        users: users.length,
+        agenda: agenda.length,
+        scaleExceptions: scale_exceptions.length,
+      },
+      firestoreDatabaseId: 'ai-studio-d36b57dc-50ec-44fe-a443-7e10611f0923',
+      environment: 'production',
+    },
+    documents,
+    logs,
+    users,
+    agenda,
+    scale_exceptions,
+  };
+
+  return backupData;
+};
+
+/**
+ * Dispara o download automático do arquivo JSON no navegador.
+ */
+export const downloadFullSystemBackupJson = (
+  backupData: FullSystemBackupData,
+  filenamePrefix: string = 'SIMCT_BACKUP_COMPLETO_FIRESTORE'
+): string => {
+  const jsonStr = JSON.stringify(backupData, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  const now = new Date();
+  const dateStr = now.toISOString().split('T')[0];
+  const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
+  const filename = `${filenamePrefix}_${dateStr}_${timeStr}.json`;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  return filename;
+};
+
+/**
+ * Restaura documentos, logs e agenda a partir de um backup JSON.
+ */
+export const restoreFullSystemBackup = async (
+  backupData: any,
+  currentUser?: User | { id: string; nome: string }
+): Promise<{ documentsRestored: number; logsRestored: number; agendaRestored: number }> => {
+  let documentsRestored = 0;
+  let logsRestored = 0;
+  let agendaRestored = 0;
+
+  // 1. Restaurar Prontuários
+  const docsList: Documento[] = Array.isArray(backupData) 
+    ? backupData 
+    : (backupData.documents && Array.isArray(backupData.documents) ? backupData.documents : []);
+
+  for (const docItem of docsList) {
+    if (docItem && docItem.id) {
+      await saveDocument(docItem, currentUser);
+      documentsRestored++;
+    }
+  }
+
+  // 2. Restaurar Logs (se presentes no arquivo de backup)
+  if (backupData.logs && Array.isArray(backupData.logs)) {
+    for (const logItem of backupData.logs) {
+      if (logItem && logItem.id) {
+        await saveLog(logItem, currentUser);
+        logsRestored++;
+      }
+    }
+  }
+
+  // 3. Restaurar Agenda (se presente)
+  if (backupData.agenda && Array.isArray(backupData.agenda)) {
+    for (const agendaItem of backupData.agenda) {
+      if (agendaItem && agendaItem.id) {
+        await saveAgenda(agendaItem, currentUser);
+        agendaRestored++;
+      }
+    }
+  }
+
+  return { documentsRestored, logsRestored, agendaRestored };
+};
+

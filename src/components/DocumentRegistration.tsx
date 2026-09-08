@@ -632,12 +632,10 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     initialData
   ]);
 
-  // DIRETRIZ: Escala baseada rigorosamente na data e hora do registro/aporte do documento
+  // DIRETRIZ: O sistema deve SEMPRE reconhecer o Trio Imediato do dia (Escala de Trabalho Hoje)
   const trioNames = useMemo(() => {
-    const d = formData.data_aporte || todayDate;
-    const t = formData.hora_aporte || todayTime;
-    return getEffectiveEscala(d, t, formData.unidade_id, nameMap, scaleExceptions);
-  }, [formData.data_aporte, formData.hora_aporte, todayDate, todayTime, formData.unidade_id, nameMap, scaleExceptions]);
+    return getEffectiveEscala(todayDate, todayTime, formData.unidade_id, nameMap, scaleExceptions);
+  }, [todayDate, todayTime, formData.unidade_id, nameMap, scaleExceptions]);
 
   // DIRETRIZ 51/52: Rodízio Alfabético Estável para Referência por Canal
   const assignedReference = useMemo(() => {
@@ -692,12 +690,12 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
       currentRefUser,
       trioNames,
       scaleExceptions,
-      formData.data_aporte || todayDate,
-      formData.hora_aporte || todayTime,
+      todayDate,
+      todayTime,
       formData.unidade_id,
       nameMap
     );
-  }, [currentRefUser, nameMap, trioNames, scaleExceptions, formData.data_aporte, formData.hora_aporte, todayDate, todayTime, formData.unidade_id]);
+  }, [currentRefUser, nameMap, trioNames, scaleExceptions, todayDate, todayTime, formData.unidade_id]);
 
   const assignedImediata = useMemo(() => {
     // -1. PRONTUÁRIO FÍSICO: Imediata e Referência unificadas no mesmo conselheiro, sem roleta
@@ -741,8 +739,8 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
         trioNames,
         allUsers,
         scaleExceptions,
-        formData.data_aporte || todayDate,
-        formData.hora_aporte || todayTime,
+        todayDate,
+        todayTime,
         formData.unidade_id,
         nameMap
       );
@@ -963,7 +961,18 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     
     const finalRefName = finalRefUser?.nome?.toUpperCase();
     const mappedFinalRefName = (finalRefName && nameMap && nameMap[finalRefName]) ? nameMap[finalRefName] : finalRefName;
-    const isRefUserInTrio = Boolean(mappedFinalRefName && trioNames.some(n => isSameCounselorName(n, mappedFinalRefName)));
+    const isRefUserInTrio = Boolean(
+      mappedFinalRefName && 
+      isCounselorInTrioOrSubstitution(
+        finalRefUser,
+        trioNames,
+        scaleExceptions,
+        todayDate,
+        todayTime,
+        formData.unidade_id,
+        nameMap
+      )
+    );
 
     let finalValidators = initialData?.conselheiros_providencia_nomes || trioNames;
 
@@ -1002,11 +1011,13 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     const fallbackCounselorId = fallbackCounselorUser?.id || unitCounselors[0]?.id || '';
     const fallbackCounselorName = fallbackCounselorUser?.nome || unitCounselors[0]?.nome || '';
 
+    const firstTrioCounselor = unitCounselors.find(u => trioNames.some(n => isSameCounselorName(n, u.nome))) || unitCounselors[0];
+
     const finalProvId = isFisico
       ? finalRefId
       : (canEditCouncillors && formData.providencia_imediata_manual)
         ? formData.providencia_imediata_manual
-        : (initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || finalRefId || fallbackCounselorId));
+        : (initialData ? initialData.conselheiro_providencia_id : (assignedImediata?.id || (isRefUserInTrio ? finalRefId : firstTrioCounselor?.id) || fallbackCounselorId));
 
     const finalProvUser = allUsers.find(u => u.id === finalProvId && (u.unidade_id || 1) === formData.unidade_id && (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE'));
     const finalProvName = isFisico 
@@ -1087,8 +1098,9 @@ Formato de resposta: [{"grupo": "...", "especificacao": "..."}, ...]`;
     }
 
     if (!finalData.conselheiro_providencia_id) {
-      finalData.conselheiro_providencia_id = finalData.conselheiro_referencia_id;
-      finalData.conselheiro_providencia_nome = finalData.conselheiro_referencia_nome;
+      const defaultTrioUser = unitCounselors.find(u => trioNames.some(n => isSameCounselorName(n, u.nome))) || unitCounselors[0];
+      finalData.conselheiro_providencia_id = isRefUserInTrio ? finalData.conselheiro_referencia_id : (defaultTrioUser?.id || finalData.conselheiro_referencia_id);
+      finalData.conselheiro_providencia_nome = isRefUserInTrio ? finalData.conselheiro_referencia_nome : (defaultTrioUser?.nome || finalData.conselheiro_referencia_nome);
     }
 
     isSubmittedRef.current = true;

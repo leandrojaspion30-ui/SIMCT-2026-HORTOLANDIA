@@ -1233,6 +1233,8 @@ const App: React.FC = () => {
       <UserManagementPanel 
         users={filteredUsers} 
         documents={allDocuments}
+        logs={allLogs}
+        agenda={allAgenda}
         currentUser={currentUser}
         onUpdateUser={async (id, upd) => {
           const target = users.find(u => u.id === id);
