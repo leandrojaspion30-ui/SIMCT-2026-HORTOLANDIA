@@ -128,9 +128,14 @@ const FamilyHistoryModal: React.FC<FamilyHistoryModalProps> = ({ history, agenda
                                <div className="space-y-1">
                                   <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Agentes</span>
                                   <div className="flex flex-wrap gap-1">
-                                     {doc.agentesVioladores?.map((a, idx) => (
-                                       <span key={idx} className="px-2 py-0.5 bg-amber-50 text-amber-700 text-[9px] font-bold rounded uppercase border border-amber-100">{a.principal}</span>
-                                     ))}
+                                     {doc.agentesVioladores?.map((a, idx) => {
+                                       const desc = (a.especificacao || a.outro_especificacao || '').trim();
+                                       return (
+                                         <span key={idx} className="px-2 py-0.5 bg-amber-50 text-amber-700 text-[9px] font-bold rounded uppercase border border-amber-100">
+                                           {a.principal}{desc ? `: ${desc}` : ''}
+                                         </span>
+                                       );
+                                     })}
                                      {(!doc.agentesVioladores || doc.agentesVioladores.length === 0) && <span className="text-[9px] text-slate-300 italic">NÃO DEFINIDO</span>}
                                   </div>
                                </div>

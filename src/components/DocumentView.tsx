@@ -6,7 +6,7 @@ import {
   CheckCircle, CheckCircle2, ChevronDown, Play, Users, Tag, FileCheck2,
   Database, Fingerprint, MapPin, Building2, UserCog, Search, LayoutList,
   ChevronRight, Timer, ArrowUpRight, ShieldCheck, Box, FileText, Baby,
-  AlertTriangle, Trash2, Zap, Bell, BellRing, RotateCcw
+  AlertTriangle, Trash2, Zap, Bell, BellRing, RotateCcw, PenLine
 } from 'lucide-react';
 import { 
   Documento, Log, User as UserType, DocumentStatus, 
@@ -244,6 +244,102 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       quem_comunicou_classificado: isClassificado
     });
     onAddLog(doc.id, `IDENTIFICAÇÃO: "Quem Comunicou a Violação" atualizado para [${fullOrigem || 'N/A'}] via [${newCanal || 'N/A'}] por ${currentUser.nome}.`, 'DOCUMENTO');
+  };
+
+  const normalizeAgenteCat = (c?: string) => 
+    (c || '').trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace('CONDCTA', 'CONDUTA');
+
+  const normalizeAgenteOpt = (o?: string) => 
+    (o || '').trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  const isAgenteSelected = (cat: string, opt: string) => {
+    return tempAgentes.some(a => 
+      normalizeAgenteCat(a.categoria) === normalizeAgenteCat(cat) &&
+      normalizeAgenteOpt(a.principal) === normalizeAgenteOpt(opt)
+    );
+  };
+
+  const getAgenteEntry = (cat: string, opt: string) => {
+    return tempAgentes.find(a => 
+      normalizeAgenteCat(a.categoria) === normalizeAgenteCat(cat) &&
+      normalizeAgenteOpt(a.principal) === normalizeAgenteOpt(opt)
+    );
+  };
+
+  const isOutroAgenteOption = (opt: string) => {
+    return normalizeAgenteOpt(opt).startsWith('OUTRO');
+  };
+
+  const getAgenteOutroPlaceholder = (cat: string, opt: string) => {
+    const normCat = normalizeAgenteCat(cat);
+    if (normCat.includes('SOCIEDADE')) {
+      return 'Descreva o agente violador da sociedade (ex: comerciante, líder religioso, vizinho, terceiro)...';
+    }
+    if (normCat.includes('CONDUTA')) {
+      return 'Descreva a conduta da criança/adolescente (ex: evasão escolar, recusa de atendimento)...';
+    }
+    if (normCat.includes('FAMILIA')) {
+      return 'Especifique o familiar (ex: avô, primo, cunhado)...';
+    }
+    if (normCat.includes('ESTADO')) {
+      return 'Especifique a instituição ou órgão estatal...';
+    }
+    return `Descreva detalhadamente (${opt})...`;
+  };
+
+  const toggleAgente = (cat: string, opt: string) => {
+    if (!canEditTechnicalFields) return;
+    const isSelected = isAgenteSelected(cat, opt);
+    let nextAgentes: AgenteVioladorEntry[];
+    if (isSelected) {
+      nextAgentes = tempAgentes.filter(a => !(
+        normalizeAgenteCat(a.categoria) === normalizeAgenteCat(cat) &&
+        normalizeAgenteOpt(a.principal) === normalizeAgenteOpt(opt)
+      ));
+    } else {
+      nextAgentes = [
+        ...tempAgentes, 
+        { categoria: cat, principal: opt, tipo: 'PRINCIPAL' as const, especificacao: '', outro_especificacao: '' }
+      ];
+    }
+    setTempAgentes(nextAgentes);
+
+    try {
+      const saved = localStorage.getItem(draftKey);
+      if (saved) {
+        const draftObj = JSON.parse(saved);
+        draftObj.tempAgentes = nextAgentes;
+        localStorage.setItem(draftKey, JSON.stringify(draftObj));
+      }
+    } catch {}
+
+    onUpdateDocument(doc.id, { agentesVioladores: nextAgentes });
+  };
+
+  const updateAgenteEspecificacao = (cat: string, opt: string, text: string) => {
+    if (!canEditTechnicalFields) return;
+    const nextAgentes = tempAgentes.map(a => {
+      if (normalizeAgenteCat(a.categoria) === normalizeAgenteCat(cat) && normalizeAgenteOpt(a.principal) === normalizeAgenteOpt(opt)) {
+        return {
+          ...a,
+          especificacao: text,
+          outro_especificacao: text
+        };
+      }
+      return a;
+    });
+    setTempAgentes(nextAgentes);
+
+    try {
+      const saved = localStorage.getItem(draftKey);
+      if (saved) {
+        const draftObj = JSON.parse(saved);
+        draftObj.tempAgentes = nextAgentes;
+        localStorage.setItem(draftKey, JSON.stringify(draftObj));
+      }
+    } catch {}
+
+    onUpdateDocument(doc.id, { agentesVioladores: nextAgentes });
   };
 
   const [showIntelligence, setShowIntelligence] = useState(false);
@@ -678,8 +774,8 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     const hasViolacoesChanged = JSON.stringify([...tempViolacoes].sort((a, b) => a.especifico.localeCompare(b.especifico))) !== 
                                 JSON.stringify([...(doc.violacoesSipia || [])].sort((a, b) => a.especifico.localeCompare(b.especifico)));
 
-    const hasAgentesChanged = JSON.stringify([...tempAgentes].sort((a, b) => a.principal.localeCompare(b.principal))) !== 
-                              JSON.stringify([...(doc.agentesVioladores || [])].sort((a, b) => a.principal.localeCompare(b.principal)));
+    const hasAgentesChanged = JSON.stringify([...tempAgentes].sort((a, b) => ((a.categoria || '') + '_' + (a.principal || '')).localeCompare((b.categoria || '') + '_' + (b.principal || '')))) !== 
+                              JSON.stringify([...(doc.agentesVioladores || [])].sort((a, b) => ((a.categoria || '') + '_' + (a.principal || '')).localeCompare((b.categoria || '') + '_' + (b.principal || ''))));
 
     const wasMedidaAplicadaOrValidated = doc.status.includes('MEDIDA_APLICADA') || (doc.medidas_detalhadas?.[0]?.confirmacoes || []).length > 0;
 
@@ -1465,23 +1561,43 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                     {Object.entries(AGENTES_VIOLADORES_ESTRUTURA).map(([cat, info]) => (
                       <div key={cat} className="space-y-2">
                         <div className="text-[10px] font-black text-orange-800 uppercase border-b border-orange-100 pb-1">{cat}</div>
-                        {info.options.map(opt => (
-                          <div 
-                            key={opt} 
-                            onClick={() => {
-                              if (!canEditTechnicalFields) return;
-                              const nextAgentes: AgenteVioladorEntry[] = tempAgentes.some(a => a.principal === opt) 
-                                ? tempAgentes.filter(a => a.principal !== opt) 
-                                : [...tempAgentes, {categoria: cat, principal: opt, tipo: 'PRINCIPAL' as const}];
-                              setTempAgentes(nextAgentes);
-                              onUpdateDocument(doc.id, { agentesVioladores: nextAgentes });
-                            }} 
-                            className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer text-[10px] uppercase font-bold transition-all ${tempAgentes.some(a => a.principal === opt) ? 'bg-orange-500 text-white shadow-sm' : 'hover:bg-slate-50 text-slate-600'}`}
-                          >
-                            {tempAgentes.some(a => a.principal === opt) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4 opacity-20" />} 
-                            {opt}
-                          </div>
-                        ))}
+                        {info.options.map(opt => {
+                          const isSelected = isAgenteSelected(cat, opt);
+                          const isOutro = isOutroAgenteOption(opt);
+                          const entry = getAgenteEntry(cat, opt);
+                          const descVal = entry?.especificacao || entry?.outro_especificacao || '';
+
+                          return (
+                            <div key={opt} className="space-y-1">
+                              <div 
+                                onClick={() => toggleAgente(cat, opt)} 
+                                className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer text-[10px] uppercase font-bold transition-all ${isSelected ? 'bg-orange-500 text-white shadow-sm' : 'hover:bg-slate-50 text-slate-600'}`}
+                              >
+                                {isSelected ? <CheckSquare className="w-4 h-4 shrink-0" /> : <Square className="w-4 h-4 opacity-20 shrink-0" />} 
+                                <span className="truncate">{opt}</span>
+                              </div>
+
+                              {isSelected && isOutro && (
+                                <div className="pl-6 pr-1 pb-1 pt-0.5 space-y-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <PenLine className="w-3 h-3 text-orange-600 shrink-0" />
+                                    <label className="text-[9px] font-black uppercase text-orange-950 tracking-wider">
+                                      Descreva a opção ({opt} - {cat}):
+                                    </label>
+                                  </div>
+                                  <input
+                                    type="text"
+                                    disabled={!canEditTechnicalFields}
+                                    value={descVal}
+                                    onChange={(e) => updateAgenteEspecificacao(cat, opt, e.target.value)}
+                                    placeholder={getAgenteOutroPlaceholder(cat, opt)}
+                                    className="w-full px-2.5 py-1.5 bg-white border border-orange-300 rounded-lg text-[10px] font-bold uppercase text-slate-800 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-200 placeholder:text-slate-400 shadow-sm transition-all"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     ))}
                   </div>
@@ -1885,9 +2001,14 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                           <div>
                              <span className="text-[8px] font-black text-orange-600 uppercase block mb-1 tracking-tighter">Agentes Violadores</span>
                              <div className="flex flex-wrap gap-1">
-                                {doc.agentesVioladores && doc.agentesVioladores.length > 0 ? doc.agentesVioladores.map((a, i) => (
-                                   <span key={i} className="px-2 py-1 bg-orange-50 text-orange-700 text-[9px] font-bold rounded-lg border border-orange-100 uppercase leading-none">{a.principal}</span>
-                                )) : <span className="text-[9px] text-slate-400 italic">Nenhum agente selecionado</span>}
+                                {doc.agentesVioladores && doc.agentesVioladores.length > 0 ? doc.agentesVioladores.map((a, i) => {
+                                   const desc = (a.especificacao || a.outro_especificacao || '').trim();
+                                   return (
+                                      <span key={i} className="px-2 py-1 bg-orange-50 text-orange-700 text-[9px] font-bold rounded-lg border border-orange-100 uppercase leading-none">
+                                         {a.principal}{desc ? `: ${desc}` : ''}
+                                      </span>
+                                   );
+                                }) : <span className="text-[9px] text-slate-400 italic">Nenhum agente selecionado</span>}
                              </div>
                           </div>
                           <div>

@@ -335,7 +335,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
           doc.conselheiros_providencia_nomes?.some(name => checkInText(name)) ||
           doc.criancas?.some(c => checkInText(c.nome) || checkInText(c.cpf) || checkInText(c.genero_identidade) || checkInText(c.data_nascimento)) ||
           doc.violacoesSipia?.some(v => checkInText(v.fundamental) || checkInText(v.grupo) || checkInText(v.especifico)) ||
-          doc.agentesVioladores?.some(a => checkInText(a.principal) || checkInText(a.categoria)) ||
+          doc.agentesVioladores?.some(a => checkInText(a.principal) || checkInText(a.categoria) || (a.especificacao && checkInText(a.especificacao)) || (a.outro_especificacao && checkInText(a.outro_especificacao))) ||
           doc.medidas_detalhadas?.some(m => checkInText(m.texto) || checkInText(m.artigo_inciso)) ||
           doc.atribuicoes_136_detalhadas?.some(at => checkInText(at.inciso) || checkInText(at.texto) || at.servicos?.some(s => checkInText(s.area) || checkInText(s.servico) || checkInText(s.servico_custom) || checkInText(s.observacao))) ||
           !!matchCpfInTerm;

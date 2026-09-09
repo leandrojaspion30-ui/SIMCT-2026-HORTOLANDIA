@@ -280,6 +280,8 @@ export interface AgenteVioladorEntry {
   principal: string; 
   categoria: string; 
   tipo: 'PRINCIPAL' | 'SECUNDARIO';
+  especificacao?: string;
+  outro_especificacao?: string;
 }
 
 export interface DocumentFile {

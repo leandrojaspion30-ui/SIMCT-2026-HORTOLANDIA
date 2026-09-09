@@ -1304,7 +1304,7 @@ export const AGENTES_VIOLADORES_ESTRUTURA = {
   "FAMÍLIA": { options: ["Pai", "Mãe", "Padrasto", "Madrasta", "Tios", "Irmãos", "Outros Familiares"] },
   "ESTADO": { options: ["Educação", "Saúde", "Assistência Social", "Segurança Pública", "Judiciário", "Outros Órgãos"] },
   "SOCIEDADE": { options: ["Vizinhos", "Terceiros", "Grupos Armados", "Mídia/Internet", "Outros"] },
-  "PRÓPRIA CONDCTA": { options: ["Uso de Drogas", "Automutilação", "Fuga", "Ato Infracional", "Outros"] }
+  "PRÓPRIA CONDUTA": { options: ["Uso de Drogas", "Automutilação", "Fuga", "Ato Infracional", "Outros"] }
 };
 
 export const MEDIDAS_101_ECA = [
