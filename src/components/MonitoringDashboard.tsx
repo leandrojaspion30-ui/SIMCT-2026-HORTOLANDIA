@@ -41,14 +41,24 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({ options, value, onC
   const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const handleSelectOption = (opt: string) => {
+    onChange(opt);
+    setIsOpen(false);
+    setSearch('');
+  };
+
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, []);
 
   const filteredOptions = useMemo(() => {
@@ -107,11 +117,18 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({ options, value, onC
                 <button
                   key={opt}
                   type="button"
-                  onClick={() => {
-                    onChange(opt);
-                    setIsOpen(false);
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleSelectOption(opt);
                   }}
-                  className={`w-full text-left p-3 text-[11px] font-bold uppercase hover:bg-slate-50 transition-colors flex items-center justify-between ${
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    handleSelectOption(opt);
+                  }}
+                  onClick={() => {
+                    handleSelectOption(opt);
+                  }}
+                  className={`w-full text-left p-3 text-[11px] font-bold uppercase hover:bg-slate-50 transition-colors flex items-center justify-between cursor-pointer active:bg-blue-100 ${
                     value === opt ? 'bg-blue-50/50 text-blue-600' : 'text-slate-700'
                   }`}
                 >

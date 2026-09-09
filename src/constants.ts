@@ -1188,7 +1188,7 @@ export const UNIFIED_GENDER_OPTIONS = [
   "Outro / Prefere não informar"
 ];
 
-export const LOCAL_OCORRENCIA_OPTIONS = [
+export const LOCAL_VIOLACAO_OPTIONS = [
   "AMBIENTE VIRTUAL (INTERNET, REDES SOCIAIS, APLICATIVOS)",
   "CRECHE",
   "ESCOLA ESTADUAL",
@@ -1207,6 +1207,8 @@ export const LOCAL_OCORRENCIA_OPTIONS = [
   "UNIDADE DE SAÚDE",
   "VEÍCULO PARTICULAR"
 ];
+
+export const LOCAL_OCORRENCIA_OPTIONS = LOCAL_VIOLACAO_OPTIONS;
 
 export const SIPIA_HIERARCHY: Record<string, Record<string, string[]>> = {
   "I. CONVIVÊNCIA FAMILIAR E COMUNITÁRIA": {

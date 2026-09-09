@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { 
   ArrowLeft, Scale, X, Check, Clock, AlertCircle, Info, 
   Save, ShieldAlert, History, ClipboardList, CheckSquare, Square, 
@@ -18,7 +18,7 @@ import {
   SIPIA_HIERARCHY, AGENTES_VIOLADORES_ESTRUTURA, 
   MEDIDAS_101_ECA, MEDIDAS_129_ECA,
   ATRIBUICOES_136_ECA, REDE_HORTOLANDIA, getEffectiveEscala, isSameCounselorName,
-  LOCAL_OCORRENCIA_OPTIONS, ORIGENS_HIERARQUICAS, getOrigensHierarquicasByUnidade, CANAIS_COMUNICADO_LIST,
+  LOCAL_VIOLACAO_OPTIONS, LOCAL_OCORRENCIA_OPTIONS, ORIGENS_HIERARQUICAS, getOrigensHierarquicasByUnidade, CANAIS_COMUNICADO_LIST,
   formatUserRolePrefix
 } from '../constants';
 import FamilyHistoryModal from './FamilyHistoryModal';
@@ -78,18 +78,90 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const [informacoesDocumento, setInformacoesDocumento] = useState(doc.informacoes_documento || '');
   const [numeroComunicadoViolacao, setNumeroComunicadoViolacao] = useState(doc.numero_comunicado_violacao || '');
   const [numeroSipia, setNumeroSipia] = useState(doc.numero_sipia || '');
-  const [localOcorrencia, setLocalOcorrencia] = useState(doc.local_ocorrencia || '');
+  const parseLocaisViolacaoFromDoc = (targetDoc: Partial<Documento>): { selected: string[]; outroText: string } => {
+    let list: string[] = [];
+    let outroText = (targetDoc.local_violacao_outro || '').trim();
 
-  const parseCustomLocalText = (val?: string) => {
-    if (!val) return '';
-    if (val === 'OUTRO') return '';
-    if (val.startsWith('OUTRO:')) return val.replace(/^OUTRO:\s*/i, '').trim();
-    if (val.startsWith('OUTRO -')) return val.replace(/^OUTRO\s*-\s*/i, '').trim();
-    if (!LOCAL_OCORRENCIA_OPTIONS.includes(val)) return val;
-    return '';
+    if (Array.isArray(targetDoc.locais_violacao) && targetDoc.locais_violacao.length > 0) {
+      list = [...targetDoc.locais_violacao];
+    } else if (targetDoc.local_ocorrencia && typeof targetDoc.local_ocorrencia === 'string') {
+      const raw = targetDoc.local_ocorrencia.trim();
+      if (raw) {
+        list = raw.split(/\s*,\s*|\s*;\s*|\s*\|\s*/).map(p => p.trim()).filter(Boolean);
+      }
+    }
+
+    const selected: string[] = [];
+    for (const item of list) {
+      if (item === 'OUTRO' || item.toUpperCase().startsWith('OUTRO:') || item.toUpperCase().startsWith('OUTRO -')) {
+        if (!selected.includes('OUTRO')) selected.push('OUTRO');
+        if (!outroText) {
+          outroText = item.replace(/^OUTRO[:\s-]+/i, '').trim();
+        }
+      } else if (LOCAL_VIOLACAO_OPTIONS.includes(item)) {
+        if (!selected.includes(item)) selected.push(item);
+      } else if (item.trim()) {
+        if (!selected.includes('OUTRO')) selected.push('OUTRO');
+        if (!outroText) {
+          outroText = item.trim();
+        }
+      }
+    }
+
+    return { selected, outroText };
   };
 
-  const [customLocalText, setCustomLocalText] = useState<string>(parseCustomLocalText(doc.local_ocorrencia));
+  const initialLocaisData = parseLocaisViolacaoFromDoc(doc);
+  const [selectedLocaisViolacao, setSelectedLocaisViolacao] = useState<string[]>(initialLocaisData.selected);
+  const [customLocalText, setCustomLocalText] = useState<string>(initialLocaisData.outroText);
+
+  const formatLocaisForSave = (selected: string[], customText: string) => {
+    const list = selected.map(opt => {
+      if (opt === 'OUTRO' && customText.trim()) {
+        return `OUTRO: ${customText.trim().toUpperCase()}`;
+      }
+      return opt;
+    });
+    const str = list.join(', ');
+    return { list, str, outroText: customText.trim() };
+  };
+
+  const handleToggleLocalOption = (opt: string) => {
+    if (!canEditTechnicalFields) return;
+    const isAlreadySelected = selectedLocaisViolacao.includes(opt);
+    let nextSelected: string[];
+    let nextOutro = customLocalText;
+
+    if (isAlreadySelected) {
+      nextSelected = selectedLocaisViolacao.filter(o => o !== opt);
+      if (opt === 'OUTRO') {
+        nextOutro = '';
+        setCustomLocalText('');
+      }
+    } else {
+      nextSelected = [...selectedLocaisViolacao, opt];
+    }
+
+    setSelectedLocaisViolacao(nextSelected);
+    const { list, str, outroText } = formatLocaisForSave(nextSelected, nextOutro);
+    onUpdateDocument(doc.id, {
+      local_ocorrencia: str,
+      locais_violacao: list,
+      local_violacao_outro: outroText
+    });
+  };
+
+  const handleCustomLocalChange = (text: string) => {
+    setCustomLocalText(text);
+    if (selectedLocaisViolacao.includes('OUTRO')) {
+      const { list, str, outroText } = formatLocaisForSave(selectedLocaisViolacao, text);
+      onUpdateDocument(doc.id, {
+        local_ocorrencia: str,
+        locais_violacao: list,
+        local_violacao_outro: outroText
+      });
+    }
+  };
 
   const normalizeCatName = (str?: string) => 
     (str || '').trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -136,6 +208,10 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     return res;
   }, [unitOrigensHierarquicas, origemCategoria]);
 
+  const sortedInstitutions = useMemo(() => {
+    return [...currentInstitutions].sort((a, b) => a.localeCompare(b));
+  }, [currentInstitutions]);
+
   const handleUpdateOrigem = (newCat: string, newInst: string, newCanal: string, isManualAction: boolean = true) => {
     let fullOrigem = '';
     if (newCat === 'SOCIEDADE') {
@@ -147,6 +223,20 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     }
     const isClassificado = Boolean(newCat || newInst) && isManualAction;
     setQuemComunicouClassificado(isClassificado);
+
+    // Sincroniza imediatamente o rascunho local para que nenhum efeito reverta a opção selecionada no primeiro clique
+    try {
+      const saved = localStorage.getItem(draftKey);
+      if (saved) {
+        const draftObj = JSON.parse(saved);
+        draftObj.origemCategoria = newCat;
+        draftObj.origemInstituicao = newInst;
+        draftObj.canalComunicado = newCanal;
+        draftObj.quemComunicouClassificado = isClassificado;
+        localStorage.setItem(draftKey, JSON.stringify(draftObj));
+      }
+    } catch {}
+
     onUpdateDocument(doc.id, {
       origem_categoria: newCat,
       origem: fullOrigem,
@@ -164,9 +254,16 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const [extForm, setExtForm] = useState({ nova_data: '' });
 
   const draftKey = `simct_draft_docview_${doc.id}_${currentUser.id}`;
+  const loadedDocIdRef = useRef<string | null>(null);
 
   // Sincronização de estado local com as props do documento ou rascunho salvo localmente
   React.useEffect(() => {
+    // Não reinicializa os campos se o usuário estiver editando o mesmo documento, evitando que seleções ativas sejam revertidas
+    if (loadedDocIdRef.current === doc.id) {
+      return;
+    }
+    loadedDocIdRef.current = doc.id;
+
     let draft: any = null;
     try {
       const saved = localStorage.getItem(draftKey);
@@ -188,8 +285,18 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       setInformacoesDocumento(draft.informacoesDocumento !== undefined ? draft.informacoesDocumento : (doc.informacoes_documento || ''));
       setNumeroComunicadoViolacao(draft.numeroComunicadoViolacao !== undefined ? draft.numeroComunicadoViolacao : (doc.numero_comunicado_violacao || ''));
       setNumeroSipia(draft.numeroSipia !== undefined ? draft.numeroSipia : (doc.numero_sipia || ''));
-      setLocalOcorrencia(draft.localOcorrencia !== undefined ? draft.localOcorrencia : (doc.local_ocorrencia || ''));
-      setCustomLocalText(draft.customLocalText !== undefined ? draft.customLocalText : parseCustomLocalText(doc.local_ocorrencia));
+      if (draft.selectedLocaisViolacao !== undefined) {
+        setSelectedLocaisViolacao(draft.selectedLocaisViolacao);
+        setCustomLocalText(draft.customLocalText !== undefined ? draft.customLocalText : '');
+      } else if (draft.localOcorrencia !== undefined) {
+        const parsed = parseLocaisViolacaoFromDoc({ ...doc, local_ocorrencia: draft.localOcorrencia });
+        setSelectedLocaisViolacao(parsed.selected);
+        setCustomLocalText(draft.customLocalText !== undefined ? draft.customLocalText : parsed.outroText);
+      } else {
+        const parsed = parseLocaisViolacaoFromDoc(doc);
+        setSelectedLocaisViolacao(parsed.selected);
+        setCustomLocalText(parsed.outroText);
+      }
       
       if (draft.origemCategoria !== undefined) {
         setOrigemCategoria(draft.origemCategoria);
@@ -214,26 +321,33 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       setInformacoesDocumento(doc.informacoes_documento || '');
       setNumeroComunicadoViolacao(doc.numero_comunicado_violacao || '');
       setNumeroSipia(doc.numero_sipia || '');
-      setLocalOcorrencia(doc.local_ocorrencia || '');
-      setCustomLocalText(parseCustomLocalText(doc.local_ocorrencia));
+      const parsedLocais = parseLocaisViolacaoFromDoc(doc);
+      setSelectedLocaisViolacao(parsedLocais.selected);
+      setCustomLocalText(parsedLocais.outroText);
       const parsed = parseOrigem(doc.origem, doc.origem_categoria);
       setOrigemCategoria(parsed.cat);
       setOrigemInstituicao(parsed.inst);
       setCanalComunicado(doc.canal_comunicado || '');
       setQuemComunicouClassificado(Boolean(doc.quem_comunicou_classificado));
     }
-  }, [doc.id, doc.informacoes_documento, doc.numero_comunicado_violacao, doc.numero_sipia, doc.local_ocorrencia, doc.origem, doc.origem_categoria, doc.canal_comunicado, doc.quem_comunicou_classificado, draftKey]);
+  }, [doc.id, draftKey]);
 
   // Salva alterações em rascunho local enquanto o usuário preenche/edita
   React.useEffect(() => {
     try {
+      const locaisSaved = formatLocaisForSave(selectedLocaisViolacao, customLocalText);
       const isModified = 
         despachoSituacao !== (doc.despacho_situacao || '') ||
         relatoProvidencias !== (doc.relato_providencias || '') ||
         informacoesDocumento !== (doc.informacoes_documento || '') ||
         numeroComunicadoViolacao !== (doc.numero_comunicado_violacao || '') ||
         numeroSipia !== (doc.numero_sipia || '') ||
-        localOcorrencia !== (doc.local_ocorrencia || '') ||
+        locaisSaved.str !== (doc.local_ocorrencia || '') ||
+        JSON.stringify(selectedLocaisViolacao) !== JSON.stringify(doc.locais_violacao || []) ||
+        customLocalText !== (doc.local_violacao_outro || '') ||
+        origemCategoria !== (doc.origem_categoria || '') ||
+        origemInstituicao !== (initialOrigemParsed.inst || '') ||
+        canalComunicado !== (doc.canal_comunicado || '') ||
         isImprocedente !== (doc.is_improcedente || false) ||
         JSON.stringify(tempViolacoes) !== JSON.stringify(doc.violacoesSipia || []) ||
         JSON.stringify(tempAgentes) !== JSON.stringify(doc.agentesVioladores || []) ||
@@ -253,7 +367,8 @@ const DocumentView: React.FC<DocumentViewProps> = ({
           informacoesDocumento,
           numeroComunicadoViolacao,
           numeroSipia,
-          localOcorrencia,
+          selectedLocaisViolacao,
+          localOcorrencia: locaisSaved.str,
           customLocalText,
           origemCategoria,
           origemInstituicao,
@@ -264,7 +379,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
         localStorage.setItem(draftKey, JSON.stringify(draftData));
       }
     } catch (e) {}
-  }, [despachoSituacao, relatoProvidencias, tempViolacoes, tempAgentes, selectedMedidas101, selectedMedidas129, selectedAtribuicoes, atribuicoesDetalhadas, isImprocedente, informacoesDocumento, numeroComunicadoViolacao, numeroSipia, localOcorrencia, customLocalText, origemCategoria, origemInstituicao, canalComunicado, quemComunicouClassificado, draftKey, doc]);
+  }, [despachoSituacao, relatoProvidencias, tempViolacoes, tempAgentes, selectedMedidas101, selectedMedidas129, selectedAtribuicoes, atribuicoesDetalhadas, isImprocedente, informacoesDocumento, numeroComunicadoViolacao, numeroSipia, selectedLocaisViolacao, customLocalText, origemCategoria, origemInstituicao, canalComunicado, quemComunicouClassificado, draftKey, doc]);
 
   const isUserInTrio = (nome: string) => {
     if (!nome) return false;
@@ -523,13 +638,23 @@ const DocumentView: React.FC<DocumentViewProps> = ({
   const handleSave = (finalize: boolean) => {
     if (!canEditTechnicalFields) return;
 
-    // VALIDAÇÃO: Local da Ocorrência obrigatório se houver Direito Violado AND Agente Violador
+    // VALIDAÇÃO: Local da Violação obrigatório se houver Direito Violado AND Agente Violador
     if (finalize) {
       const hasViolations = tempViolacoes.length > 0;
       const hasAgents = tempAgentes.length > 0 && !tempAgentes.some(a => a.categoria === 'INEXISTENTE');
       
-      if (hasViolations && hasAgents && !localOcorrencia) {
-        alert("⚠️ O preenchimento do LOCAL DA OCORRÊNCIA é obrigatório quando há Direito Violado e Agente Violador identificados.");
+      if (hasViolations && hasAgents && selectedLocaisViolacao.length === 0) {
+        alert("⚠️ O preenchimento do LOCAL DA VIOLAÇÃO é obrigatório quando há Direito Violado e Agente Violador identificados.");
+        const section = document.getElementById('local');
+        if (section) {
+          section.scrollIntoView({ behavior: 'smooth' });
+          setActiveSection('local');
+        }
+        return;
+      }
+
+      if (hasViolations && hasAgents && selectedLocaisViolacao.includes('OUTRO') && !customLocalText.trim()) {
+        alert("⚠️ Você selecionou a opção 'OUTRO' no Local da Violação. Por favor, especifique qual é o local no campo de texto.");
         const section = document.getElementById('local');
         if (section) {
           section.scrollIntoView({ behavior: 'smooth' });
@@ -726,7 +851,9 @@ const DocumentView: React.FC<DocumentViewProps> = ({
       monitoramento: monitoramentoAtualizado,
       notificacoes_trio: notificacoesTrio,
       conselheiros_providencia_nomes: preservedTrio,
-      local_ocorrencia: localOcorrencia,
+      local_ocorrencia: formatLocaisForSave(selectedLocaisViolacao, customLocalText).str,
+      locais_violacao: formatLocaisForSave(selectedLocaisViolacao, customLocalText).list,
+      local_violacao_outro: formatLocaisForSave(selectedLocaisViolacao, customLocalText).outroText,
       numero_comunicado_violacao: numeroComunicadoViolacao,
       numero_sipia: numeroSipia,
       informacoes_documento: informacoesDocumento
@@ -1423,7 +1550,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                           disabled={!canEditQuemComunicou || !origemCategoria || normalizeCatName(origemCategoria) === 'SOCIEDADE'}
                           className="w-full p-3 sm:p-4 bg-white border border-slate-200 rounded-xl sm:rounded-[1.25rem] font-bold uppercase text-[10px] sm:text-[11px] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-100"
                           placeholder={normalizeCatName(origemCategoria) === 'SOCIEDADE' ? "NÃO SE APLICA (SOCIEDADE)" : "SELECIONE INSTITUIÇÃO..."}
-                          options={[...currentInstitutions].sort((a, b) => a.localeCompare(b))}
+                          options={sortedInstitutions}
                           value={normalizeCatName(origemCategoria) === 'SOCIEDADE' ? '' : origemInstituicao}
                           onChange={val => {
                             setOrigemInstituicao(val);
@@ -1478,69 +1605,50 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                   </div>
                 </AccordionSection>
 
-                <AccordionSection id="local" title={isLocalMandatory ? "Local da Ocorrência (Obrigatório)" : "Local da Ocorrência"} color="bg-slate-700" active={activeSection} onToggle={setActiveSection} saved={!!localOcorrencia}>
+                <AccordionSection id="local" title={isLocalMandatory ? "Local da Violação (Obrigatório)" : "Local da Violação"} color="bg-slate-700" active={activeSection} onToggle={setActiveSection} saved={selectedLocaisViolacao.length > 0}>
                   <div className="space-y-4">
+                    <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase">
+                        Selecione um ou mais locais onde ocorreu a violação:
+                      </span>
+                      {selectedLocaisViolacao.length > 0 && (
+                        <span className="text-[10px] font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-200">
+                          {selectedLocaisViolacao.length} {selectedLocaisViolacao.length === 1 ? 'selecionado' : 'selecionados'}
+                        </span>
+                      )}
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {LOCAL_OCORRENCIA_OPTIONS.map(opt => {
-                        const isOutro = opt === 'OUTRO';
-                        const isSelected = isOutro 
-                          ? Boolean(localOcorrencia && (localOcorrencia === 'OUTRO' || localOcorrencia.startsWith('OUTRO:') || localOcorrencia.startsWith('OUTRO -') || !LOCAL_OCORRENCIA_OPTIONS.filter(o => o !== 'OUTRO').includes(localOcorrencia)))
-                          : localOcorrencia === opt;
+                      {LOCAL_VIOLACAO_OPTIONS.map(opt => {
+                        const isSelected = selectedLocaisViolacao.includes(opt);
 
                         return (
                           <div 
                             key={opt} 
-                            onClick={() => {
-                              if (!canEditTechnicalFields) return;
-                              if (isSelected) {
-                                setLocalOcorrencia('');
-                                setCustomLocalText('');
-                                onUpdateDocument(doc.id, { local_ocorrencia: '' });
-                              } else {
-                                if (isOutro) {
-                                  const nextVal = customLocalText.trim() ? `OUTRO: ${customLocalText.trim().toUpperCase()}` : 'OUTRO';
-                                  setLocalOcorrencia(nextVal);
-                                  onUpdateDocument(doc.id, { local_ocorrencia: nextVal });
-                                } else {
-                                  setLocalOcorrencia(opt);
-                                  onUpdateDocument(doc.id, { local_ocorrencia: opt });
-                                }
-                              }
-                            }} 
-                            className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer text-[10px] uppercase font-bold transition-all ${isSelected ? 'bg-slate-700 text-white shadow-sm' : 'hover:bg-slate-50 text-slate-600'}`}
+                            onClick={() => handleToggleLocalOption(opt)} 
+                            className={`flex items-center gap-2 p-2.5 rounded-xl cursor-pointer text-[10px] uppercase font-bold transition-all select-none ${isSelected ? 'bg-slate-700 text-white shadow-sm' : 'hover:bg-slate-50 text-slate-600 border border-transparent hover:border-slate-200'}`}
                           >
-                            {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4 opacity-20" />} 
-                            {opt}
+                            {isSelected ? <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0" /> : <Square className="w-4 h-4 opacity-25 shrink-0" />} 
+                            <span className="truncate">{opt}</span>
                           </div>
                         );
                       })}
                     </div>
 
                     {/* Campo de preenchimento para especificar o local exato quando a opção OUTRO estiver acionada */}
-                    {Boolean(localOcorrencia && (localOcorrencia === 'OUTRO' || localOcorrencia.startsWith('OUTRO:') || localOcorrencia.startsWith('OUTRO -') || !LOCAL_OCORRENCIA_OPTIONS.filter(o => o !== 'OUTRO').includes(localOcorrencia))) && (
+                    {selectedLocaisViolacao.includes('OUTRO') && (
                       <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 animate-fadeIn">
                         <label className="text-[10px] font-black text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
                           <Building2 className="w-3.5 h-3.5 text-slate-500" />
-                          Especifique o Local Exato da Ocorrência:
+                          Especifique o Local da Violação (Opção "OUTRO"):
                         </label>
                         <div className="flex gap-2">
                           <input 
                             type="text"
                             disabled={!canEditTechnicalFields}
-                            placeholder="Digite o local exato (ex: Terreno baldio, Estação rodoviária, Praça central, etc.)..."
+                            placeholder="Digite o local da violação (ex: Terreno baldio, Estação rodoviária, Praça central, etc.)..."
                             value={customLocalText}
-                            onChange={e => {
-                              const val = e.target.value;
-                              setCustomLocalText(val);
-                              const nextVal = val.trim() ? `OUTRO: ${val.trim().toUpperCase()}` : 'OUTRO';
-                              setLocalOcorrencia(nextVal);
-                            }}
-                            onBlur={() => {
-                              if (!canEditTechnicalFields) return;
-                              const nextVal = customLocalText.trim() ? `OUTRO: ${customLocalText.trim().toUpperCase()}` : 'OUTRO';
-                              setLocalOcorrencia(nextVal);
-                              onUpdateDocument(doc.id, { local_ocorrencia: nextVal });
-                            }}
+                            onChange={e => handleCustomLocalChange(e.target.value)}
                             className="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 uppercase focus:ring-2 focus:ring-slate-500 focus:outline-none placeholder:text-slate-400 placeholder:normal-case shadow-sm"
                           />
                         </div>
@@ -1783,11 +1891,17 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                              </div>
                           </div>
                           <div>
-                             <span className="text-[8px] font-black text-rose-600 uppercase block mb-1 tracking-tighter">Local da Ocorrência</span>
+                             <span className="text-[8px] font-black text-rose-600 uppercase block mb-1 tracking-tighter">Local da Violação</span>
                              <div className="flex flex-wrap gap-1">
-                                {(localOcorrencia || doc.local_ocorrencia) ? (
+                                {selectedLocaisViolacao.length > 0 ? (
+                                   selectedLocaisViolacao.map((loc, i) => (
+                                      <span key={i} className="px-2 py-1 bg-rose-50 text-rose-700 text-[9px] font-bold rounded-lg border border-rose-100 uppercase leading-none">
+                                         {loc === 'OUTRO' && customLocalText.trim() ? `OUTRO: ${customLocalText.trim().toUpperCase()}` : loc}
+                                      </span>
+                                   ))
+                                ) : doc.local_ocorrencia ? (
                                    <span className="px-2 py-1 bg-rose-50 text-rose-700 text-[9px] font-bold rounded-lg border border-rose-100 uppercase leading-none">
-                                      {localOcorrencia || doc.local_ocorrencia}
+                                      {doc.local_ocorrencia}
                                    </span>
                                 ) : <span className="text-[9px] text-slate-400 italic">Nenhum local selecionado</span>}
                              </div>

@@ -429,9 +429,15 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         }
       }
       
-      if (doc.local_ocorrencia) {
-        stats.locaisOcorrencia[doc.local_ocorrencia] = (stats.locaisOcorrencia[doc.local_ocorrencia] || 0) + 1;
-      }
+      const docLocaisList: string[] = Array.isArray(doc.locais_violacao) && doc.locais_violacao.length > 0
+        ? doc.locais_violacao
+        : (doc.local_ocorrencia ? doc.local_ocorrencia.split(/\s*,\s*|\s*;\s*|\s*\|\s*/).filter(Boolean) : []);
+      docLocaisList.forEach(l => {
+        const trimmed = l.trim();
+        if (trimmed) {
+          stats.locaisOcorrencia[trimmed] = (stats.locaisOcorrencia[trimmed] || 0) + 1;
+        }
+      });
       
       const currentStatus = doc.status[doc.status.length - 1];
       stats.status[currentStatus] = (stats.status[currentStatus] || 0) + 1;
@@ -668,7 +674,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
   // 1. Direito Violado (SIPIA / Violências)
   // 2. Agente Violador
   // 3. Quem Comunicou a Violação
-  // 4. Local da Ocorrência
+  // 4. Local da Violação
   // Cruzando automaticamente com os Dados da Criança Registrada e o Bairro de Residência
   const diagnosticoCompletoStats = useMemo(() => {
     const qualifiedDocs = filteredDocuments.filter(doc => {
@@ -685,11 +691,14 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
       const rawOrigCat = (doc.origem_categoria || '').trim();
       const hasQuemComunicou = Boolean(rawOrigCat || (rawOrig && rawOrig !== 'NÃO INFORMADO' && rawOrig !== 'OUTROS'));
 
-      // 4. Local da Ocorrência
+      // 4. Local da Violação
       const rawLocal = (doc.local_ocorrencia || '').trim();
-      const hasLocalOcorrencia = Boolean(rawLocal && rawLocal !== 'NÃO INFORMADO');
+      const hasLocalViolacao = Boolean(
+        (Array.isArray(doc.locais_violacao) && doc.locais_violacao.length > 0) ||
+        (rawLocal && rawLocal !== 'NÃO INFORMADO')
+      );
 
-      return hasDireitoViolado && hasAgenteViolador && hasQuemComunicou && hasLocalOcorrencia;
+      return hasDireitoViolado && hasAgenteViolador && hasQuemComunicou && hasLocalViolacao;
     });
 
     const totalCasos = qualifiedDocs.length;
@@ -810,11 +819,18 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
         quemComunicouInstituicoes[origInst] = (quemComunicouInstituicoes[origInst] || 0) + 1;
       }
 
-      // Local da Ocorrência
-      const local = (doc.local_ocorrencia || '').trim();
-      if (local) {
-        locaisOcorrencia[local] = (locaisOcorrencia[local] || 0) + 1;
-      }
+      // Local da Violação
+      const docLocais = Array.isArray(doc.locais_violacao) && doc.locais_violacao.length > 0
+        ? doc.locais_violacao
+        : (doc.local_ocorrencia ? doc.local_ocorrencia.split(/\s*,\s*|\s*;\s*|\s*\|\s*/).filter(Boolean) : []);
+
+      docLocais.forEach(l => {
+        const trimmed = l.trim();
+        if (trimmed && trimmed !== 'NÃO INFORMADO') {
+          locaisOcorrencia[trimmed] = (locaisOcorrencia[trimmed] || 0) + 1;
+        }
+      });
+      const local = docLocais.join(', ') || (doc.local_ocorrencia || '').trim();
 
       // Canal de Comunicação
       const canal = (doc.canal_comunicado || '').trim();
@@ -1945,7 +1961,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
                 Violações de Direitos Tipificadas pelos Conselheiros (SIPIA / ECA)
               </h3>
               <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mt-0.5">
-                Estatística gerada exclusivamente a partir dos casos com preenchimento completo dos 4 eixos (Direito Violado, Agente Violador, Quem Comunicou e Local da Ocorrência), cruzados com os dados da criança e bairro de residência
+                Estatística gerada exclusivamente a partir dos casos com preenchimento completo dos 4 eixos (Direito Violado, Agente Violador, Quem Comunicou e Local da Violação), cruzados com os dados da criança e bairro de residência
               </p>
             </div>
           </div>
@@ -2012,7 +2028,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
             </h4>
             <p className="text-xs text-slate-500 max-w-xl mx-auto">
               Para alimentar este painel analítico integrado, os Conselheiros Tutelares devem preencher no procedimento: 
-              <strong> 1. Direito Violado</strong>, <strong>2. Agente Violador</strong>, <strong>3. Quem Comunicou a Violação</strong> e <strong>4. Local da Ocorrência</strong>.
+              <strong> 1. Direito Violado</strong>, <strong>2. Agente Violador</strong>, <strong>3. Quem Comunicou a Violação</strong> e <strong>4. Local da Violação</strong>.
               O sistema puxará automaticamente o Bairro de Residência e os Dados da Criança Registrada.
             </p>
           </div>
@@ -2066,7 +2082,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
               />
             </div>
 
-            {/* GRÁFICOS DE QUEM COMUNICOU E LOCAL DA OCORRÊNCIA */}
+            {/* GRÁFICOS DE QUEM COMUNICOU E LOCAL DA VIOLAÇÃO */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:grid-cols-2 print:gap-4">
               <ProfessionalHorizontalChart 
                 title="Gráfico 18: Quem Comunicou a Violação (Origem Notificante)" 
@@ -2076,7 +2092,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
               />
 
               <ProfessionalHorizontalChart 
-                title="Gráfico 19: Local da Ocorrência da Violação" 
+                title="Gráfico 19: Local da Violação" 
                 data={diagnosticoLocaisData} 
                 barColor="#2563eb"
                 footerNote="Hortolândia • Locais físicos onde a violação ocorreu"
@@ -2104,7 +2120,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ documents, agenda, user
                       <th className="py-2 px-3">Violação (SIPIA)</th>
                       <th className="py-2 px-3">Agente Violador</th>
                       <th className="py-2 px-3">Quem Comunicou</th>
-                      <th className="py-2 px-3">Local Ocorrência</th>
+                      <th className="py-2 px-3">Local da Violação</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
