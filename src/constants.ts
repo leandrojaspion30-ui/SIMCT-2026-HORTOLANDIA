@@ -965,6 +965,71 @@ export const getActiveSubstituteInTrio = (
   return directUser || null;
 };
 
+/**
+ * Verifica com precisão se um usuário está em período de atestado médico ativo.
+ * Considera a flag `em_atestado` e o intervalo entre `data_inicio_atestado` e `data_fim_atestado`.
+ */
+export const isUserOnAtestado = (
+  userOrName: User | { id?: string; nome?: string; em_atestado?: boolean; data_inicio_atestado?: string; data_fim_atestado?: string } | string | null | undefined,
+  targetDateStr?: string,
+  allUsers?: User[]
+): boolean => {
+  if (!userOrName) return false;
+  let userObj: any = null;
+
+  if (typeof userOrName === 'string') {
+    if (!allUsers) return false;
+    userObj = allUsers.find(u => isSameCounselorName(u.nome, userOrName));
+  } else {
+    userObj = userOrName;
+    if (userObj.id && allUsers && userObj.em_atestado === undefined) {
+      const found = allUsers.find(u => u.id === userObj.id);
+      if (found) userObj = found;
+    }
+  }
+
+  if (!userObj || !userObj.em_atestado) return false;
+
+  const targetDate = targetDateStr ? targetDateStr.trim().split('T')[0] : new Date().toISOString().split('T')[0];
+  const start = userObj.data_inicio_atestado ? userObj.data_inicio_atestado.trim().split('T')[0] : '';
+  const end = userObj.data_fim_atestado ? userObj.data_fim_atestado.trim().split('T')[0] : '';
+
+  if (start && targetDate < start) return false;
+  if (end && targetDate > end) return false;
+
+  return true;
+};
+
+/**
+ * Retorna a lista de Conselheiros que estão EFETIVAMENTE na sede (trio de trabalho do dia),
+ * filtrando conselheiros que estejam em atestado médico para que a providência imediata seja
+ * distribuída SOMENTE para os outros conselheiros que estão presentes na sede.
+ */
+export const getCounselorsNaSede = (
+  unidadeId: number,
+  dateStr: string,
+  timeStr: string = "08:00",
+  allUsers: User[],
+  nameMap?: Record<string, string>,
+  scaleExceptions?: ScaleException[],
+  excludeAtestado: boolean = true
+): User[] => {
+  const trioNames = getEffectiveEscala(dateStr, timeStr, unidadeId, nameMap, scaleExceptions || []);
+  const activeCounselors = allUsers.filter(u => 
+    (u.unidade_id || 1) === unidadeId && 
+    u.status === 'ATIVO' && 
+    (u.perfil === 'CONSELHEIRO' || u.perfil === 'SUPLENTE')
+  );
+
+  const sedeUsers = trioNames
+    .map(tName => activeCounselors.find(u => isSameCounselorName(u.nome, tName)))
+    .filter((u): u is User => Boolean(u));
+
+  if (!excludeAtestado) return sedeUsers;
+
+  return sedeUsers.filter(u => !isUserOnAtestado(u, dateStr, allUsers));
+};
+
 export const BAIRROS = [
   "CHÁCARA PLANALTO", "CHÁCARA RECREIO ALVORADA", "CHÁCARA REYMAR", "CHÁCARAS ACARAÍ", 
   "CHÁCARAS ASSAY", "CHÁCARAS DE RECREIO 2000", "CHÁCARAS FAZENDA COELHO", "CHÁCARAS HAVAÍ", 

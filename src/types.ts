@@ -27,6 +27,11 @@ export interface User {
   last_heartbeat?: string;
   trocar_senha_proximo_acesso?: boolean;
   senha_alterada_em?: string;
+  // Gestão de RH - Atestado Médico
+  em_atestado?: boolean;
+  data_inicio_atestado?: string;
+  data_fim_atestado?: string;
+  motivo_atestado?: string;
 }
 
 export type DocumentStatus = 

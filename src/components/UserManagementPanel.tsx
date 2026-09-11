@@ -28,7 +28,8 @@ import {
   History,
   Check,
   Clock,
-  Sparkles
+  Sparkles,
+  Stethoscope
 } from 'lucide-react';
 import { 
   exportFullSystemBackupFromFirestore, 
@@ -81,6 +82,8 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState<boolean>(false);
   const [tempDates, setTempDates] = useState({ start: '', end: '' });
+  const [atestadoUserId, setAtestadoUserId] = useState<string | null>(null);
+  const [atestadoDates, setAtestadoDates] = useState({ start: '', end: '', motivo: '' });
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [resetConfirmText, setResetConfirmText] = useState('');
   const [pendingResetAction, setPendingResetAction] = useState<'ONLY_RESET' | 'BACKUP_AND_RESET'>('ONLY_RESET');
@@ -166,8 +169,16 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
         cargo: editingUser.cargo.toUpperCase(),
         perfil: editingUser.perfil,
         unidade_id: editingUser.unidade_id,
-        fotoUrl: editingUser.fotoUrl
+        fotoUrl: editingUser.fotoUrl,
+        em_atestado: Boolean(editingUser.em_atestado),
+        data_inicio_atestado: editingUser.em_atestado ? (editingUser.data_inicio_atestado || '') : '',
+        data_fim_atestado: editingUser.em_atestado ? (editingUser.data_fim_atestado || '') : '',
+        motivo_atestado: editingUser.em_atestado ? (editingUser.motivo_atestado || '') : ''
       };
+
+      if (editingUser.em_atestado) {
+        onAddLog(`RH: Atestado do usuário ${editingUser.nome} configurado de ${editingUser.data_inicio_atestado || 'N/A'} a ${editingUser.data_fim_atestado || 'Indeterminado'}.`);
+      }
 
       // Apenas define senha se o administrador digitou uma nova senha
       if (editNewPassword && editNewPassword.trim().length > 0) {
@@ -577,6 +588,43 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                 </div>
               )}
 
+              {user.em_atestado && (
+                <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-2xl animate-in slide-in-from-top-2">
+                  <div className="flex items-center justify-between text-rose-700 mb-1">
+                    <div className="flex items-center gap-2">
+                      <Stethoscope className="w-4 h-4 text-rose-600" />
+                      <span className="text-[10px] font-black uppercase tracking-widest">Em Atestado Médico (RH)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await onUpdateUser(user.id, {
+                          em_atestado: false,
+                          data_inicio_atestado: '',
+                          data_fim_atestado: '',
+                          motivo_atestado: ''
+                        });
+                        onAddLog(`RH: Atestado do conselheiro ${user.nome} encerrado pelo Administrador.`);
+                      }}
+                      className="text-[9px] font-black uppercase text-rose-600 hover:text-rose-800 underline cursor-pointer"
+                    >
+                      Encerrar
+                    </button>
+                  </div>
+                  <p className="text-[11px] font-bold text-rose-600 uppercase">
+                    Período: {user.data_inicio_atestado ? user.data_inicio_atestado.split('-').reverse().join('/') : 'Início'} até {user.data_fim_atestado ? user.data_fim_atestado.split('-').reverse().join('/') : 'Indeterminado'}
+                  </p>
+                  {user.motivo_atestado && (
+                    <p className="text-[10px] text-rose-500 font-bold mt-1 uppercase">
+                      Motivo: {user.motivo_atestado}
+                    </p>
+                  )}
+                  <p className="text-[9px] text-rose-400 font-semibold mt-1">
+                    * Providência Imediata: Redirecionada para outros da sede | Referência: Mantida normal
+                  </p>
+                </div>
+              )}
+
               {user.perfil === 'SUPLENTE' && user.substituicao_ativa && (
                 <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-2xl animate-in slide-in-from-top-2">
                   <div className="flex items-center gap-2 text-blue-700 mb-1">
@@ -674,6 +722,97 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                     className="w-full py-4 bg-slate-900/5 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center gap-2 border border-slate-100"
                   >
                     <Calendar className="w-3.5 h-3.5" /> {user.substituicao_ativa ? 'Atualizar Suplência' : 'Designar Suplente'}
+                  </button>
+                )
+              )}
+
+              {/* Seção Gestão de Atestado Médico (RH) */}
+              {(user.perfil === 'CONSELHEIRO' || user.perfil === 'ADMIN' || user.perfil === 'ADMINISTRATIVO') && (
+                atestadoUserId === user.id ? (
+                  <div className="space-y-3 p-4 bg-rose-50/80 rounded-2xl border border-rose-200 animate-in zoom-in-95 my-1">
+                    <div className="flex items-center gap-2 text-rose-800 border-b border-rose-200 pb-2">
+                      <Stethoscope className="w-4 h-4 text-rose-600" />
+                      <span className="text-[10px] font-black uppercase tracking-widest">Lançar Atestado (RH)</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-black text-rose-700 uppercase tracking-widest">Início</label>
+                        <input 
+                          type="date" 
+                          className="w-full p-2 bg-white border border-rose-200 rounded-xl text-[11px] font-bold outline-none focus:border-rose-500 shadow-sm"
+                          value={atestadoDates.start}
+                          onChange={e => setAtestadoDates(prev => ({ ...prev, start: e.target.value }))}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-black text-rose-700 uppercase tracking-widest">Término</label>
+                        <input 
+                          type="date" 
+                          className="w-full p-2 bg-white border border-rose-200 rounded-xl text-[11px] font-bold outline-none focus:border-rose-500 shadow-sm"
+                          value={atestadoDates.end}
+                          onChange={e => setAtestadoDates(prev => ({ ...prev, end: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] font-black text-rose-700 uppercase tracking-widest">Motivo / Justificativa</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ex: ATESTADO MÉDICO 14 DIAS, CID..."
+                        className="w-full p-2 bg-white border border-rose-200 rounded-xl text-[10px] font-bold uppercase outline-none focus:border-rose-500 shadow-sm"
+                        value={atestadoDates.motivo}
+                        onChange={e => setAtestadoDates(prev => ({ ...prev, motivo: e.target.value.toUpperCase() }))}
+                      />
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button 
+                        type="button"
+                        onClick={async () => {
+                          if (!atestadoDates.start || !atestadoDates.end) {
+                            alert("Por favor, informe as datas de início e término do atestado.");
+                            return;
+                          }
+                          await onUpdateUser(user.id, {
+                            em_atestado: true,
+                            data_inicio_atestado: atestadoDates.start,
+                            data_fim_atestado: atestadoDates.end,
+                            motivo_atestado: atestadoDates.motivo || ''
+                          });
+                          onAddLog(`RH: Conselheiro ${user.nome} em ATESTADO MÉDICO de ${atestadoDates.start} até ${atestadoDates.end}.`);
+                          setAtestadoUserId(null);
+                        }}
+                        className="flex-1 py-3 bg-rose-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-rose-700 transition-all shadow-md flex items-center justify-center gap-1.5"
+                      >
+                        <Save className="w-3.5 h-3.5" /> Salvar
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setAtestadoUserId(null)} 
+                        className="flex-1 py-3 bg-slate-200 text-slate-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-300 transition-all"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setAtestadoUserId(user.id);
+                      setAtestadoDates({
+                        start: user.data_inicio_atestado || new Date().toISOString().split('T')[0],
+                        end: user.data_fim_atestado || '',
+                        motivo: user.motivo_atestado || ''
+                      });
+                    }}
+                    className={`w-full py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 border ${
+                      user.em_atestado 
+                        ? 'bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100 shadow-sm' 
+                        : 'bg-slate-900/5 text-slate-600 border-slate-100 hover:bg-rose-50 hover:text-rose-700'
+                    }`}
+                  >
+                    <Stethoscope className="w-3.5 h-3.5 text-rose-500" />
+                    {user.em_atestado ? 'Gerenciar Atestado (RH)' : 'Lançar Atestado (RH)'}
                   </button>
                 )
               )}
@@ -1256,6 +1395,75 @@ const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
                    </select>
                  </div>
                </div>
+
+                {/* Gestão de Atestado Médico (RH) */}
+                <div className="p-5 bg-rose-50/70 border border-rose-200 rounded-2xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 bg-rose-100 text-rose-700 rounded-xl">
+                        <Stethoscope className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black uppercase text-rose-950 tracking-wide">
+                          Atestado Médico (Gestão de RH)
+                        </h4>
+                        <p className="text-[10px] font-bold text-rose-600">
+                          Redireciona providências imediatas na sede e mantém distribuição de referência
+                        </p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={Boolean(editingUser.em_atestado)}
+                        onChange={e => setEditingUser({
+                          ...editingUser, 
+                          em_atestado: e.target.checked,
+                          data_inicio_atestado: e.target.checked ? (editingUser.data_inicio_atestado || new Date().toISOString().split("T")[0]) : "",
+                          data_fim_atestado: e.target.checked ? (editingUser.data_fim_atestado || "") : ""
+                        })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-600"></div>
+                    </label>
+                  </div>
+
+                  {editingUser.em_atestado && (
+                    <div className="space-y-3 pt-3 border-t border-rose-200/80 animate-in fade-in">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black text-rose-800 uppercase tracking-widest ml-1">Data Início</label>
+                          <input 
+                            type="date"
+                            className="w-full p-3 bg-white border border-rose-200 rounded-xl font-black text-xs outline-none focus:border-rose-500 shadow-sm"
+                            value={editingUser.data_inicio_atestado || ""}
+                            onChange={e => setEditingUser({ ...editingUser, data_inicio_atestado: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black text-rose-800 uppercase tracking-widest ml-1">Data Término</label>
+                          <input 
+                            type="date"
+                            className="w-full p-3 bg-white border border-rose-200 rounded-xl font-black text-xs outline-none focus:border-rose-500 shadow-sm"
+                            value={editingUser.data_fim_atestado || ""}
+                            onChange={e => setEditingUser({ ...editingUser, data_fim_atestado: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-rose-800 uppercase tracking-widest ml-1">Motivo / CID / Observações RH (Opcional)</label>
+                        <input 
+                          type="text"
+                          placeholder="EX: ATESTADO 14 DIAS, CID J06..."
+                          className="w-full p-3 bg-white border border-rose-200 rounded-xl font-black text-xs uppercase outline-none focus:border-rose-500 shadow-sm"
+                          value={editingUser.motivo_atestado || ""}
+                          onChange={e => setEditingUser({ ...editingUser, motivo_atestado: e.target.value.toUpperCase() })}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                <div className="space-y-2 pt-2 border-t border-slate-100">
                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Redefinir Nova Senha (Opcional)</label>
                  <div className="relative">

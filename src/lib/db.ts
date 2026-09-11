@@ -20,7 +20,7 @@ import {
 } from 'firebase/firestore';
 import { db, ensureAuthenticated, auth } from './firebase';
 import { Documento, Log, AgendaEntry, User, ScaleException, ChatMessage, DocumentStatus } from '../types';
-import { isSameCounselorName, getEffectiveEscala, INITIAL_USERS, normalizeCanalName, isRotationChannel, getActiveRotationCounselors, isCounselorInTrioOrSubstitution, getActiveSubstituteInTrio, sanitizeUserRoleAndIdentity } from '../constants';
+import { isSameCounselorName, getEffectiveEscala, INITIAL_USERS, normalizeCanalName, isRotationChannel, getActiveRotationCounselors, isCounselorInTrioOrSubstitution, getActiveSubstituteInTrio, sanitizeUserRoleAndIdentity, isUserOnAtestado, getCounselorsNaSede } from '../constants';
 
 export enum OperationType {
   CREATE = 'create',
@@ -454,6 +454,13 @@ export const saveDocumentWithAtomicRotation = async (
       const trioOfDate = getEffectiveEscala(todayDate, todayTime, unidadeId, nameMap, scaleExceptions || []);
 
       const refUserObj = activeCounselors.find(u => u.id === finalRefId) || { id: finalRefId, nome: finalRefName };
+      const isRefUserOnAtestado = isUserOnAtestado(refUserObj, todayDate, activeCounselors);
+
+      // Conselheiros do Trio do Dia que estão EFETIVAMENTE na sede (exclui quem está de atestado hoje)
+      const sedeUsersAvailable = trioOfDate
+        .map(tName => activeCounselors.find(u => (u.unidade_id || 1) === unidadeId && u.status === 'ATIVO' && isSameCounselorName(u.nome, tName)))
+        .filter((u): u is User => Boolean(u && !isUserOnAtestado(u, todayDate, activeCounselors)));
+
       const isRefUserInTrio = isCounselorInTrioOrSubstitution(
         refUserObj,
         trioOfDate,
@@ -465,8 +472,9 @@ export const saveDocumentWithAtomicRotation = async (
       );
 
       if (!docData.notificacao && !docData.providencia_imediata_manual && !docData.is_prontuario_fisico) {
-        if (isRefUserInTrio) {
-          // Se o conselheiro de referência está no trio do dia ou em substituição/troca, a imediata é atribuída a ele (ou ao substituto ativo no trio)
+        if (isRefUserInTrio && !isRefUserOnAtestado) {
+          // Se o conselheiro de referência está no trio do dia e NÃO está de atestado:
+          // A providência imediata é atribuída a ele (ou ao substituto ativo no trio)
           const activeSubUser = getActiveSubstituteInTrio(
             refUserObj,
             trioOfDate,
@@ -477,7 +485,7 @@ export const saveDocumentWithAtomicRotation = async (
             unidadeId,
             nameMap
           );
-          if (activeSubUser) {
+          if (activeSubUser && !isUserOnAtestado(activeSubUser, todayDate, activeCounselors)) {
             finalProvId = activeSubUser.id;
             finalProvName = activeSubUser.nome;
           } else {
@@ -485,29 +493,40 @@ export const saveDocumentWithAtomicRotation = async (
             finalProvName = finalRefName;
           }
         } else {
-          // Quando a referência NÃO ESTÁ no trio do dia:
-          // A providência imediata DEVE OBRIGATORIAMENTE pertencer ao Trio Imediato do dia.
-          const isCurrentProvInTrio = finalProvId && trioOfDate.some(tName => {
-            const pUser = activeCounselors.find(u => u.id === finalProvId);
-            return pUser ? isSameCounselorName(tName, pUser.nome) : false;
-          });
+          // Quando a referência NÃO ESTÁ no trio do dia OU ESTÁ DE ATESTADO:
+          // A providência imediata DEVE ser distribuída SOMENTE para os outros Conselheiros que estão na sede.
+          const otherSedeUsers = sedeUsersAvailable.filter(u => u.id !== finalRefId);
+          const candidateUsers = otherSedeUsers.length > 0 ? otherSedeUsers : sedeUsersAvailable;
 
-          if (!isCurrentProvInTrio || finalProvId === finalRefId) {
-            // Se docData trouxe um conselheiro providência válido pertencente ao trio de hoje, usa ele
-            const candidateUser = docData.conselheiro_providencia_id ? activeCounselors.find(u => u.id === docData.conselheiro_providencia_id) : null;
-            if (candidateUser && candidateUser.id !== finalRefId && trioOfDate.some(tName => isSameCounselorName(tName, candidateUser.nome))) {
+          const isCurrentProvInSede = finalProvId && candidateUsers.some(u => u.id === finalProvId);
+
+          if (!isCurrentProvInSede || (isRefUserOnAtestado && finalProvId === finalRefId)) {
+            // Se docData trouxe um conselheiro providência válido na sede (e não de atestado), usa ele
+            const candidateUser = docData.conselheiro_providencia_id ? candidateUsers.find(u => u.id === docData.conselheiro_providencia_id) : null;
+            if (candidateUser) {
               finalProvId = candidateUser.id;
               finalProvName = candidateUser.nome;
+            } else if (candidateUsers.length > 0) {
+              // Fallback para o primeiro conselheiro ativo na sede
+              finalProvId = candidateUsers[0].id;
+              finalProvName = candidateUsers[0].nome;
             } else {
-              // Fallback para o primeiro plantonista/conselheiro do trio de hoje
-              const firstTrioName = trioOfDate[0];
-              const trioUser = activeCounselors.find(u => (u.unidade_id || 1) === unidadeId && u.status === 'ATIVO' && isSameCounselorName(u.nome, firstTrioName)) || activeCounselors[0] || currentUser;
-              if (trioUser) {
-                finalProvId = trioUser.id;
-                finalProvName = trioUser.nome;
-              }
+              // Fallback seguro de unidade caso todos do trio estejam ausentes
+              const nonAtestadoCounselor = activeCounselors.find(u => !isUserOnAtestado(u, todayDate, activeCounselors)) || activeCounselors[0] || currentUser;
+              finalProvId = nonAtestadoCounselor.id;
+              finalProvName = nonAtestadoCounselor.nome;
             }
           }
+        }
+      }
+
+      // Se a providência imediata final ainda apontar para alguém de atestado, redireciona para a sede
+      if (isUserOnAtestado(finalProvId, todayDate, activeCounselors)) {
+        const otherSede = sedeUsersAvailable.filter(u => u.id !== finalProvId);
+        const replacement = otherSede.length > 0 ? otherSede[0] : (activeCounselors.find(u => !isUserOnAtestado(u, todayDate, activeCounselors)) || currentUser);
+        if (replacement) {
+          finalProvId = replacement.id;
+          finalProvName = replacement.nome;
         }
       }
 

@@ -11,7 +11,11 @@
         "cargo": { "type": "string" },
         "unidade_id": { "type": "number" },
         "status": { "type": "string" },
-        "senha": { "type": "string" }
+        "senha": { "type": "string" },
+        "em_atestado": { "type": "boolean" },
+        "data_inicio_atestado": { "type": "string" },
+        "data_fim_atestado": { "type": "string" },
+        "motivo_atestado": { "type": "string" }
       },
       "required": ["id", "nome", "perfil", "unidade_id", "senha"]
     },

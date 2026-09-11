@@ -227,14 +227,12 @@ const DocumentView: React.FC<DocumentViewProps> = ({
     // Sincroniza imediatamente o rascunho local para que nenhum efeito reverta a opção selecionada no primeiro clique
     try {
       const saved = localStorage.getItem(draftKey);
-      if (saved) {
-        const draftObj = JSON.parse(saved);
-        draftObj.origemCategoria = newCat;
-        draftObj.origemInstituicao = newInst;
-        draftObj.canalComunicado = newCanal;
-        draftObj.quemComunicouClassificado = isClassificado;
-        localStorage.setItem(draftKey, JSON.stringify(draftObj));
-      }
+      const draftObj = saved ? JSON.parse(saved) : {};
+      draftObj.origemCategoria = newCat;
+      draftObj.origemInstituicao = newInst;
+      draftObj.canalComunicado = newCanal;
+      draftObj.quemComunicouClassificado = isClassificado;
+      localStorage.setItem(draftKey, JSON.stringify(draftObj));
     } catch {}
 
     onUpdateDocument(doc.id, {
@@ -306,11 +304,9 @@ const DocumentView: React.FC<DocumentViewProps> = ({
 
     try {
       const saved = localStorage.getItem(draftKey);
-      if (saved) {
-        const draftObj = JSON.parse(saved);
-        draftObj.tempAgentes = nextAgentes;
-        localStorage.setItem(draftKey, JSON.stringify(draftObj));
-      }
+      const draftObj = saved ? JSON.parse(saved) : {};
+      draftObj.tempAgentes = nextAgentes;
+      localStorage.setItem(draftKey, JSON.stringify(draftObj));
     } catch {}
 
     onUpdateDocument(doc.id, { agentesVioladores: nextAgentes });
@@ -332,11 +328,9 @@ const DocumentView: React.FC<DocumentViewProps> = ({
 
     try {
       const saved = localStorage.getItem(draftKey);
-      if (saved) {
-        const draftObj = JSON.parse(saved);
-        draftObj.tempAgentes = nextAgentes;
-        localStorage.setItem(draftKey, JSON.stringify(draftObj));
-      }
+      const draftObj = saved ? JSON.parse(saved) : {};
+      draftObj.tempAgentes = nextAgentes;
+      localStorage.setItem(draftKey, JSON.stringify(draftObj));
     } catch {}
 
     onUpdateDocument(doc.id, { agentesVioladores: nextAgentes });
@@ -2005,7 +1999,7 @@ const DocumentView: React.FC<DocumentViewProps> = ({
                                    const desc = (a.especificacao || a.outro_especificacao || '').trim();
                                    return (
                                       <span key={i} className="px-2 py-1 bg-orange-50 text-orange-700 text-[9px] font-bold rounded-lg border border-orange-100 uppercase leading-none">
-                                         {a.principal}{desc ? `: ${desc}` : ''}
+                                         {a.categoria ? `${a.categoria}: ` : ''}{a.principal}{desc ? `: ${desc}` : ''}
                                       </span>
                                    );
                                 }) : <span className="text-[9px] text-slate-400 italic">Nenhum agente selecionado</span>}

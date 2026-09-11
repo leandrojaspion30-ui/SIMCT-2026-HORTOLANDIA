@@ -64,7 +64,10 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
       <button
         type="button"
         disabled={disabled}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={(e) => {
+          e.preventDefault();
+          setIsOpen(prev => !prev);
+        }}
         className={`${className || ''} w-full text-left flex items-center justify-between cursor-pointer`}
       >
         <span className={value ? "text-slate-800" : "text-slate-400"}>
@@ -106,15 +109,17 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
                   key={opt}
                   type="button"
                   onMouseDown={(e) => {
-                    // Previne perda de foco do input que causa descarte de cliques no primeiro toque
+                    // Previne perda de foco do input sem descartar o clique
                     e.preventDefault();
-                    handleSelectOption(opt);
                   }}
                   onTouchEnd={(e) => {
                     e.preventDefault();
+                    e.stopPropagation();
                     handleSelectOption(opt);
                   }}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     handleSelectOption(opt);
                   }}
                   className={`w-full text-left p-3 text-[11px] font-bold uppercase hover:bg-slate-50 transition-colors flex items-center justify-between cursor-pointer active:bg-blue-100 ${
